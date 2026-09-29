@@ -9,18 +9,20 @@ mapping stays honest as the code changes.
 
 Status: ⬜ not yet written · 🚧 partially covered · ✅ automated and passing
 
-**Everything is ⬜.** An earlier scaffold had 15 passing unit tests; it was
-stripped back so the schema can be designed first. The tests in the repo today
-cover environment configuration, prove the database harness works, guard
-that every table has Row Level Security enabled, and check the starter data
-loaded — none of them verifies any row below.
+**Everything is ⬜ except US-02b, which is 🚧.** An earlier scaffold had 15
+passing unit tests; it was stripped back so the schema can be designed first.
+The tests in the repo today cover environment configuration, the form
+validation rules, the W4 fixtures and the location picker's props, prove the
+database harness works, guard that every table has Row Level Security
+enabled, and check the starter data loaded. Only the validation tests touch
+a row below, and only half of it.
 
 | ID | Status | Given | When | Then | Verified by |
 | --- | --- | --- | --- | --- | --- |
 | US-01 | ⬜ | An unregistered student is on the sign-in screen | They submit a valid `@vanderbilt.edu` address | A one-time sign-in link is emailed; non-Vanderbilt addresses are rejected with a specific message | Unit test + a database-level domain check |
 | US-01b | ⬜ | An attacker calls the auth API directly with a non-Vanderbilt address | The request bypasses our sign-in form | The database trigger rejects it | DB integration test — TASK-03 |
 | US-02 | ⬜ | A signed-in student is on Create Session | They submit course, topic, building, room, time range, capacity | The session is saved, the host is added to the roster, and a pin appears on the map | Unit test + integration test |
-| US-02b | ⬜ | A signed-in student is on Create Session | They submit an end time before the start, or a time in the past | Submission is blocked with a field-level error | Unit test |
+| US-02b | 🚧 | A signed-in student is on Create Session | They submit an end time before the start, or a time in the past | Submission is blocked with a field-level error | Unit test: `src/lib/validation.test.ts`, the "US-02b" block — the rule and its field-level messages. **Not yet:** the form showing them (W5), the database refusing them (S1) |
 | US-03 | ⬜ | Three upcoming sessions and one ended session exist | A signed-in student opens the map | Three pins appear, the ended one does not; tapping a pin shows course, time, and seats left | Manual on staging — Sprint 3 |
 | US-04 | ⬜ | A signed-in student views an open session with space | They tap Join | Attendee count increases by one, their name appears on the roster, and the chat unlocks | E2E — Sprint 3 |
 | US-05 | ⬜ | A student has joined a session with at least one other attendee | They type a message and send | It appears for every attendee within a second, tagged with sender and timestamp | Two-client manual test, then E2E |
@@ -73,8 +75,9 @@ and can be added alongside if the team prefers it there.
 
 ## Coverage, stated plainly
 
-**Zero.** `npm test` covers `src/lib/env.ts` — missing and malformed
-configuration. `npm run test:db` proves the database harness can connect and
+**Half of one row.** `npm test` covers `src/lib/env.ts` — missing and
+malformed configuration — and, since W4, the form validation rules in
+`src/lib/validation.ts`. `npm run test:db` proves the database harness can connect and
 make one connection wait on another, and runs one permanent structural guard:
 `tests/db/rls.test.ts` fails if any table in `public` has Row Level Security
 switched off (checked to fail when a table without RLS was added). Nothing in
@@ -96,7 +99,19 @@ non-normalised rows were inserted). CI also fails if `supabase/seed.sql` or
 checked locally to fail on a deliberate change). That is data hygiene, not behaviour: nothing yet
 normalises what a *student* types — that is S2, and it needs its own tests.
 
+W4's `src/lib/validation.test.ts` is the half of US-02b that exists: the
+schema rejects an end at or before the start and a start more than five
+minutes in the past, each with a message on the right field, and reports
+both at once. Each of those tests was checked to fail when its rule was
+broken. The other half — the form rendering those errors (W5) and
+`create_session` rejecting the same input (S1) — does not exist yet. The
+same file tests the sign-in domain rule, but US-01 also needs the link sent
+and the database trigger, so it stays ⬜. `src/lib/fixtures.test.ts` and
+`src/components/LocationPicker.test.tsx` check that the stubs' fixtures are
+consistent and that the picker keeps its props contract — scaffolding, not
+behaviour a student sees.
+
 The green CI badge certifies that the code compiles, lints, reaches a
-database, has RLS switched on everywhere, and that the generated files are
-current — nothing more. Say that plainly in the report rather than letting
+database, has RLS switched on everywhere, that the generated files are
+current, and that the form rules behave — nothing more. Say that plainly in the report rather than letting
 "CI passing" do unearned work.
