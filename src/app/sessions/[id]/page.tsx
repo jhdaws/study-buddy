@@ -1,5 +1,6 @@
 /**
  * Session detail: roster, join/leave, and chat (US-04, US-05, US-23).
+ * Later sprint -- not part of Sprint 2 (docs/tickets.md, "Later sprints").
  *
  * TODO:
  *   - fetch the session, its attendee roster, and (for attendees) its messages

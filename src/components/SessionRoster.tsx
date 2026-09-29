@@ -1,6 +1,7 @@
 /**
  * Attendee roster, live seat count, and the join/leave button
  * (US-04, US-07, US-08, US-23).
+ * Later sprint -- not part of Sprint 2 (docs/tickets.md, "Later sprints").
  *
  * TODO:
  *   - client component, subscribed to roster changes for this session

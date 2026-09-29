@@ -1,5 +1,5 @@
 /**
- * Sign-in screen (US-01).
+ * Sign-in screen (US-01). Owner: Track A -- A3 (#16).
  *
  * TODO:
  *   - email field, restricted to @vanderbilt.edu

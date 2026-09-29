@@ -53,7 +53,10 @@ mean rewriting both. The PostgreSQL schema underneath stays portable.
 
 **Watch.** Row Level Security has a real learning curve and is the one place
 this stack can genuinely confuse us. Budget time in Sprint 2 for the whole team
-to work through the policies in `0001_init.sql` together.
+to work through the RLS policies together. (This once named `0001_init.sql`,
+which was removed in the 2026-09-21 strip-back; the schema now starts at
+`supabase/migrations/*_schema_skeleton.sql` and each track adds its own
+policies — ADR 0008.)
 
 ## Alternative if this is reversed
 

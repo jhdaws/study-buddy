@@ -71,6 +71,53 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-09-29 · Form in Nashville time; docs audited after W2–W5
+
+**Branch:** `docs-audit-campus-time` (from `main` after #29) · **Commits made:**
+one, plus this entry — PR opened this session
+
+### What changed
+- **The create form now reads and shows times in campus time**
+  (`America/Chicago`), not the device's — the user's call, answering W5's
+  open question. `localInputToIso` / `isoToLocalInput` take a zone defaulting
+  to `CAMPUS_TIME_ZONE` and never read the runtime's zone. Each time input
+  has a "Nashville time (Central)" hint. The W5 entry below still describes
+  the old device-time behaviour; it is superseded.
+- **Docs audited against the repo, GitHub, Supabase and Vercel.** W1's boxes
+  now match reality; TASK-00 and TASK-03 ✅; US-02 and US-03 🚧; README
+  layout, links and production URL; CLAUDE.md current state and conventions;
+  stale `0001_init.sql` / `0002_join_session.sql` references in ADRs
+  0001/0003/0005 (0005 via a dated note, body untouched); W4's cross-track
+  constraints copied into A2, S1, S4.
+
+### Verified versus assumed
+- **Verified:** hosted Supabase has all six tables (REST returns `[]` for
+  each and `PGRST205` for a made-up table). Repo settings via the GitHub
+  API: secret scanning and push protection on; `main` ruleset requires a PR
+  with one approval and the `verify` check, blocks force pushes and
+  deletion. Time conversion tested under UTC, Chicago, Los Angeles and Tokyo
+  and across both 2026 daylight-saving changes; the form tests run in Tokyo
+  and fail (3 of 17) against the old conversion.
+- **Not verified:** the Vercel env vars (user-reported) and the hosted seed
+  rows (RLS hides them) — production cannot be checked from outside.
+
+### Open questions for the user
+- Turn off Vercel Deployment Protection for production? Until then every
+  page of https://study-buddy-jdaws.vercel.app redirects to Vercel's login,
+  which blocks teammates without Vercel access and every magic link (A1/A3).
+- W1 leftovers: `db` as a required check; "automatically delete head
+  branches"; Dependabot; sharing the Supabase values with the team.
+- Still open from W4/W5: the 5-minute start grace, the length caps, real
+  building names on fixture places, W5's copy ("Happening now",
+  Today/Tomorrow), no default capacity or end time, the `limits.ts` move.
+
+### Things the next agent should be careful about
+- DST edge rules in `localInputToIso`: a nonexistent time (spring change)
+  moves an hour later; a twice-occurring time (autumn change) takes the
+  first. Tested — keep them if you touch it.
+
+---
+
 ## 2026-09-29 · W5 basic UI: shell, session list, create-session form
 
 **Branch:** `w5-basic-ui`, from `origin/w4-stubs-fixtures` at `bcce298`,

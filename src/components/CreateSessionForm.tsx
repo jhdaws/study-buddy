@@ -23,8 +23,10 @@
  *                   visible datetime-local inputs have no name: their values
  *                   have no time zone and the schema rejects them on
  *                   purpose, so they are converted in the browser
- *                   (src/lib/datetime-local.ts). This form therefore needs
- *                   JavaScript to submit valid times.
+ *                   (src/lib/datetime-local.ts). They are read as
+ *                   NASHVILLE time, not the device's -- the same zone the
+ *                   list shows -- and each says so in a hint. This form
+ *                   therefore needs JavaScript to submit valid times.
  *   capacity        number, at least MIN_CAPACITY, the host included.
  *
  * KEEPING WHAT THE STUDENT TYPED. React resets the form after every action,
@@ -337,13 +339,16 @@ export default function CreateSessionForm({
             <label htmlFor={ids("startsAt").input} className={LABEL}>
               Starts
             </label>
+            <p id={ids("startsAt").hint} className={HINT}>
+              Nashville time (Central)
+            </p>
             <input
               id={ids("startsAt").input}
               type="datetime-local"
               value={startsAtLocal}
               onChange={(event) => setStartsAtLocal(event.target.value)}
               required
-              {...a11y("startsAt")}
+              {...a11y("startsAt", true)}
               className={INPUT}
             />
             <input type="hidden" name="startsAt" value={localInputToIso(startsAtLocal)} />
@@ -354,13 +359,16 @@ export default function CreateSessionForm({
             <label htmlFor={ids("endsAt").input} className={LABEL}>
               Ends
             </label>
+            <p id={ids("endsAt").hint} className={HINT}>
+              Nashville time (Central)
+            </p>
             <input
               id={ids("endsAt").input}
               type="datetime-local"
               value={endsAtLocal}
               onChange={(event) => setEndsAtLocal(event.target.value)}
               required
-              {...a11y("endsAt")}
+              {...a11y("endsAt", true)}
               className={INPUT}
             />
             <input type="hidden" name="endsAt" value={localInputToIso(endsAtLocal)} />

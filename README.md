@@ -1,7 +1,11 @@
 # Study Buddy
 
 Find and join study sessions happening across Vanderbilt's campus — by course,
-by building, with seats left.
+by place, with seats left.
+
+**Live:** https://study-buddy-jdaws.vercel.app — currently behind Vercel's
+login (Deployment Protection), so it only opens for members of the Vercel
+project. See W1 in [`docs/tickets.md`](./docs/tickets.md).
 
 CS 4278: Principles of Software Engineering · Group 4 · Fall 2026
 Jack Dawson · Nate Dalbert · Moses Banda · Tapan Sidhwani
@@ -84,6 +88,10 @@ also commit the regenerated types.
 
 ### The hosted project
 
+The hosted project has the same migrations and seed as local (pushed with
+`--include-seed`, below). Its tables are unreadable through the API until the
+tracks add RLS policies — that is the intended starting point.
+
 `supabase db push` applies migrations to the hosted project but **does not
 load the seed.** To load it as well, run
 `npx supabase db push --include-seed` (linked to the hosted project first
@@ -117,29 +125,44 @@ or `src/lib/database.types.ts` is out of date.
 src/
   app/
     page.tsx               Landing page
-    login/                 Sign-in (US-01)
-    auth/confirm/          Sign-in callback
-    sessions/              Browse, create, and view sessions
-      actions.ts           Server actions: create, join, leave, cancel, message
-  components/              SessionBrowser, SessionMap, LocationPicker,
-                           SessionRoster, SessionChat
+    layout.tsx             App shell and header
+    login/                 Sign-in (US-01) -- page and actions are Track A's
+    auth/confirm/          Sign-in callback (Track A)
+    sessions/              List (page.tsx), create (new/), detail ([id]/, later)
+      actions.ts           Server actions: createSession (Track S)
+    api/courses/           GET course suggestions for the typeahead
+  components/              SiteHeader, NavLinks, AccountMenu, SessionBrowser,
+                           SessionCard, CreateSessionForm, CourseNumberInput,
+                           LocationPicker; SessionMap, SessionRoster,
+                           SessionChat (later sprints)
   lib/
-    supabase/              Browser, server, and proxy clients
+    supabase/              Browser, server, and proxy clients; requireUser()
+    sessions.ts            listSessions, listDepartments, searchCourses (Track S)
+    places.ts              resolvePlace (Track M)
+    fixtures.ts            Fixture data every stub returns until replaced
     validation.ts          Schemas shared by forms and actions
+    limits.ts              Length and capacity limits (client-safe)
+    format.ts              Display formatting, in campus time
+    datetime-local.ts      Form time inputs <-> ISO, in campus time
+    course-search.ts       Client-side call to /api/courses
+    env.ts                 Env vars (fail fast) and campus constants
     errors.ts              Database error codes -> student-facing messages
     database.types.ts      Generated from the schema (npm run db:types)
-  proxy.ts                 Session refresh + route protection
+  proxy.ts                 Session refresh (route protection: Track A)
 supabase/                  Local config, migrations (schema skeleton, RLS on),
                            and seed.sql (generated from data/)
 tests/db/                  Database tests (two-connection harness)
 data/                      Starter departments and courses -- source of seed.sql
 scripts/build-seed.mjs     Builds supabase/seed.sql from data/ (npm run db:seed)
-docs/                      Backlog, acceptance criteria, architecture decisions
+docs/                      Backlog, tickets, contracts, acceptance criteria,
+                           architecture, decisions (adr/)
 ```
 
-Many files above are still stubs or return fixtures. Real: `lib/env.ts`,
+Many files above are still stubs or return fixtures — the full list, with
+owners, is [`docs/contracts.md`](./docs/contracts.md). Real: `lib/env.ts`,
 `lib/supabase/` (except `requireUser()`), `proxy.ts`, `lib/validation.ts`,
-the layout and header, and the `/sessions` and `/sessions/new` screens. Each
+`limits.ts`, `format.ts`, `datetime-local.ts`, `course-search.ts`, the layout
+and header, and the `/sessions` and `/sessions/new` screens. Each
 stub carries a comment describing what it should contain and any constraint
 worth knowing before writing it.
 
@@ -147,6 +170,13 @@ worth knowing before writing it.
 
 - [`docs/backlog.md`](./docs/backlog.md) — canonical story IDs, priorities,
   estimates, and what changed from the Requirements Analysis Report
+- [`docs/tickets.md`](./docs/tickets.md) — the current sprint, by track; status
+  is tracked on the [GitHub project](https://github.com/users/jhdaws/projects/1)
+- [`docs/contracts.md`](./docs/contracts.md) — every stub the tracks replace,
+  its signature, and its owner
+- [`docs/architecture.md`](./docs/architecture.md) — system shape and the
+  agreed data model
+- [`HANDOFF.md`](./HANDOFF.md) — what each working session left for the next
 - [`docs/test-cases.md`](./docs/test-cases.md) — Given/When/Then criteria and
   honest coverage status
 - [`docs/adr/`](./docs/adr/) — architecture decisions and the corrected risk

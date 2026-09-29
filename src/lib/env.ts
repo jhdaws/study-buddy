@@ -84,9 +84,10 @@ export const CAMPUS_CENTER = { lat: 36.1447, lng: -86.8027 };
  * matches what a student means by "2 PM": everyone meeting is on campus.
  * Pass it to `Intl.DateTimeFormat`; see src/lib/format.ts.
  *
- * Times going IN are the other direction: the create form converts the
- * browser's local `datetime-local` value to an ISO instant before submitting
- * (docs/contracts.md, "Times in").
+ * Times going IN use the same zone: the create form reads its
+ * `datetime-local` values as campus time -- not the device's -- and converts
+ * them to ISO instants before submitting (src/lib/datetime-local.ts;
+ * docs/contracts.md, "Times in").
  */
 export const CAMPUS_TIME_ZONE = "America/Chicago";
 

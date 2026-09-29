@@ -84,11 +84,16 @@ flowchart LR
 **S · TASK-03 · 🚧**
 - [x] Hosted Supabase project created; Vercel connected, `main` deploys, previews on PRs
 - [x] `permissions: contents: read` in `ci.yml`
+- [x] Migrations and seed pushed to the hosted project (`supabase db push --include-seed`) — all six tables confirmed through the API; the seed rows are hidden by RLS until policies exist, so their presence is not confirmed
+- [x] Same two Supabase values in Vercel for Production, Preview, and Development — done (reported); not checkable from outside while production is behind Vercel's login
 - [ ] Supabase URL and publishable key shared with the team through a password manager
-- [ ] Same two values in Vercel for Production, Preview, and Development — **every page returns 500 without them**; redeploy after adding
-- [ ] Production URL loads signed out, and is in the README. Decide whether previews stay behind Vercel's login
-- [ ] **Before M1 creates any keys:** secret scanning and push protection on
-- [ ] `main` ruleset: PR required, `verify` and `db` checks required, no force push; "automatically delete head branches" on; Dependabot
+- [x] Production URL in the README: https://study-buddy-jdaws.vercel.app
+- [ ] **Production loads for a signed-out visitor.** It does not yet: every page redirects to Vercel's login (Deployment Protection), so teammates without Vercel access — and every magic link in A1/A3 — hit a login wall. Turn protection off for production (Vercel → Settings → Deployment Protection); decide separately whether previews stay protected
+- [x] **Before M1 creates any keys:** secret scanning and push protection on
+- [x] `main` ruleset: PR with one approval required, `verify` check required, no force push, no deletion
+- [ ] Add the `db` check to the ruleset's required checks
+- [ ] "Automatically delete head branches" on (Settings → General)
+- [ ] Dependabot config for npm and GitHub Actions
 
 #### W2 · Schema skeleton
 **M · TASK-00 · after W0**
@@ -118,7 +123,7 @@ flowchart LR
 #### W5 · Basic UI
 **L · US-02, US-03 · after W4**
 - [x] App shell: header, navigation, sign-in / sign-out link — the header shows "Sign in" until A3 makes a session possible; the sign-out form is component-tested only
-- [x] `/sessions`: list and card — course, topic, location, room, time, seats left; "Full" treatment; empty state inviting hosting. Times in campus time (`CAMPUS_TIME_ZONE`)
+- [x] `/sessions`: list and card — course, topic, location, room, time, seats left; "Full" treatment; empty state inviting hosting. Times shown in campus time (`CAMPUS_TIME_ZONE`) — and entered in it too: the form reads its time inputs as Nashville time whatever the device's zone
 - [x] `/sessions/new`: department picker with "add a department", course-number typeahead, topic, room, start, end, capacity, `<LocationPicker>`; field errors from `createSessionSchema`
 - [x] Mobile first: 44px tap targets, `text-base` inputs (ADR 0004) — checked at 375px in a browser
 - [x] Works end to end on fixtures: submitting the form validates and lands on the list (the stub saves nothing, so the new session does not appear until S3)
@@ -145,6 +150,7 @@ flowchart LR
 **M · US-01, US-25 · after W2**
 - [ ] Trigger rejecting non-`@vanderbilt.edu` signups
 - [ ] Trigger creating a `profiles` row on signup
+- [ ] `display_name` CHECK matching `displayNameSchema`: 1–50 characters after trimming (`DISPLAY_NAME_MAX_LENGTH` in `src/lib/limits.ts`)
 - [ ] RLS: signed-in users read display names; users update only their own
 - [ ] **Don't copy email into `profiles`.** It already lives in `auth.users`,
       which clients cannot read — that satisfies US-25 without column grants
@@ -171,8 +177,9 @@ flowchart LR
 **L · US-02 · after W2**
 - [ ] CHECKs: end after start, capacity ≥ 2. No maximums — the host decides
 - [ ] `create_session` database function: inserts the session **and** the host
-      as an attendee in one transaction; rejects a start in the past; requires
-      a display name
+      as an attendee in one transaction; rejects a start in the past —
+      allowing the same `START_GRACE_MINUTES` (5) the form allows, or the
+      database rejects what the form accepted; requires a display name
 - [ ] No client INSERT on `session_attendees` (joining is later, through its own function)
 - [ ] RLS: signed-in users read sessions and attendees
 - [ ] Database tests for each rejection, and for the host landing on the roster
@@ -193,6 +200,7 @@ flowchart LR
 **M · US-03 · after S1**
 - [ ] `listSessions()`: ended and cancelled sessions excluded, seats left derived from the roster (never stored), soonest first
 - [ ] `listDepartments()`; `searchCourses()` ordered by how many sessions used each course
+- [ ] `hostDisplayName` on each item needs A2's profiles read policy — until A2 lands, return null (shown as "Deleted user") or coordinate with A2
 
 ---
 

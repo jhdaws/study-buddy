@@ -7,13 +7,38 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe("localInputToIso", () => {
-  it("reads the value in the runtime's own zone -- the browser's, in the form", () => {
-    vi.stubEnv("TZ", "America/Chicago");
-    expect(localInputToIso("2026-10-01T14:30")).toBe("2026-10-01T19:30:00.000Z");
+// The machine running the code must not matter: the form reads and shows
+// campus time (America/Chicago) wherever the student's device thinks it is.
+const RUNTIME_ZONES = ["UTC", "America/Chicago", "America/Los_Angeles", "Asia/Tokyo"];
 
-    vi.stubEnv("TZ", "America/Los_Angeles");
-    expect(localInputToIso("2026-10-01T14:30")).toBe("2026-10-01T21:30:00.000Z");
+describe("localInputToIso", () => {
+  it("reads the value as campus time, whatever the runtime's zone", () => {
+    for (const zone of RUNTIME_ZONES) {
+      vi.stubEnv("TZ", zone);
+      // October: Central Daylight Time, UTC-5.
+      expect(localInputToIso("2026-10-01T14:30")).toBe("2026-10-01T19:30:00.000Z");
+      // December: Central Standard Time, UTC-6.
+      expect(localInputToIso("2026-12-01T14:30")).toBe("2026-12-01T20:30:00.000Z");
+    }
+  });
+
+  it("handles the daylight-saving changes", () => {
+    vi.stubEnv("TZ", "UTC");
+    // Spring forward, 2026-03-08 02:00 CST -> 03:00 CDT.
+    expect(localInputToIso("2026-03-08T01:30")).toBe("2026-03-08T07:30:00.000Z");
+    // 2:30 AM does not exist that night: an hour later, as browsers do.
+    expect(localInputToIso("2026-03-08T02:30")).toBe("2026-03-08T08:30:00.000Z");
+    expect(localInputToIso("2026-03-08T03:00")).toBe("2026-03-08T08:00:00.000Z");
+    // Fall back, 2026-11-01 02:00 CDT -> 01:00 CST.
+    expect(localInputToIso("2026-11-01T00:30")).toBe("2026-11-01T05:30:00.000Z");
+    // 1:30 AM happens twice that night: the first one.
+    expect(localInputToIso("2026-11-01T01:30")).toBe("2026-11-01T06:30:00.000Z");
+    expect(localInputToIso("2026-11-01T02:00")).toBe("2026-11-01T08:00:00.000Z");
+    expect(localInputToIso("2026-11-01T03:00")).toBe("2026-11-01T09:00:00.000Z");
+  });
+
+  it("takes an explicit zone", () => {
+    expect(localInputToIso("2026-10-01T14:30", "UTC")).toBe("2026-10-01T14:30:00.000Z");
   });
 
   it("produces what createSessionSchema accepts, where the raw value is rejected", () => {
@@ -43,29 +68,36 @@ describe("localInputToIso", () => {
   });
 
   it("accepts seconds, which some browsers include", () => {
-    vi.stubEnv("TZ", "UTC");
-    expect(localInputToIso("2026-10-01T14:30:15")).toBe("2026-10-01T14:30:15.000Z");
+    expect(localInputToIso("2026-10-01T14:30:15")).toBe("2026-10-01T19:30:15.000Z");
   });
 
   it("returns an empty string for blank, partial or impossible values", () => {
-    expect(localInputToIso("")).toBe("");
-    expect(localInputToIso("2026-10-01")).toBe("");
-    expect(localInputToIso("not a date")).toBe("");
-    expect(localInputToIso("2026-02-30T10:00")).toBe("");
+    for (const value of [
+      "",
+      "2026-10-01",
+      "not a date",
+      "2026-02-30T10:00",
+      "2026-10-01T24:00",
+      "2026-10-01T10:60",
+    ]) {
+      expect(localInputToIso(value)).toBe("");
+    }
   });
 });
 
 describe("isoToLocalInput", () => {
-  it("is the inverse of localInputToIso, to the minute", () => {
-    for (const zone of ["UTC", "America/Chicago", "Asia/Kolkata"]) {
+  it("shows an instant as campus time, whatever the runtime's zone", () => {
+    for (const zone of RUNTIME_ZONES) {
       vi.stubEnv("TZ", zone);
-      expect(isoToLocalInput(localInputToIso("2026-10-01T09:05"))).toBe("2026-10-01T09:05");
+      expect(isoToLocalInput("2026-10-01T19:30:00.000Z")).toBe("2026-10-01T14:30");
+      expect(isoToLocalInput("2027-01-01T05:59:00.000Z")).toBe("2026-12-31T23:59");
     }
   });
 
-  it("shows an instant in the runtime's zone", () => {
-    vi.stubEnv("TZ", "America/Chicago");
-    expect(isoToLocalInput("2026-10-01T19:30:00.000Z")).toBe("2026-10-01T14:30");
+  it("is the inverse of localInputToIso, to the minute", () => {
+    for (const local of ["2026-10-01T09:05", "2026-12-01T23:45", "2026-11-01T03:00"]) {
+      expect(isoToLocalInput(localInputToIso(local))).toBe(local);
+    }
   });
 
   it("returns an empty string for nothing or garbage", () => {

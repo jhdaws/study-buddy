@@ -10,23 +10,30 @@ failed. The template and the rules for writing an entry are in that file.
 
 ## Current state
 
-This repository is a scaffold. Every route, component, and helper is a stub
-carrying a comment describing what belongs in it. The database has a schema
-skeleton (RLS on, no policies yet), a seed of starter departments and
-courses, and generated TypeScript types — but there is no auth and no
-working feature yet.
+Sprint 2 is in progress (`docs/tickets.md`). The database has a schema
+skeleton (RLS on, **no policies yet**), a seed of starter departments and
+courses, and generated TypeScript types; the hosted project has the same.
+The screens — header, session list, create-session form — are built, but on
+**stubs returning fixture data**: nothing is saved or read, and nobody can
+sign in yet. Every stub, its owner, and what its real body must do is in
+`docs/contracts.md`. Routes and components for later sprints are still
+comment-only stubs.
 
 **Read the stub comment before you fill one in** — several record a constraint
 that is easy to miss and expensive to get wrong.
 
 ## Conventions
 
-- **Story IDs.** `docs/backlog.md` is canonical. Use `US-nn` in branch names
-  (`us-04-join-session`), commit subjects, and PR titles.
-- **Schema changes are migrations.** Add a new numbered file in
-  `supabase/migrations/`; never edit one that has already been applied.
+- **Story IDs.** `docs/backlog.md` is canonical. Use `US-nn` in commit
+  subjects and PR titles. Branches are named after the ticket and story
+  (`s3-us-02-create-session`); ticket IDs are in `docs/tickets.md`.
+- **Schema changes are migrations.** Create one with
+  `npx supabase migration new <name>` (timestamped, in
+  `supabase/migrations/`); never edit one that has already been applied.
+  Commit the regenerated `src/lib/database.types.ts` with it — CI checks.
 - **Validation lives in `src/lib/validation.ts`** and is shared by a form and
-  the server action behind it. Those rules should mirror the database
+  the server action behind it (its length limits live in `src/lib/limits.ts`,
+  so Client Components can import them without shipping zod). Those rules should mirror the database
   constraints — the database is the real enforcement, this layer is for a good
   error message.
 - **Database errors reach users through `src/lib/errors.ts`.** Never surface

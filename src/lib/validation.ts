@@ -161,13 +161,14 @@ export type DisplayNameField = keyof DisplayNameValues;
 // mirror: see src/lib/limits.ts.
 
 /**
- * An absolute instant, as ISO 8601 **with** a UTC offset or `Z`
- * (`new Date(value).toISOString()` in the browser), parsed to a `Date`.
+ * An absolute instant, as ISO 8601 **with** a UTC offset or `Z`, parsed to a
+ * `Date`.
  *
  * A bare `datetime-local` value (`2026-10-01T14:30`) is REJECTED on purpose:
  * it has no time zone, and the server (UTC on Vercel) would read it as a time
- * five or six hours away from what the student meant. The form converts it in
- * the browser, which knows the student's zone.
+ * five or six hours away from what the student meant. The form converts it
+ * first, reading it as campus time (localInputToIso in
+ * src/lib/datetime-local.ts).
  */
 function instant(message: string) {
   return z.iso
