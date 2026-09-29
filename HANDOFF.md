@@ -71,6 +71,137 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-09-29 · W4 stubs and fixtures: the contract for tracks A, S, M
+
+**Branch:** `w4-stubs-fixtures`, fast-forwarded onto `origin/main` at
+`f93a9a2` (#27 merged) · **Commits made:** `560c23f` (the work) and the one
+adding this entry. PR opened this session against `main`; **not merged**.
+**Two agent sessions:** the first was stopped partway, leaving uncommitted
+`validation.ts`, `supabase/server.ts`, `fixtures.ts` and a started
+`places.ts`; this session reviewed that work, kept most of it, and finished
+the ticket.
+
+### What changed
+- `docs/contracts.md` (new) — every seam: file, signature, owner ticket, what
+  the stub does, what the real body must do; the shared types verbatim; W5's
+  form notes; why the typeahead uses a Route Handler. Linked from
+  `tickets.md` "How the stubs work"; all four W4 boxes ticked.
+- `src/lib/validation.ts` — from the first session, kept. One change: the
+  end-after-start rule now runs whenever both times parsed, so a past start
+  no longer hides "end before start". `validation.test.ts` (27 tests).
+- `src/lib/fixtures.ts` — from the first session, plus the stub bodies of
+  `sessions.ts` as pure functions (`fixtureSessionList`,
+  `fixtureDepartments`, `fixtureCourseSuggestions`). `fixtures.test.ts`
+  (20 tests) — the file's header already promised it.
+- `src/lib/sessions.ts`, `src/app/api/courses/route.ts`,
+  `src/lib/course-search.ts` (new) — Track S reads; typeahead over HTTP.
+- `src/app/sessions/actions.ts`, `src/app/login/actions.ts` — stubs replacing
+  the old TODO lists. The atomic-join warning is kept in the sessions file.
+- `src/lib/places.ts` — first session's, kept; owner line and a note on
+  session tokens added.
+- `src/components/LocationPicker.tsx` — props contract, fixture `<select>`,
+  rewritten comment; `LocationPicker.test.tsx` (4 tests).
+- Comments only: `CreateSessionForm.tsx`, `SessionBrowser.tsx`,
+  `SessionMap.tsx`, `sessions/page.tsx`, `sessions/new/page.tsx`.
+- `test-cases.md` — US-02b 🚧 (rule tested, form and database not);
+  `ai-usage-log.md` row.
+
+### Names W5 and the tracks build on (exact)
+- `@/lib/supabase/server`: `requireUser(): Promise<CurrentUser>`,
+  `type CurrentUser = { id: string; displayName: string }`. `createClient()`
+  and `getCurrentUser()` unchanged.
+- `@/lib/validation`: `signInSchema`, `displayNameSchema`,
+  `createSessionSchema(now?: Date)`; `type FormState<Field>`,
+  `FieldErrors<Field>`, `SignInField`, `SignInValues`, `DisplayNameField`,
+  `DisplayNameValues`, `CreateSessionField`, `CreateSessionValues`,
+  `CreateSessionSchema`; `formValues()`, `invalidFormState()`; constants
+  `DISPLAY_NAME_MAX_LENGTH` (50), `TOPIC_MAX_LENGTH` (120),
+  `LOCATION_LABEL_MAX_LENGTH` (100), `ROOM_MAX_LENGTH` (50), `MIN_CAPACITY`
+  (2), `MAX_CAPACITY`, `START_GRACE_MINUTES` (5).
+- `@/app/login/actions`: `signIn(prev: SignInState, formData): Promise<SignInState>`,
+  `saveDisplayName(prev: DisplayNameState, formData): Promise<DisplayNameState>`,
+  `signOut(): Promise<void>`; `type SignInState = FormState<SignInField> & { sentTo?: string }`,
+  `type DisplayNameState = FormState<DisplayNameField>`.
+- `@/app/sessions/actions`: `createSession(prev: CreateSessionState, formData): Promise<CreateSessionState>`,
+  `type CreateSessionState = FormState<CreateSessionField>`.
+- `@/lib/sessions` (server-only): `listSessions(): Promise<SessionListItem[]>`,
+  `listDepartments(): Promise<Department[]>`,
+  `searchCourses(departmentCode: string, query: string): Promise<CourseSuggestion[]>`;
+  types `CourseLabel`, `SessionListItem`, `Department`, `CourseSuggestion`;
+  `COURSE_SUGGESTION_LIMIT` (8).
+- `GET /api/courses?department=&q=` → `CourseSuggestion[]` (400 without
+  `department`). `@/lib/course-search`: `fetchCourseSuggestions(departmentCode, query, options?: { signal?: AbortSignal })`,
+  `COURSE_SEARCH_PATH`.
+- `@/lib/places` (server-only): `resolvePlace(placeId: string): Promise<ResolvedPlace>`,
+  `type ResolvedPlace = { locationId: string }`, `class PlaceError` (`reason`,
+  `placeId`, safe `message`), `type PlaceErrorReason`.
+- `@/components/LocationPicker`: default export; `type PickedPlace = { placeId: string; label: string }`,
+  `type LocationPickerProps` (`name?` default `"placeId"`, `id?`,
+  `defaultValue?`, `onSelect?`, `required?`, `disabled?`, `aria-invalid?`,
+  `aria-describedby?`).
+- `@/lib/fixtures`: `FIXTURE_USER`, `FIXTURE_PROFILES`, `FIXTURE_DEPARTMENTS`,
+  `FIXTURE_COURSES`, `FIXTURE_PLACES`, `FIXTURE_LOCATIONS`, `FIXTURE_ROSTERS`,
+  `fixtureSessions(now?)`, and the three stub-body functions above.
+
+### Verified versus assumed
+- **Verified locally:** `npm run lint`, `typecheck`, `npm test` (55 tests),
+  `npm run build` with CI's placeholder values, `npm run test:db`. With a
+  gitignored `.env.local` from `npx supabase status -o env`, `next dev -p
+  3200` served `/`, `/sessions`, `/sessions/new`, `/login` with 200, and
+  `/api/courses` answered as documented (200 with suggestions; 400 without a
+  department); server stopped. Mutations: breaking the past-start rule, the
+  end-after-start rule, its `when` condition, or the domain check (to
+  `endsWith`) each failed the matching tests; so did changing a fixture
+  title, dropping the cancelled filter, and overfilling a roster. Two
+  throwaway build probes, since deleted: a Client Component using
+  `fetchCourseSuggestions` (which type-imports from server-only
+  `sessions.ts`) builds; one importing a value from `sessions.ts` fails with
+  the `server-only` error.
+- **Not verified:** the four server actions were type-checked and built but
+  **never submitted** — no form exists until W5. The pages still render only
+  their `<h1>`, so the 200s prove little beyond compiling. The `<select>`
+  reset behaviour below was seen in jsdom only, not a browser. Fixture
+  coordinates are approximations, checked only to be inside the radius.
+  CI had not run on the PR when this was written.
+
+### Open questions for the user
+- Choices the brief left to the agents, reviewable in the PR: the length
+  caps and the 5-minute start grace (S1 must mirror the grace in
+  `create_session`, or the database rejects what the form accepts);
+  rejecting times without an offset, so the form must convert in the
+  browser; `hostDisplayName` on `SessionListItem`, which makes S4's query
+  depend on A2's profiles read policy; the course suggestion limit of 8.
+- Fixture places use real building names (Featheringill Hall, Central
+  Library) with obviously fake IDs, and the picker shows them under a
+  "Fixture places (stub until M2)" group. Fine, or should the names be fake
+  too?
+
+### Things the next agent should be careful about
+- **React 19's post-action form reset clears `<select>`s** — uncontrolled
+  ones ignore a changed `defaultValue`, and controlled ones are reset too.
+  W5: give each select `key={values?.field}` as well as `defaultValue`.
+  `<LocationPicker>` works around it by mirroring its choice into
+  `defaultSelected`. A controlled text input or a hidden input survives.
+  (jsdom, React 19.2.8.)
+- **The stubs save nothing.** Submitting the create form lands on
+  `/sessions` without the new session; `signIn` sends no email;
+  `requireUser()` checks nothing and returns the fixture user. All expected
+  until S3, A3 and A4.
+- **`sessions.ts` and `places.ts` are `import "server-only"`**, which Next
+  resolves itself (the npm package is not installed). Vitest cannot import
+  them — that is why the stub logic is in `fixtures.ts`. M3 should put the
+  distance check in its own module, as `places.ts` says.
+- **Times are UTC ISO strings.** Formatting them in a Server Component on
+  Vercel without `timeZone: "America/Chicago"` shows the wrong hour.
+- **`src/lib/errors.ts` has no signature yet.** S3 writes the first mapping.
+- **After a throwaway build with an extra route, `npm run typecheck` fails**
+  on a stale `.next/types/validator.ts` naming the deleted route. Rebuild,
+  or delete `.next`.
+- **Still stale, not touched:** `test-cases.md` US-02 row still says
+  "building"; `src/lib/errors.ts`'s comment speaks only of the join routine.
+
+---
+
 ## 2026-09-29 · W3 starter data, seed, and generated types
 
 **Branch:** `w3-starter-data`, from `origin/main` at `8e978a0` · **Commits
