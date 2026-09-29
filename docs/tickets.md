@@ -59,6 +59,8 @@ flowchart LR
 
 - **A stub is a typed function or component whose signature W4 fixes.** Its
   body returns fixture data. Its comment names the owning track and ticket.
+  Every seam — file, signature, owner, what the stub returns, what the real
+  body must do — is listed in [`contracts.md`](./contracts.md).
 - **Replace the body, keep the signature.** If a signature has to change, do
   it in a PR that updates every caller, and tell Jack.
 - **W2 turns on RLS for every table with no policies**, so nothing is readable
@@ -105,13 +107,13 @@ flowchart LR
 
 #### W4 · Stubs and fixtures
 **M · after W3 · unblocks A, S, M**
-- [ ] `src/lib/fixtures.ts` — sessions (one full, one with only the host), departments, courses, locations
-- [ ] `src/lib/validation.ts` — `signInSchema`, `displayNameSchema`, `createSessionSchema` (end after start, not in the past, capacity ≥ 2), unit tested, including US-02b
-- [ ] Stubs with final signatures, each returning fixtures:
-  - Track S: `createSession()` in `sessions/actions.ts`; `listSessions()`, `listDepartments()`, `searchCourses()` in `src/lib/sessions.ts`
+- [x] `src/lib/fixtures.ts` — sessions (one full, one with only the host), departments, courses, locations
+- [x] `src/lib/validation.ts` — `signInSchema`, `displayNameSchema`, `createSessionSchema` (end after start, not in the past, capacity ≥ 2), unit tested, including US-02b
+- [x] Stubs with final signatures, each returning fixtures:
+  - Track S: `createSession()` in `sessions/actions.ts`; `listSessions()`, `listDepartments()`, `searchCourses()` in `src/lib/sessions.ts` — the typeahead reaches `searchCourses()` through `GET /api/courses` ([why](./contracts.md#why-searchcourses-goes-through-a-route-handler))
   - Track M: `<LocationPicker>` (stub: a select of fixture places that submits a `place_id`); `resolvePlace(placeId)` in `src/lib/places.ts`
   - Track A: `signIn()`, `saveDisplayName()`, `signOut()` in `login/actions.ts`; `requireUser()` in `src/lib/supabase/server.ts`
-- [ ] Every stub's comment names its owning ticket
+- [x] Every stub's comment names its owning ticket — all listed in [`contracts.md`](./contracts.md)
 
 #### W5 · Basic UI
 **L · US-02, US-03 · after W4**
