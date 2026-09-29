@@ -3,7 +3,7 @@
 Local development is set up — `config.toml`, and `npm run db:start` brings up
 the whole Supabase stack in Docker (see the root README). **There are no
 migrations yet, on purpose:** the schema is written once the team has agreed
-what it looks like (C0 in `docs/tickets.md`).
+what it looks like (W0 and W2 in `docs/tickets.md`).
 
 ## What goes here
 
