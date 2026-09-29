@@ -90,9 +90,33 @@ spends its first hour rediscovering the same dead end.
 - **Open question 1 from the entry below is answered for this session:** the
   user asked for the PRs, so the agent committed and pushed. Do not generalise
   that to future sessions without asking.
+- **Open question 2 is answered: `LocationPicker.tsx` stays a separate
+  component.** T-D6 already assumes this; nothing else needed changing.
 
 ### Open questions for the user
-- Questions 2 and 3 from the entry below are still unanswered.
+- Question 3 from the entry below is still unanswered.
+- The user asked to keep everything else **pending** — do not resolve these
+  without them. They are C0 material unless marked otherwise:
+  - What the picker returns (an id for the server to resolve, not
+    coordinates — recommended but not agreed)
+  - Who may write a venue row; whether that brings the service-role key into
+    the app
+  - Whether Google's terms let us store a venue's name, or the host types a
+    label — affects the `locations` table
+  - Room required for campus / optional for venues; allowed venue types;
+    radius; campus zone list
+  - Seat count derived vs stored; where authorization lives; locations single
+    table vs per-kind; display name required at first sign-in; study request
+    shape; capacity and time bounds; whether the host can leave; chat after a
+    session ends; deletion behaviour for US-24
+  - Team calls: ratifying ADRs 0001–0003; who owns Google billing; DB tests in
+    CI or local only; merge strategy
+- **T-A2 must enable "Places API (New)"**, not the legacy Places API —
+  `locationRestriction` and `includedPrimaryTypes` only exist in the new one.
+  Not yet written into the ticket.
+- `CreateSessionForm.tsx` and `sessions/new/page.tsx` stub comments predate
+  ADRs 0006/0007 (single "course" field, building dropdown). Stale; not yet
+  fixed.
 - **Merge order.** PR #2 is based on `db-setup`. If #1 is squash-merged, #2
   will need rebasing onto `main`; if `db-setup` is deleted on merge GitHub
   retargets #2 automatically (branch auto-delete is currently off).
