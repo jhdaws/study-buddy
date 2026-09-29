@@ -9,21 +9,24 @@ mapping stays honest as the code changes.
 
 Status: ⬜ not yet written · 🚧 partially covered · ✅ automated and passing
 
-**Everything is ⬜ except US-02b, which is 🚧.** An earlier scaffold had 15
-passing unit tests; it was stripped back so the schema can be designed first.
-The tests in the repo today cover environment configuration, the form
-validation rules, the W4 fixtures and the location picker's props, prove the
-database harness works, guard that every table has Row Level Security
-enabled, and check the starter data loaded. Only the validation tests touch
-a row below, and only half of it.
+**Everything is ⬜ except US-02b and US-16, which are 🚧.** An earlier
+scaffold had 15 passing unit tests; it was stripped back so the schema can be
+designed first. The tests in the repo today cover environment configuration,
+the form validation rules, the W4 fixtures and the location picker's props,
+the W5 screens as components (session card, list, empty state, create form,
+header) and their time formatting, prove the database harness works, guard
+that every table has Row Level Security enabled, and check the starter data
+loaded. Only the validation tests and the W5 component tests touch a row
+below, and neither completes one: **the UI runs on fixture stubs, so no
+acceptance criterion is verified end to end.**
 
 | ID | Status | Given | When | Then | Verified by |
 | --- | --- | --- | --- | --- | --- |
 | US-01 | ⬜ | An unregistered student is on the sign-in screen | They submit a valid `@vanderbilt.edu` address | A one-time sign-in link is emailed; non-Vanderbilt addresses are rejected with a specific message | Unit test + a database-level domain check |
 | US-01b | ⬜ | An attacker calls the auth API directly with a non-Vanderbilt address | The request bypasses our sign-in form | The database trigger rejects it | DB integration test — TASK-03 |
-| US-02 | ⬜ | A signed-in student is on Create Session | They submit course, topic, building, room, time range, capacity | The session is saved, the host is added to the roster, and a pin appears on the map | Unit test + integration test |
-| US-02b | 🚧 | A signed-in student is on Create Session | They submit an end time before the start, or a time in the past | Submission is blocked with a field-level error | Unit test: `src/lib/validation.test.ts`, the "US-02b" block — the rule and its field-level messages. **Not yet:** the form showing them (W5), the database refusing them (S1) |
-| US-03 | ⬜ | Three upcoming sessions and one ended session exist | A signed-in student opens the map | Three pins appear, the ended one does not; tapping a pin shows course, time, and seats left | Manual on staging — Sprint 3 |
+| US-02 | ⬜ | A signed-in student is on Create Session | They submit course, topic, a place (from Google Places — there is no building list, ADR 0008), room, time range, capacity | The session is saved, the host is added to the roster, and a pin appears on the map | Unit test + integration test. **So far:** the form exists (W5) and submits to the `createSession` stub, which validates and redirects but **saves nothing** — S3 |
+| US-02b | 🚧 | A signed-in student is on Create Session | They submit an end time before the start, or a time in the past | Submission is blocked with a field-level error | Unit test: `src/lib/validation.test.ts`, the "US-02b" block — the rule and its field-level messages. Component test: `src/components/CreateSessionForm.test.tsx` — the form shows a `startsAt`/`endsAt` error beside its input (`role="alert"`, `aria-describedby`) and keeps what was typed (W5). **Not yet:** the database refusing them (S1) |
+| US-03 | ⬜ | Three upcoming sessions and one ended session exist | A signed-in student opens the map | Three pins appear, the ended one does not; tapping a pin shows course, time, and seats left | Manual on staging — Sprint 3. **So far (list half, not the map):** `SessionBrowser.test.tsx` renders course, time and seats left per card; the ended/cancelled filter is only the fixture stub's (`fixtures.test.ts`) until S4 |
 | US-04 | ⬜ | A signed-in student views an open session with space | They tap Join | Attendee count increases by one, their name appears on the roster, and the chat unlocks | E2E — Sprint 3 |
 | US-05 | ⬜ | A student has joined a session with at least one other attendee | They type a message and send | It appears for every attendee within a second, tagged with sender and timestamp | Two-client manual test, then E2E |
 | US-05b | ⬜ | A student has **not** joined a session | They query the messages table for it | No rows are returned | Database authorization rule — needs a DB test |
@@ -32,7 +35,7 @@ a row below, and only half of it.
 | US-08 | ⬜ | A student has joined a session | They tap Leave | They disappear from the roster and the seat is released | E2E — Sprint 3 |
 | US-09 | ⬜ | A host owns an open session | They cancel it | Attendees see a cancellation notice and new joins are rejected | E2E — Sprint 4 |
 | US-06 / US-12 | ⬜ | Several sessions exist across courses and campus zones | A student applies a course or zone filter | Only matching sessions remain; clearing the filter restores all | Component test — Sprint 3 |
-| US-16 | ⬜ | No sessions exist for a student's course | They open the session list | The empty state invites them to start one or post a request | Component test |
+| US-16 | 🚧 | No sessions exist for a student's course | They open the session list | The empty state invites them to start one or post a request | Component test: `src/components/SessionBrowser.test.tsx` — an empty list shows an invitation linking to `/sessions/new`. **Not yet:** "for a student's course" needs the course filter (US-06); "post a request" needs study requests (later sprint) |
 | US-23 | ⬜ | A student is deciding whether to walk across campus | They open a session | They see who is already attending before joining | E2E |
 | US-11b | ⬜ | A signed-in student queries another student's profile row | They request the `email` column | The request is denied; name, major, and year are returned | Column-level access control — needs a DB test |
 
@@ -75,9 +78,9 @@ and can be added alongside if the team prefers it there.
 
 ## Coverage, stated plainly
 
-**Half of one row.** `npm test` covers `src/lib/env.ts` — missing and
-malformed configuration — and, since W4, the form validation rules in
-`src/lib/validation.ts`. `npm run test:db` proves the database harness can connect and
+**Pieces of two rows, none complete.** `npm test` covers `src/lib/env.ts` — missing and
+malformed configuration — since W4, the form validation rules in
+`src/lib/validation.ts`, and since W5 the screens as components (below). `npm run test:db` proves the database harness can connect and
 make one connection wait on another, and runs one permanent structural guard:
 `tests/db/rls.test.ts` fails if any table in `public` has Row Level Security
 switched off (checked to fail when a table without RLS was added). Nothing in
@@ -111,7 +114,20 @@ and the database trigger, so it stays ⬜. `src/lib/fixtures.test.ts` and
 consistent and that the picker keeps its props contract — scaffolding, not
 behaviour a student sees.
 
+W5's component tests (`SessionBrowser.test.tsx`, `CreateSessionForm.test.tsx`,
+`SiteHeader.test.tsx`) render the screens in jsdom with fixture data and a
+mocked `createSession`: a card's seats text and "Full" state, the empty
+state's link, each field error rendered and linked, values kept across two
+failed submits, the typeahead (debounce, cancelling the previous request,
+"create it?"). `src/lib/format.test.ts` checks times print in campus time
+whatever the machine's zone. They prove the screens render what they are
+given. They do not prove anything is saved, read from the database, or
+protected — every call below the UI is still a stub. The form was also
+clicked through once on the dev server at 375px (errors shown and kept, a
+valid submit landing on `/sessions`); that is a manual check, not a test.
+
 The green CI badge certifies that the code compiles, lints, reaches a
 database, has RLS switched on everywhere, that the generated files are
-current, and that the form rules behave — nothing more. Say that plainly in the report rather than letting
+current, that the form rules behave, and that the screens render fixture
+data as intended — nothing more. Say that plainly in the report rather than letting
 "CI passing" do unearned work.

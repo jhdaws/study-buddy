@@ -156,6 +156,36 @@ export type LocationPickerProps = {
   previous call on each keystroke. Suggestions are hints: the host may type a
   course that does not exist yet, and S2 creates it on use.
 
+## What W5 added on top
+
+W5 ([#12](https://github.com/jhdaws/study-buddy/issues/12)) built the screens
+against the seams above without changing any of them. What it added that is
+worth knowing when you build next to it:
+
+- **`src/lib/limits.ts`** — the numeric limits (`TOPIC_MAX_LENGTH`,
+  `MIN_CAPACITY`, …) now live here, in a module with no imports.
+  `@/lib/validation` still exports every one of them, so nothing above
+  changes. **Client Components should import them from `@/lib/limits`:**
+  importing a value from `validation.ts` ships zod with all its locales to
+  the browser (a 405 KB client chunk, 95 KB gzipped, in W5's first build of
+  `/sessions/new`; gone from the client chunks after the move). Types
+  from `validation.ts` are fine with `import type`.
+- **Times out:** `CAMPUS_TIME_ZONE` (`"America/Chicago"`) in
+  `src/lib/env.ts`, and the formatters in `src/lib/format.ts`
+  (`formatSessionTime`, `formatSeatsLeft`, …). Use them rather than
+  `toLocaleString()` wherever a session time is shown.
+- **The list for M4:** `<SessionBrowser sessions now />` renders one
+  `<SessionCard session now />` per `SessionListItem`. `SessionCard` has no
+  hooks, so M4's list/map toggle can make `SessionBrowser` a Client Component
+  and keep the cards as they are; the comment in `SessionBrowser.tsx`
+  describes the seam. The page does not need to change.
+- **Selects and the post-action reset, refined:** `key` + `defaultValue`
+  works for an *uncontrolled* select, including a second submit with the
+  same value (checked in jsdom). A *controlled* select — the department
+  picker, which the typeahead reads — needs its value mirrored into
+  `defaultSelected` instead, as `<LocationPicker>` does; see
+  `CreateSessionForm.tsx`.
+
 ## Why `searchCourses` goes through a Route Handler
 
 W5's typeahead is a Client Component, so it cannot call a server-only module

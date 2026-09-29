@@ -34,7 +34,11 @@ harness are real. The Sprint 2 tables exist ([ADR 0008](./docs/adr/0008-sprint-2
 with Row Level Security on and **no policies yet** — so nothing is readable
 through the API until each track adds its own. A starter set of departments
 and courses is seeded from [`data/`](./data/), and TypeScript types are
-generated from the schema. No sign-in and no working feature yet.
+generated from the schema. The screens — header, session list, and the
+create-session form — are built and click through end to end, but on
+**fixture stubs**: nothing is read from or saved to the database, and nobody
+can sign in yet. Every seam the tracks replace is listed in
+[`docs/contracts.md`](./docs/contracts.md).
 
 The toolchain is real and green: lint, typecheck, test, and build all pass, and
 CI runs them on every push.
@@ -133,9 +137,11 @@ scripts/build-seed.mjs     Builds supabase/seed.sql from data/ (npm run db:seed)
 docs/                      Backlog, acceptance criteria, architecture decisions
 ```
 
-Most files above are stubs; `lib/env.ts`, `lib/supabase/`, and `proxy.ts` are
-real. Each one carries a comment describing what it
-should contain and any constraint worth knowing before writing it.
+Many files above are still stubs or return fixtures. Real: `lib/env.ts`,
+`lib/supabase/` (except `requireUser()`), `proxy.ts`, `lib/validation.ts`,
+the layout and header, and the `/sessions` and `/sessions/new` screens. Each
+stub carries a comment describing what it should contain and any constraint
+worth knowing before writing it.
 
 ## Where things are decided
 
