@@ -21,8 +21,9 @@ const fetchSuggestionsMock = vi.mocked(fetchCourseSuggestions);
 const departments = fixtureDepartments(); // CHEM, CS, ECON, MATH, PHYS
 
 beforeEach(() => {
-  // The form reads datetime-local values in the browser's zone.
-  vi.stubEnv("TZ", "America/Chicago");
+  // The form reads and shows campus (Nashville) time whatever the device's
+  // zone is. Run in a far-away zone so a regression to device time fails.
+  vi.stubEnv("TZ", "Asia/Tokyo");
   fetchSuggestionsMock.mockResolvedValue([]);
 });
 

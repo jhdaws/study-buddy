@@ -34,7 +34,7 @@ acceptance criterion is verified end to end.**
 | **US-07b** | ⬜ | A session has exactly one seat left | **Two students attempt to join at the same moment** | Exactly one succeeds; the other is told the session is full; the roster never exceeds capacity | **DB concurrency test — see below** |
 | US-08 | ⬜ | A student has joined a session | They tap Leave | They disappear from the roster and the seat is released | E2E — Sprint 3 |
 | US-09 | ⬜ | A host owns an open session | They cancel it | Attendees see a cancellation notice and new joins are rejected | E2E — Sprint 4 |
-| US-06 / US-12 | ⬜ | Several sessions exist across courses and campus zones | A student applies a course or zone filter | Only matching sessions remain; clearing the filter restores all | Component test — Sprint 3 |
+| US-06 / US-12 | ⬜ | Several sessions exist across courses and campus zones *(zone data no longer exists — US-12 needs rethinking, ADR 0008)* | A student applies a course or zone filter | Only matching sessions remain; clearing the filter restores all | Component test — Sprint 3 |
 | US-16 | 🚧 | No sessions exist for a student's course | They open the session list | The empty state invites them to start one or post a request | Component test: `src/components/SessionBrowser.test.tsx` — an empty list shows an invitation linking to `/sessions/new`. **Not yet:** "for a student's course" needs the course filter (US-06); "post a request" needs study requests (later sprint) |
 | US-23 | ⬜ | A student is deciding whether to walk across campus | They open a session | They see who is already attending before joining | E2E |
 | US-11b | ⬜ | A signed-in student queries another student's profile row | They request the `email` column | The request is denied; name, major, and year are returned | Column-level access control — needs a DB test |
@@ -120,7 +120,9 @@ mocked `createSession`: a card's seats text and "Full" state, the empty
 state's link, each field error rendered and linked, values kept across two
 failed submits, the typeahead (debounce, cancelling the previous request,
 "create it?"). `src/lib/format.test.ts` checks times print in campus time
-whatever the machine's zone. They prove the screens render what they are
+whatever the machine's zone, and `src/lib/datetime-local.test.ts` that the
+form reads the times a student types as campus time too, across both
+daylight-saving changes. They prove the screens render what they are
 given. They do not prove anything is saved, read from the database, or
 protected — every call below the UI is still a stub. The form was also
 clicked through once on the dev server at 375px (errors shown and kept, a

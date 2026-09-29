@@ -27,15 +27,17 @@ issues, and test names so the report, the tracker, and the code all agree.
 
 Status: ⬜ not started · 🚧 in progress · ✅ done
 
-**Everything is ⬜.** An earlier scaffold implemented several of these; it was
-deliberately stripped back so the first push is structure only and the schema
-can be designed properly. Nothing below is built.
+**Nothing below is done.** An earlier scaffold implemented several of these;
+it was stripped back so the schema could be designed first. Sprint 2 is now
+under way (see [`tickets.md`](./tickets.md)): the screens for US-02 and US-03
+exist but run on fixture stubs — nothing is saved or read from the database
+yet — so those two are 🚧 and everything else is ⬜.
 
 | ID | Pri | Status | Story | Est |
 | --- | --- | --- | --- | --- |
 | US-01 | P0 | ⬜ | As a Vanderbilt student, I want to authenticate with my Vanderbilt email, so that everyone on the platform is a verified classmate. | 12 |
-| US-02 | P0 | ⬜ | As an authenticated user, I want to create a study session with course, topic, building, room, time range, and max capacity, so that peers can join me. | 14 |
-| US-03 | P0 | ⬜ | As a student looking for peers, I want to see active sessions on a campus map or list, so that I can find groups meeting near me. | 16 |
+| US-02 | P0 | 🚧 | As an authenticated user, I want to create a study session with course, topic, location, room, time range, and max capacity, so that peers can join me. *(Location from Google Places, not a building list — ADR 0008.)* | 14 |
+| US-03 | P0 | 🚧 | As a student looking for peers, I want to see active sessions on a campus map or list, so that I can find groups meeting near me. | 16 |
 | US-04 | P0 | ⬜ | As a student, I want to join an open session in one tap, so that my name appears on the roster and my seat is reserved. | 8 |
 | US-05 | P0 | ⬜ | As a participant, I want to send and receive messages in a session chat, so that I can coordinate with the group. | ~~16~~ **30** |
 | US-16 | **P0** | ⬜ | As a student who can't find a session for my course, I want to post a study request visible to classmates, so that they can see the interest and start one. | 5 |
@@ -44,7 +46,7 @@ can be designed properly. Nothing below is built.
 | US-08 | P1 | ⬜ | As an attendee, I want to leave a session, so that my seat opens up for someone else. | 4 |
 | US-09 | P1 | ⬜ | As a host, I want to edit or cancel my session, so that attendees always see the correct time and place. | 9 |
 | US-11 | P1 | ⬜ | As a new user, I want to fill in my academic profile (major, minor, year, current courses), so that others have context before joining. | 6 |
-| US-12 | P1 | ⬜ | As a student searching, I want to filter by building or campus zone. | 7 |
+| US-12 | P1 | ⬜ | As a student searching, I want to filter by building or campus zone. *(Needs rethinking: with no building list there is no zone data — ADR 0008.)* | 7 |
 | US-10 | P2 | ⬜ | As a student who joined a session, I want a reminder 30 minutes before it starts. | 8 |
 | US-13 | P2 | ⬜ | As a host, I want to remove a disruptive attendee. | 11 |
 | US-14 | P2 | ⬜ | As a student who just finished a session, I want to rate the session and host. | 8 |
@@ -73,12 +75,12 @@ Treat these three as a group and land them before any public launch.
 
 | ID | Owner | Status | Task |
 | --- | --- | --- | --- |
-| TASK-00 | — | 🚧 | **Agree the database schema** — tables, relationships, where capacity is enforced, how concurrent joins stay correct, and where authorization lives. Blocks everything else. *Product calls and technical picks approved 2026-09-29 and recorded in ADR 0008; tables created as a skeleton in W2.* |
+| TASK-00 | — | ✅ | **Agree the database schema** — tables, relationships, where capacity is enforced, how concurrent joins stay correct, and where authorization lives. Blocks everything else. *Product calls and technical picks approved 2026-09-29 and recorded in ADR 0008; tables created as a skeleton in W2.* |
 | TASK-01 | — | Dropped | ~~Curate the core Vanderbilt academic buildings with verified coordinates.~~ *Dropped 2026-09-29: every location, campus buildings included, comes from Google Places. Recorded in ADR 0008.* |
 | TASK-06 | — | ⬜ | Create the Google Cloud project, enable Maps/Places, set up billing, and **restrict both API keys** (browser key by HTTP referrer; server key by API plus a daily quota cap, not IP — ADR 0008) before either is committed anywhere. |
 | TASK-07 | — | Dropped | ~~Ask VU Facilities/IT whether Vanderbilt publishes campus GIS building data.~~ *Dropped with TASK-01 — it only fed the curated building layer.* |
 | TASK-02 | — | ✅ | ~~Compile the full department list (~100–150 rows, closed set).~~ **Reduced 2026-09-29:** seed ~10 departments and a few courses; users add the rest, departments included. *Done in W3: `data/`, from the 2026-27 catalogue.* |
-| TASK-03 | — | 🚧 | Create the Supabase project, apply migrations, and add env vars to Vercel. *Hosted project created; local database and test harness landed (#4). Vercel env vars and migrations outstanding.* |
+| TASK-03 | — | ✅ | Create the Supabase project, apply migrations, and add env vars to Vercel. *Done: hosted project created; local database and test harness (#4); migrations and seed pushed to the hosted project; env vars in Vercel. Production is still behind Vercel's login — see W1 in `tickets.md`.* |
 | TASK-04 | — | ⬜ | Keyboard and screen-reader pass over the core flows. |
 | TASK-05 | — | ✅ | Generate TypeScript types from the schema once TASK-03 is done, rather than hand-maintaining them. *Done in W3: `npm run db:types` → `src/lib/database.types.ts`; CI checks it is current.* |
 

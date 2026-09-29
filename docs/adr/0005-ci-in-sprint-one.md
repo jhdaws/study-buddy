@@ -2,6 +2,13 @@
 
 **Status:** Accepted · **Date:** 2026-09-17
 
+> **Note, 2026-09-29:** two statements below were true when written and are
+> not now. The join function it cites (`0002_join_session.sql`) was removed in
+> the 2026-09-21 strip-back; the row-locked join is a later-sprint ticket
+> (`docs/tickets.md`, "Later sprints"). The seed-freshness check it lists was
+> not in `ci.yml` until W3 added it, alongside a generated-types check. The
+> decision itself stands.
+
 ## Context
 
 The project plan scheduled CI twice — once at milestone P2.5 (Oct 8) and again

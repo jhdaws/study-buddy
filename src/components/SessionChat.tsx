@@ -1,5 +1,6 @@
 /**
  * In-session group chat (US-05).
+ * Later sprint -- not part of Sprint 2 (docs/tickets.md, "Later sprints").
  *
  * TODO:
  *   - client component, subscribed to new messages for this session

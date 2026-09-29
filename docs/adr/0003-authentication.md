@@ -30,7 +30,7 @@ The domain restriction is enforced in three places, only one of which matters:
 | --- | --- | --- |
 | Client-side form | `src/lib/validation.ts` | Instant, specific feedback |
 | Server action | `src/app/login/actions.ts` | Rejects before calling Supabase |
-| **Database trigger** | `supabase/migrations/0001_init.sql` | **The actual enforcement** |
+| **Database trigger** | A2's migration in `supabase/migrations/` (not written yet) | **The actual enforcement** |
 
 The `enforce_vanderbilt_email` trigger fires `before insert on auth.users`, so
 an attacker calling the Supabase auth API directly — bypassing our UI entirely —

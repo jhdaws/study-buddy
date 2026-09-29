@@ -1,4 +1,5 @@
-// Magic-link landing route.
+// Magic-link landing route. Owner: Track A -- A3 (#16); the hosted Supabase
+// email template must point here (A1, #14).
 //
 // TODO:
 //   - read token_hash and type from the query string

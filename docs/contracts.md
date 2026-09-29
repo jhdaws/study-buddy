@@ -145,8 +145,10 @@ export type LocationPickerProps = {
   with React 19.2; `<LocationPicker>` handles its own.)
 - **Times in.** `startsAt` and `endsAt` must be ISO 8601 **with** an offset
   or `Z`. A bare `datetime-local` value is rejected on purpose — it has no
-  time zone and the server runs in UTC. Convert in the browser:
-  `new Date(localValue).toISOString()`. A start up to
+  time zone and the server runs in UTC. Convert it with `localInputToIso()`
+  from `src/lib/datetime-local.ts`, which reads the value as **campus time**
+  (`CAMPUS_TIME_ZONE`, America/Chicago) whatever the device's zone — not
+  `new Date(localValue)`, which would use the device's. A start up to
   `START_GRACE_MINUTES` (5) in the past is accepted.
 - **Times out.** `SessionListItem.startsAt`/`endsAt` are UTC. Format them
   with `timeZone: "America/Chicago"` when rendering on the server.
@@ -174,6 +176,13 @@ worth knowing when you build next to it:
   `src/lib/env.ts`, and the formatters in `src/lib/format.ts`
   (`formatSessionTime`, `formatSeatsLeft`, …). Use them rather than
   `toLocaleString()` wherever a session time is shown.
+- **Times in:** `localInputToIso(local, timeZone = CAMPUS_TIME_ZONE)` and
+  `isoToLocalInput(iso, timeZone = CAMPUS_TIME_ZONE)` in
+  `src/lib/datetime-local.ts`. The create form reads its `datetime-local`
+  inputs as **campus time**, not the device's, so what a student types and
+  what the list shows are the same clock; each time input carries a
+  "Nashville time (Central)" hint. Tested under several machine zones and
+  across both daylight-saving changes.
 - **The list for M4:** `<SessionBrowser sessions now />` renders one
   `<SessionCard session now />` per `SessionListItem`. `SessionCard` has no
   hooks, so M4's list/map toggle can make `SessionBrowser` a Client Component
