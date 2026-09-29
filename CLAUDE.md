@@ -3,6 +3,11 @@
 Read [`AGENTS.md`](./AGENTS.md) too: it is maintained by Next.js itself and
 warns that this version differs from older Next.js you may have seen.
 
+**Start every session by reading the top entry of [`HANDOFF.md`](./HANDOFF.md),
+and end every session by adding a new one.** It carries what the docs cannot:
+uncommitted work, unanswered questions, and approaches that were tried and
+failed. The template and the rules for writing an entry are in that file.
+
 ## Current state
 
 This repository is a scaffold. Every route, component, and helper is a stub
