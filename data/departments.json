@@ -1,0 +1,15 @@
+{
+  "source": "Vanderbilt Undergraduate Catalog 2026-27, via the catalog's public course API (https://vanderbilt.kuali.co/api/v1/catalog/courses/69861616dc1d2450f8837f3a), read 2026-09-29. Codes and names are the catalog's subject codes and subject descriptions, copied verbatim. A starter set chosen for a CS 4278 team, not a full list -- users add the rest (ADR 0008). Edit this file, then run `npm run db:seed`.",
+  "departments": [
+    { "code": "BSCI", "name": "Biological Sciences" },
+    { "code": "CHEM", "name": "Chemistry" },
+    { "code": "CS", "name": "Computer Science" },
+    { "code": "DS", "name": "Data Science" },
+    { "code": "ECE", "name": "Electrical & Computer Engineering" },
+    { "code": "ECON", "name": "Economics" },
+    { "code": "ES", "name": "Engineering Science" },
+    { "code": "MATH", "name": "Mathematics" },
+    { "code": "PHYS", "name": "Physics" },
+    { "code": "PSY", "name": "Psychology (AS)" }
+  ]
+}

@@ -32,8 +32,9 @@ components, and helpers exist as stubs describing what belongs in them. The
 Supabase clients, session-refreshing proxy, local database, and database test
 harness are real. The Sprint 2 tables exist ([ADR 0008](./docs/adr/0008-sprint-2-schema-decisions.md)),
 with Row Level Security on and **no policies yet** — so nothing is readable
-through the API until each track adds its own. No sign-in and no working
-feature yet.
+through the API until each track adds its own. A starter set of departments
+and courses is seeded from [`data/`](./data/), and TypeScript types are
+generated from the schema. No sign-in and no working feature yet.
 
 The toolchain is real and green: lint, typecheck, test, and build all pass, and
 CI runs them on every push.
@@ -59,12 +60,32 @@ Supabase CLI is a dev dependency, so there is nothing else to install.
 npm run db:start    # first run downloads images; takes a few minutes
 npm run db:status   # URLs and keys for .env.local; Studio at http://127.0.0.1:54323
 npm run test:db     # database tests
-npm run db:reset    # rebuild from supabase/migrations/ -- wipes local data
+npm run db:reset    # rebuild from supabase/migrations/ and seed.sql -- wipes local data
 npm run db:stop
 ```
 
 Database tests live in `tests/db/` and refuse to run against anything but a
 local database. CI runs them in a separate `db` job.
+
+**Two files are generated — edit their sources, never the files:**
+
+| Generated file | Source | Regenerate with |
+| --- | --- | --- |
+| `supabase/seed.sql` | `data/*.json` | `npm run db:seed` |
+| `src/lib/database.types.ts` | the migrations, via the local database | `npm run db:reset && npm run db:types` |
+
+Commit the generated file with its source. CI regenerates both and fails if
+either differs from what is committed — so a PR that adds a migration must
+also commit the regenerated types.
+
+### The hosted project
+
+`supabase db push` applies migrations to the hosted project but **does not
+load the seed.** To load it as well, run
+`npx supabase db push --include-seed` (linked to the hosted project first
+with `npx supabase link`). The seed uses `on conflict do nothing`, so running
+it again, or against a database where users have already added some of the
+same departments or courses, changes nothing that already exists.
 
 ## Scripts
 
@@ -75,13 +96,16 @@ local database. CI runs them in a separate `db` job.
 | `npm test` | Unit tests (Vitest) |
 | `npm run test:db` | Database tests — needs `npm run db:start` first |
 | `npm run db:start` / `db:stop` | Start or stop the local Supabase stack |
-| `npm run db:reset` | Rebuild the local database from migrations |
+| `npm run db:reset` | Rebuild the local database from migrations, then load `supabase/seed.sql` |
+| `npm run db:seed` | Regenerate `supabase/seed.sql` from `data/` — writes the file only; `db:reset` loads it |
+| `npm run db:types` | Regenerate `src/lib/database.types.ts` from the local database |
 | `npm run db:status` | Local URLs and keys |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
 
 CI runs lint, typecheck, tests, and build on every push and pull request, plus
-the database tests in a separate job.
+the database tests in a separate job. It also fails if `supabase/seed.sql`
+or `src/lib/database.types.ts` is out of date.
 
 ## Layout
 
@@ -99,10 +123,13 @@ src/
     supabase/              Browser, server, and proxy clients
     validation.ts          Schemas shared by forms and actions
     errors.ts              Database error codes -> student-facing messages
+    database.types.ts      Generated from the schema (npm run db:types)
   proxy.ts                 Session refresh + route protection
-supabase/                  Local config and migrations (schema skeleton, RLS on)
+supabase/                  Local config, migrations (schema skeleton, RLS on),
+                           and seed.sql (generated from data/)
 tests/db/                  Database tests (two-connection harness)
-data/                      Starter departments and courses (W3). Empty for now.
+data/                      Starter departments and courses -- source of seed.sql
+scripts/build-seed.mjs     Builds supabase/seed.sql from data/ (npm run db:seed)
 docs/                      Backlog, acceptance criteria, architecture decisions
 ```
 

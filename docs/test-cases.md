@@ -11,9 +11,9 @@ Status: ⬜ not yet written · 🚧 partially covered · ✅ automated and passi
 
 **Everything is ⬜.** An earlier scaffold had 15 passing unit tests; it was
 stripped back so the schema can be designed first. The tests in the repo today
-cover environment configuration, prove the database harness works, and guard
-that every table has Row Level Security enabled — none of them verifies any
-row below.
+cover environment configuration, prove the database harness works, guard
+that every table has Row Level Security enabled, and check the starter data
+loaded — none of them verifies any row below.
 
 | ID | Status | Given | When | Then | Verified by |
 | --- | --- | --- | --- | --- | --- |
@@ -86,7 +86,17 @@ table is simply closed. US-05b, US-11b, and every other access rule still
 need their own tests once their policies exist.
 
 The schema skeleton (W2) exists, but no acceptance criterion depends on
-structure alone, so W2 verifies none of them. The green CI badge certifies
-that the code compiles, lints, reaches a database, and has RLS switched on
-everywhere — nothing more. Say that plainly in the report rather than letting
+structure alone, so W2 verifies none of them.
+
+The starter data (W3) verifies none of them either. `tests/db/seed.test.ts`
+checks that the seeded departments and courses match `data/` exactly and are
+in normalised form (checked to fail when a JSON title was changed, and when
+non-normalised rows were inserted). CI also fails if `supabase/seed.sql` or
+`src/lib/database.types.ts` has drifted from its source (both commands
+checked locally to fail on a deliberate change). That is data hygiene, not behaviour: nothing yet
+normalises what a *student* types — that is S2, and it needs its own tests.
+
+The green CI badge certifies that the code compiles, lints, reaches a
+database, has RLS switched on everywhere, and that the generated files are
+current — nothing more. Say that plainly in the report rather than letting
 "CI passing" do unearned work.

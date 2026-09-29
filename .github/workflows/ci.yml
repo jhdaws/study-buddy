@@ -37,6 +37,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # supabase/seed.sql is generated from data/ by scripts/build-seed.mjs.
+      # Regenerate it and fail if the committed file differs -- one was
+      # edited without the other. Needs no database.
+      - name: Seed matches data/
+        run: |
+          npm run db:seed
+          git diff --exit-code supabase/seed.sql || {
+            echo "::error file=supabase/seed.sql::seed.sql does not match data/. Run 'npm run db:seed' and commit the result."
+            exit 1
+          }
+
       - name: Lint
         run: npm run lint
 
@@ -51,7 +62,8 @@ jobs:
 
   # Tests that need real Postgres behaviour -- locks, constraints, RLS. Starts
   # only the database container, not the whole local Supabase stack, and
-  # applies every migration in supabase/migrations/ on the way up.
+  # applies every migration in supabase/migrations/, then supabase/seed.sql,
+  # on the way up.
   db:
     runs-on: ubuntu-latest
 
@@ -71,3 +83,14 @@ jobs:
 
       - name: Database tests
         run: npm run test:db
+
+      # src/lib/database.types.ts is generated from the schema. Regenerate it
+      # from the database started above and fail if the committed file
+      # differs -- a migration landed without `npm run db:types`.
+      - name: Generated types match the schema
+        run: |
+          npm run db:types
+          git diff --exit-code src/lib/database.types.ts || {
+            echo "::error file=src/lib/database.types.ts::database.types.ts does not match the migrations. Run 'npm run db:reset && npm run db:types' and commit the result."
+            exit 1
+          }

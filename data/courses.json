@@ -1,0 +1,41 @@
+{
+  "source": "Vanderbilt Undergraduate Catalog 2026-27, via the catalog's public course API (https://vanderbilt.kuali.co/api/v1/catalog/courses/69861616dc1d2450f8837f3a), read 2026-09-29. Every number and title below appears in that catalog; titles are verbatim except ES 1401, where the catalog's 'Module1' is written 'Module 1' to match Modules 2 and 3. A few courses per department, not the catalog -- the rest are created on first use (ADR 0008). Edit this file, then run `npm run db:seed`.",
+  "courses": [
+    { "department_code": "BSCI", "number": "1510", "title": "Molecules and Cells" },
+    { "department_code": "BSCI", "number": "1511", "title": "Organisms and Ecosystems" },
+
+    { "department_code": "CHEM", "number": "1601", "title": "General Chemistry" },
+    { "department_code": "CHEM", "number": "1601L", "title": "General Chemistry Laboratory" },
+    { "department_code": "CHEM", "number": "1602", "title": "General Chemistry" },
+
+    { "department_code": "CS", "number": "2201", "title": "Program Design and Data Structures" },
+    { "department_code": "CS", "number": "2212", "title": "Discrete Structures" },
+    { "department_code": "CS", "number": "3251", "title": "Intermediate Software Design" },
+    { "department_code": "CS", "number": "4278", "title": "Principles of Software Engineering" },
+
+    { "department_code": "DS", "number": "1000", "title": "Data Science: How Data Shape Our World" },
+    { "department_code": "DS", "number": "3100", "title": "Fundamentals of Data Science" },
+
+    { "department_code": "ECE", "number": "2123", "title": "Digital Systems" },
+    { "department_code": "ECE", "number": "2281", "title": "Computer Architecture" },
+    { "department_code": "ECE", "number": "2281L", "title": "Computer Architecture Laboratory" },
+
+    { "department_code": "ECON", "number": "1010", "title": "Principles of Macroeconomics" },
+    { "department_code": "ECON", "number": "1020", "title": "Principles of Microeconomics" },
+
+    { "department_code": "ES", "number": "1401", "title": "Introduction to Engineering, Module 1" },
+    { "department_code": "ES", "number": "2100W", "title": "Technical Communications" },
+
+    { "department_code": "MATH", "number": "1300", "title": "Accelerated Single-Variable Calculus I" },
+    { "department_code": "MATH", "number": "1301", "title": "Accelerated Single-Variable Calculus II" },
+    { "department_code": "MATH", "number": "2410", "title": "Methods of Linear Algebra" },
+    { "department_code": "MATH", "number": "2810", "title": "Probability and Statistics for Engineering" },
+
+    { "department_code": "PHYS", "number": "1601", "title": "General Physics I" },
+    { "department_code": "PHYS", "number": "1601L", "title": "General Physics Laboratory I" },
+    { "department_code": "PHYS", "number": "1602", "title": "General Physics II" },
+
+    { "department_code": "PSY", "number": "1200", "title": "General Psychology" },
+    { "department_code": "PSY", "number": "2150", "title": "Principles of Experimental Design" }
+  ]
+}
