@@ -71,6 +71,58 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-09-29 · Sprint 2 re-plan and C0 product decisions
+
+**Branch:** `sprint-2-tickets` (from `main` after #4 merged) · **Commits made:**
+one, docs only
+
+### What changed
+- `docs/tickets.md` — restructured around the Sprint 2 goal: sign in, create
+  a session, list sessions. Everything else is in a "Later sprints" table.
+  T-C4 split: messages are now T-C8 (later). T-B2 and T-B3 dropped.
+- `docs/backlog.md` — TASK-00 and TASK-03 🚧; TASK-01 and TASK-07 dropped;
+  TASK-02 reduced to a starter list.
+
+### Decided in conversation, not yet written down
+The user made these product calls. They are recorded in the C0 section of
+`tickets.md`, but **not yet in an ADR** — ADR 0008 is on C0's done-when list:
+- Display name required at first sign-in.
+- Capacity and time set by the host; only sanity constraints (end after
+  start, not in the past, capacity ≥ 2). *"Sanity constraints" and the
+  minimum of 2 are the agent's reading of "given by host".*
+- Host cannot leave; the host cancels instead.
+- Chat stays writable for a week after a session ends, then read-only.
+  *The user wrote "read only after a week"; this reading was not confirmed.*
+- Deleted accounts anonymised: messages kept as "Deleted user".
+- Study requests carry a poster-set time range and expire at its end.
+- **No curated building list** — all locations from Google Places. Reverses
+  ADR 0007's campus layer.
+- **Departments user-creatable**, only a handful seeded. Reverses ADR 0006's
+  closed list. *"Users will flesh those out" was read as including
+  departments; not confirmed.*
+
+### Open questions for the user
+- The three italicised readings above.
+- The technical picks in C0 "To confirm" are AI recommendations; the team has
+  not reviewed them.
+
+### Verified versus assumed
+- **Verified:** PR #4 merged with every check green, including the new `db`
+  job; Vercel deployed `main` to production. The Sprint 2 diagram renders.
+- **Not verifiable from here:** whether production actually serves pages.
+  Every deployment URL tried redirects to a Vercel login (Deployment
+  Protection), so a missing env var would be invisible from outside.
+
+### Things the next agent should be careful about
+- `data/README.md`, `supabase/README.md`, `architecture.md` §2.3, and ADRs
+  0006/0007 still describe the curated building layer and the closed
+  department list. **Stale on purpose** until ADR 0008 — do not quietly edit
+  accepted ADRs.
+- `main` gained a commit from the user (`ddee8d6`, `permissions: contents:
+  read` in `ci.yml`, a CodeQL fix). T-A4's matching box is ticked.
+
+---
+
 ## 2026-09-29 · Database plumbing on `db-setup` (no schema)
 
 **Branch:** `db-setup` · **Commits made:** see the PR opened this session

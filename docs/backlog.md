@@ -73,12 +73,12 @@ Treat these three as a group and land them before any public launch.
 
 | ID | Owner | Status | Task |
 | --- | --- | --- | --- |
-| TASK-00 | — | ⬜ | **Agree the database schema** — tables, relationships, where capacity is enforced, how concurrent joins stay correct, and where authorization lives. Blocks everything else. See `supabase/README.md`. |
-| TASK-01 | — | ⬜ | Curate the core Vanderbilt academic buildings with verified coordinates, named the way students actually say them. ~25 rows. See ADR 0007. |
+| TASK-00 | — | 🚧 | **Agree the database schema** — tables, relationships, where capacity is enforced, how concurrent joins stay correct, and where authorization lives. Blocks everything else. *Product calls decided 2026-09-29; technical picks await team review — see C0 in `tickets.md`.* |
+| TASK-01 | — | Dropped | ~~Curate the core Vanderbilt academic buildings with verified coordinates.~~ *Dropped 2026-09-29: every location, campus buildings included, comes from Google Places. Recorded in ADR 0008 once written.* |
 | TASK-06 | — | ⬜ | Create the Google Cloud project, enable Maps/Places, set up billing, and **restrict both API keys** (browser key by HTTP referrer, server key by IP) before either is committed anywhere. |
-| TASK-07 | — | ⬜ | Ask VU Facilities/IT whether Vanderbilt publishes campus GIS building data. Free and authoritative if it exists. Do this in parallel — do not block TASK-01 on it. |
-| TASK-02 | — | ⬜ | Compile the department/subject code list from the public catalog (~100–150 rows, closed set). Course *numbers* are learned from use — see ADR 0006. |
-| TASK-03 | — | ⬜ | Create the Supabase project, apply migrations, and add env vars to Vercel. |
+| TASK-07 | — | Dropped | ~~Ask VU Facilities/IT whether Vanderbilt publishes campus GIS building data.~~ *Dropped with TASK-01 — it only fed the curated building layer.* |
+| TASK-02 | — | ⬜ | ~~Compile the full department list (~100–150 rows, closed set).~~ **Reduced 2026-09-29:** seed ~10 departments and a few courses; users add the rest, departments included. See T-B1. |
+| TASK-03 | — | 🚧 | Create the Supabase project, apply migrations, and add env vars to Vercel. *Hosted project created; local database and test harness landed (T-A5). Vercel env vars and migrations outstanding.* |
 | TASK-04 | — | ⬜ | Keyboard and screen-reader pass over the core flows. |
 | TASK-05 | — | ⬜ | Generate TypeScript types from the schema once TASK-03 is done, rather than hand-maintaining them. |
 
