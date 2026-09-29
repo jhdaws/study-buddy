@@ -31,7 +31,7 @@ what we rejected and why — is in [`docs/adr/`](./docs/adr/); start with
 stubs describing what belongs in them. The Supabase clients, session-refreshing
 proxy, local database, and database test harness are real — but there are **no
 tables yet**, no sign-in, and no working feature. The schema waits on the team's
-schema decision (C0 in [`docs/tickets.md`](./docs/tickets.md)).
+schema decision (W0 in [`docs/tickets.md`](./docs/tickets.md)).
 
 The toolchain is real and green: lint, typecheck, test, and build all pass, and
 CI runs them on every push.

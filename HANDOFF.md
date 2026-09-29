@@ -71,6 +71,37 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-09-29 · Tickets reorganised into four Sprint 2 tracks
+
+**Branch:** `sprint-2-tracks` (from `main` after #5 merged) · **Commits made:**
+one, docs plus one comment in `src/lib/supabase/proxy.ts`
+
+### What changed
+- `docs/tickets.md` rewritten as four tracks: **W** (wiring — the user's own,
+  done first), **A** (auth), **S** (sessions API), **M** (Google Maps).
+  Track W builds the schema skeleton and typed stubs returning fixtures; the
+  other tracks replace stub bodies.
+- **Ticket IDs renumbered** (W0–W6, A1–A4, S1–S4, M1–M4). Old `T-xx` and `C0`
+  IDs in earlier handoff entries and AI-log rows refer to the previous scheme.
+  C0 is now W0. References in `CLAUDE.md`, both READMEs, `backlog.md`, and
+  the proxy comment were updated.
+
+### Decided in conversation, not yet written down
+- The user owns Track W; the other three owners are not assigned.
+
+### Things the next agent should be careful about
+- **ADR 0007 and `.env.example` say to restrict the server Maps key by IP.**
+  That cannot work on Vercel (no fixed outbound IP). M1 says API restriction
+  plus a quota cap instead. The ADR and `.env.example` are now stale on this
+  point; fix via ADR 0008, not by editing ADR 0007. Not verified against
+  current Google or Vercel documentation.
+- W2 enables RLS with no policies, so tables are unreadable until A/S/M add
+  policies. That is intended; do not "fix" it by adding broad policies in W2.
+- The three unconfirmed readings from the previous entry are still
+  unconfirmed; they are listed under "To confirm at W0".
+
+---
+
 ## 2026-09-29 · Sprint 2 re-plan and C0 product decisions
 
 **Branch:** `sprint-2-tickets` (from `main` after #4 merged) · **Commits made:**

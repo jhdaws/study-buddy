@@ -1,6 +1,6 @@
 // Session refresh, called from src/proxy.ts on every matched request.
 //
-// TODO (T-E1, once sign-in exists): redirect signed-out users away from
+// TODO (A4 in docs/tickets.md, once sign-in exists): redirect signed-out users away from
 // private routes, preserving the path they wanted in a ?next= param. Adding it
 // before /login works would lock everyone out of /sessions.
 //

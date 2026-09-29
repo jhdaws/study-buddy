@@ -51,7 +51,7 @@ npm run lint && npm run typecheck && npm test && npm run build
 ```
 
 CI runs exactly this. A seed-freshness check is planned but not yet in
-`ci.yml` — see T-C6 in `docs/tickets.md`.
+`ci.yml` — see W3 in `docs/tickets.md`.
 
 ## Testing
 
