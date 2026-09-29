@@ -71,6 +71,105 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-09-29 · W3 starter data, seed, and generated types
+
+**Branch:** `w3-starter-data`, from `origin/main` at `8e978a0` · **Commits
+made:** `10d8751` (the work) and the one adding this entry. PR opened this
+session against `main`; **not merged**. The brief said to stack on
+`w2-schema-skeleton` (#26), but #26 had already merged with a merge commit
+before this session started, so the branch starts from `main` and the PR
+targets `main` directly.
+
+### What changed
+- `data/departments.json`, `data/courses.json` — 10 departments (BSCI, CHEM,
+  CS, DS, ECE, ECON, ES, MATH, PHYS, PSY) and 27 courses, 2–4 each. Each
+  file has a `"source"` note.
+- `scripts/build-seed.mjs`, run as **`npm run db:seed`** — validates `data/`
+  and writes `supabase/seed.sql` (sorted, escaped, `on conflict do
+  nothing`). It writes the file only; **`npm run db:reset`** loads it.
+- **`npm run db:types`** = `supabase gen types --lang typescript --local >
+  src/lib/database.types.ts`. Generated file committed.
+- `tests/db/seed.test.ts` — seeded rows (`created_by is null`) equal
+  `data/` exactly and are normalised.
+- `ci.yml` — `verify` job: step "Seed matches data/"; `db` job: step
+  "Generated types match the schema". `permissions: contents: read` kept.
+- Docs: `data/README.md` (source, the S2 findings below), root README
+  (scripts, generated files, hosted seed), `supabase/README.md` (run
+  `db:types` after a migration), `tickets.md` W3 all ticked, `backlog.md`
+  TASK-02 and TASK-05 ✅, `test-cases.md`, AI-log row. `CLAUDE.md`: only
+  the "no database" sentence and the "seed-freshness check is planned" line
+  were changed — the previous entry flagged the first as stale.
+
+### The course-number finding (for S2) — verified
+- Source: Vanderbilt's public Kuali catalogue API, no login —
+  `https://vanderbilt.kuali.co/api/v1/catalog/courses/<catalogId>`; ids at
+  `.../api/v1/catalog/public/catalogs`. 2026-27 undergraduate is
+  `69861616dc1d2450f8837f3a`.
+- **Four digits, optionally one uppercase letter: `W` (writing) or `L`
+  (lab).** 2026-27 undergraduate: 3,119 of 3,407 are four digits, the other
+  286 four digits plus `W` or `L`. Same shape in 2025-26 undergraduate and
+  2026-27 graduate. The suffix is part of the number (`CHEM 1601` ≠
+  `CHEM 1601L`).
+- Six subject codes contain a hyphen (`PSY-PC`, `ES-NYC`, …); `EECE` is now
+  `ECE`; cross-listed courses (`CS 4278` = `ECE 4278`) have two codes.
+  Details in `data/README.md`.
+
+### Verified versus assumed
+- **Verified locally:** `npx supabase db reset` applies the migration and
+  loads the seed (10 departments, 27 courses, all `created_by` null);
+  `npm run lint`, `typecheck`, `npm test`, `npm run test:db` pass;
+  `npm run build` passes with CI's placeholder Supabase values. The two new
+  CI steps, extracted from `ci.yml` and run with `bash -e`, pass on a clean
+  tree; the seed step fails with the `::error` message when a JSON value is
+  changed. `seed.test.ts` fails when a JSON title changes and when
+  non-normalised rows are inserted. SQL escaping checked with a title
+  containing quotes, a backslash and `--`, applied in a rolled-back
+  transaction. The build script rejects each kind of bad data (lowercase or
+  hyphenated code, unknown department, bad number, duplicate, unknown key,
+  blank title) without writing the file. `db:types` output is identical
+  across runs. **CI's path** — `supabase db start` only, then
+  `gen types --local` — was run in a throwaway project (`w3-ci-sim`,
+  ports 553xx, since stopped): `db start` loads the seed, and the generated
+  types were byte-identical to the committed file; after adding a column
+  there, the regenerate-and-diff failed.
+- **Not verified:** the new CI steps on GitHub (had not run when this was
+  written). Nothing was pushed to the hosted project; `db push
+  --include-seed` was only confirmed to exist with `--help`.
+- **Assumed:** that these ten departments and 27 courses are what the team
+  takes — a guess; swap freely.
+
+### Open questions for the user
+- Is the starter list right? It is the agent's guess.
+- `PSY` is named `Psychology (AS)`, verbatim from the catalogue (it
+  distinguishes Peabody's `PSY-PC`). Keep, or shorten to `Psychology`?
+- Cross-listed courses (`CS`/`ECE`) will split sessions for one class across
+  two course rows. Accept for now, or give S2 a rule? Not blocking.
+
+### Things the next agent should be careful about
+- **`database.types.ts` is unformatted** — that is how CLI 2.118.0 emits it.
+  Do not format it or hand-edit it: CI compares it byte for byte. Upgrading
+  the `supabase` package can change the output; regenerate in the same PR.
+- **`db:types` reads the local database as it is.** Run `npm run db:reset`
+  first, or schema you tried by hand leaks into the file and CI fails. If
+  the database is not running, the redirect leaves the file empty —
+  `git checkout src/lib/database.types.ts` restores it.
+- **A migration PR must commit regenerated types**, or the `db` job fails.
+  The error message says so; `supabase/README.md` lists the step.
+- **`seed.test.ts` treats `created_by is null` as "seeded".** A later test
+  that inserts departments or courses with a null `created_by` must roll
+  back, or this test fails.
+- **`on conflict do nothing`:** changing a title in `data/` does not update
+  a row that already exists on the hosted project.
+- **S2 owns normalisation.** `build-seed.mjs` and `seed.test.ts` each
+  contain a small check (`^[A-Z0-9]+$`, `^[0-9]{4}[A-Z]?$`) — they check
+  the data, they are not the app's rule. Align them once S2's rule lands.
+- In this worktree-isolated session, `&&` chains mixing file edits with git
+  or `docker` were refused by the isolation guard; plain commands and small
+  Python scripts in the scratchpad worked. The auto-mode classifier also
+  failed transiently several times — retrying the same call worked.
+
+---
+
 ## 2026-09-29 · W2 schema skeleton and ADR 0008
 
 **Branch:** `w2-schema-skeleton` (reset onto `origin/main` at `d7efbdb`; the
