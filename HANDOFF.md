@@ -71,6 +71,72 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-09-28 · Opened PRs for the docs; refined the tickets
+
+**Branch:** `db-setup` → `docs-refine-tickets` · **Commits made:** `b36fe7b`
+(on `db-setup`), `d71c570` and this entry (on `docs-refine-tickets`)
+
+### What changed
+- **PR #1** (`db-setup` → `main`) — the previous session's uncommitted docs,
+  plus an AI-usage-log row for them. Docs only; despite the branch name, no
+  database work is in it.
+- **PR #2** (`docs-refine-tickets` → `db-setup`, stacked) — ticket refinement;
+  the PR body lists every change. Headline: US-16 had no tickets, and nothing
+  set up a local database for the US-07b test.
+- `CLAUDE.md` — removed the claim that CI runs a seed-freshness check. It does
+  not; adding one is now on T-C6.
+
+### Answered this session
+- **Open question 1 from the entry below is answered for this session:** the
+  user asked for the PRs, so the agent committed and pushed. Do not generalise
+  that to future sessions without asking.
+- **Open question 2 is answered: `LocationPicker.tsx` stays a separate
+  component.** T-D6 already assumes this; nothing else needed changing.
+
+### Open questions for the user
+- Question 3 from the entry below is still unanswered.
+- The user asked to keep everything else **pending** — do not resolve these
+  without them. They are C0 material unless marked otherwise:
+  - What the picker returns (an id for the server to resolve, not
+    coordinates — recommended but not agreed)
+  - Who may write a venue row; whether that brings the service-role key into
+    the app
+  - Whether Google's terms let us store a venue's name, or the host types a
+    label — affects the `locations` table
+  - Room required for campus / optional for venues; allowed venue types;
+    radius; campus zone list
+  - Seat count derived vs stored; where authorization lives; locations single
+    table vs per-kind; display name required at first sign-in; study request
+    shape; capacity and time bounds; whether the host can leave; chat after a
+    session ends; deletion behaviour for US-24
+  - Team calls: ratifying ADRs 0001–0003; who owns Google billing; DB tests in
+    CI or local only; merge strategy
+- **T-A2 must enable "Places API (New)"**, not the legacy Places API —
+  `locationRestriction` and `includedPrimaryTypes` only exist in the new one.
+  Not yet written into the ticket.
+- `CreateSessionForm.tsx` and `sessions/new/page.tsx` stub comments predate
+  ADRs 0006/0007 (single "course" field, building dropdown). Stale; not yet
+  fixed.
+- **Merge order.** PR #2 is based on `db-setup`. If #1 is squash-merged, #2
+  will need rebasing onto `main`; if `db-setup` is deleted on merge GitHub
+  retargets #2 automatically (branch auto-delete is currently off).
+
+### Verified versus assumed
+- **Verified:** `npm run lint && npm run typecheck && npm test && npm run build`
+  passed locally before PR #1. The new tickets dependency diagram was rendered
+  with `mmdc` and inspected.
+- **Assumed:** every new ticket, dependency, and size in PR #2 is a proposal.
+  CI had not reported on either PR when this entry was written.
+
+### Things the next agent should be careful about
+- **ADR 0005 is stale in two places** and was deliberately not edited (it is
+  an Accepted record): it cites `supabase/migrations/0002_join_session.sql` as
+  written, which was deleted in the 2026-09-21 strip-back, and it lists a
+  seed-freshness check CI does not run. Supersede or amend it via a new ADR
+  rather than rewriting it silently.
+
+---
+
 ## 2026-09-28 · Architecture write-up and sprint tickets
 
 **Branch:** `db-setup` · **Commits made:** none — everything below is
