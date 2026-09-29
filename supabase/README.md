@@ -1,7 +1,9 @@
 # Supabase
 
-Empty on purpose. The database is designed in the next push, once the team has
-agreed what the schema actually looks like.
+Local development is set up — `config.toml`, and `npm run db:start` brings up
+the whole Supabase stack in Docker (see the root README). **There are no
+migrations yet, on purpose:** the schema is written once the team has agreed
+what it looks like (C0 in `docs/tickets.md`).
 
 ## What goes here
 

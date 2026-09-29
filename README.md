@@ -27,9 +27,11 @@ what we rejected and why — is in [`docs/adr/`](./docs/adr/); start with
 
 ## Status
 
-**Scaffold only.** Routes, components, and helpers exist as stubs describing
-what belongs in them. There is no database, no authentication, and no working
-feature yet — that lands in subsequent pushes, starting with the schema.
+**Scaffold plus database plumbing.** Routes, components, and helpers exist as
+stubs describing what belongs in them. The Supabase clients, session-refreshing
+proxy, local database, and database test harness are real — but there are **no
+tables yet**, no sign-in, and no working feature. The schema waits on the team's
+schema decision (C0 in [`docs/tickets.md`](./docs/tickets.md)).
 
 The toolchain is real and green: lint, typecheck, test, and build all pass, and
 CI runs them on every push.
@@ -38,9 +40,29 @@ CI runs them on every push.
 
 ```bash
 npm install
-cp .env.example .env.local   # values not needed until the database lands
+cp .env.example .env.local   # fill in the two Supabase values -- see below
 npm run dev                  # http://localhost:3000
 ```
+
+**The Supabase values are required.** Without them every page returns an
+error naming the missing variable. Use either the hosted project's values
+(ask a teammate) or your local database's (`npm run db:status`).
+
+## Local database
+
+Needs [Docker](https://www.docker.com/products/docker-desktop/) running. The
+Supabase CLI is a dev dependency, so there is nothing else to install.
+
+```bash
+npm run db:start    # first run downloads images; takes a few minutes
+npm run db:status   # URLs and keys for .env.local; Studio at http://127.0.0.1:54323
+npm run test:db     # database tests
+npm run db:reset    # rebuild from supabase/migrations/ -- wipes local data
+npm run db:stop
+```
+
+Database tests live in `tests/db/` and refuse to run against anything but a
+local database. CI runs them in a separate `db` job.
 
 ## Scripts
 
@@ -49,10 +71,15 @@ npm run dev                  # http://localhost:3000
 | `npm run dev` | Development server |
 | `npm run build` | Production build |
 | `npm test` | Unit tests (Vitest) |
+| `npm run test:db` | Database tests — needs `npm run db:start` first |
+| `npm run db:start` / `db:stop` | Start or stop the local Supabase stack |
+| `npm run db:reset` | Rebuild the local database from migrations |
+| `npm run db:status` | Local URLs and keys |
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm run lint` | ESLint |
 
-CI runs lint, typecheck, tests, and build on every push and pull request.
+CI runs lint, typecheck, tests, and build on every push and pull request, plus
+the database tests in a separate job.
 
 ## Layout
 
@@ -71,12 +98,14 @@ src/
     validation.ts          Schemas shared by forms and actions
     errors.ts              Database error codes -> student-facing messages
   proxy.ts                 Session refresh + route protection
-supabase/                  Schema and migrations. Empty until the database push.
+supabase/                  Local config and migrations. No migrations yet.
+tests/db/                  Database tests (two-connection harness)
 data/                      Seed data (departments, campus buildings). Empty for now.
 docs/                      Backlog, acceptance criteria, architecture decisions
 ```
 
-Every file above is a stub. Each one carries a comment describing what it
+Most files above are stubs; `lib/env.ts`, `lib/supabase/`, and `proxy.ts` are
+real. Each one carries a comment describing what it
 should contain and any constraint worth knowing before writing it.
 
 ## Where things are decided

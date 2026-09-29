@@ -1,14 +1,13 @@
-import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+import { updateSession } from "@/lib/supabase/proxy";
 
 /**
- * Runs before every matched request.
- *
- * TODO: take the NextRequest and delegate to updateSession() from
- * @/lib/supabase/proxy once auth lands. Until then this is a passthrough so
- * routing behaves normally.
+ * Runs before every matched request: refreshes the Supabase session cookie.
+ * Route protection is added in @/lib/supabase/proxy once sign-in lands.
  */
-export async function proxy() {
-  return NextResponse.next();
+export async function proxy(request: NextRequest) {
+  return updateSession(request);
 }
 
 export const config = {

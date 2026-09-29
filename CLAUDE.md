@@ -56,10 +56,14 @@ CI runs exactly this. A seed-freshness check is planned but not yet in
 ## Testing
 
 Unit tests sit next to the code as `*.test.ts`. Pure logic — validation, error
-mapping, seat maths — is unit tested; anything needing a live database is not
-yet possible.
+mapping, seat maths — is unit tested with `npm test`.
 
-`src/lib/harness.test.ts` is a placeholder that only proves the runner works.
-**Delete it once a real test lands.** `docs/test-cases.md` tracks what is
-genuinely verified versus what is assumed — keep it honest, because a green CI
-badge should never imply coverage we do not have.
+Anything needing real Postgres behaviour — constraints, RLS, locks — goes in
+`tests/db/` and runs with `npm run test:db` against the local database
+(`npm run db:start`, needs Docker). Those tests refuse to connect anywhere but
+localhost. CI runs them in a separate `db` job.
+
+`tests/db/harness.test.ts` only proves the database harness works. **Delete it
+once US-07b lands.** `docs/test-cases.md` tracks what is genuinely verified
+versus what is assumed — keep it honest, because a green CI badge should never
+imply coverage we do not have.
