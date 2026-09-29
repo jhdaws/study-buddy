@@ -71,6 +71,99 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-09-29 · W5 basic UI: shell, session list, create-session form
+
+**Branch:** `w5-basic-ui`, from `origin/w4-stubs-fixtures` at `bcce298`,
+because #28 (W4) was still open when the session started · **Commits
+made:** `f40a823` (the work) and the one adding this entry. #28 was merged
+with a merge commit (`c558b76`) while this work was under way; `main`'s tree
+is identical to `bcce298`, so the PR targets **`main`** directly with no
+rebase, and its diff is only W5's commits. PR opened; **not merged**.
+
+### What changed
+- `src/app/layout.tsx`, `src/components/SiteHeader.tsx`, `NavLinks.tsx`,
+  `AccountMenu.tsx` — the shell. The header reads `getCurrentUser()` (not
+  `requireUser()`, which would loop on `/login` once A4 lands) inside
+  `<Suspense>`.
+- `src/app/sessions/page.tsx`, `SessionBrowser.tsx`, `SessionCard.tsx`,
+  `src/app/sessions/error.tsx` — the list, the Full card, the hosting empty
+  state, a retry screen.
+- `src/app/sessions/new/page.tsx`, `CreateSessionForm.tsx`,
+  `CourseNumberInput.tsx` — the form and the typeahead.
+- `src/lib/format.ts` + `CAMPUS_TIME_ZONE` in `env.ts` — times out, in
+  campus time. `src/lib/datetime-local.ts` — times in, browser zone → ISO.
+- `src/lib/limits.ts` (new) — the numeric limits, moved out of
+  `validation.ts`, which re-exports them. See below for why.
+- Docs: `tickets.md` W5 ticked; `test-cases.md` (US-16 and US-02b 🚧,
+  US-02's stale "building" wording fixed, coverage paragraph); `contracts.md`
+  "What W5 added on top"; README status (it still said "no working
+  feature"); AI-log row.
+
+### Verified versus assumed
+- **Verified locally:** `npm run lint`, `typecheck`, `npm test` (102 tests,
+  47 new), `npm run build` with CI's placeholder values, `npm run test:db`.
+  Mutations, each failing the matching test and then restored: dropping
+  `timeZone` from the time formatter (fails under TZ=UTC and Tokyo);
+  dropping the select's `defaultSelected` mirror; not refilling `room`;
+  not aborting the previous typeahead request; putting the raw
+  `datetime-local` value in the hidden field.
+- **Clicked through once** in the Claude Browser pane (Chromium) against
+  `next dev -p 3300` with `.env.local` from the local stack, viewport
+  emulated at 375×812: the list shows the four fixture cards with MATH 2410
+  as Full; an empty submit shows eight field errors; after filling part of
+  the form and submitting, every filled value was still there (department
+  select included) with four errors left; the typeahead showed `CS 3251 · 1
+  session` for `32`, and ArrowDown + Enter picked it without submitting; "Add
+  a department" + `BME` + `1000` showed "Nobody's studied BME 1000 yet —
+  create it?"; a full submit (Enter in the capacity field) landed on
+  `/sessions`. At 375px: no horizontal scroll, no control under 44px tall,
+  every input 16px. **How the clicks were made matters:** the pane is 223px
+  wide, so the 375px emulation is scaled, and the tool's pointer clicks
+  landed off-screen (a click listener saw `clientY` 1248 in an 812px
+  viewport). Buttons were therefore pressed with `element.click()` from
+  JavaScript or the Enter key, and fields filled with the tool's
+  `form_input` and real key presses. No real touch or pointer tap on the
+  submit button was tested. Dev server stopped.
+- **Not verified:** anything below the stubs (nothing saved or read); the
+  sign-out button outside jsdom (it only renders with a session); iOS
+  Safari (native `datetime-local` and select pickers); light mode was not
+  looked at in the browser (the pane was in dark mode); a screen reader.
+  CI had not run on the PR when this was written.
+
+### Open questions for the user
+- The create form reads times in the **device's** zone (the contract's
+  `new Date(local)` choice); the list shows **campus** time. They agree for
+  anyone whose phone is on Central time. Fine, or should the form read
+  `datetime-local` values in `CAMPUS_TIME_ZONE` too? Not changed.
+- Review the copy and the choices the brief left open: "Happening now" and
+  Today/Tomorrow labels; `noValidate` (every message from the schema, no
+  browser bubbles); no default capacity or end time; the card is not a
+  link yet (no detail page).
+- `src/lib/limits.ts` changes W4's file layout, though not a single
+  exported name. OK, or would you rather keep the constants in
+  `validation.ts` and accept zod in the client bundle?
+
+### Things the next agent should be careful about
+- **Do not import a value from `@/lib/validation` in a Client Component.**
+  It pulls zod and every zod locale into the browser (a 405 KB chunk, 95
+  KB gzipped, on `/sessions/new` before the move). Limits come from
+  `@/lib/limits`; types via `import type`. A3/A4's forms need the same.
+- **Every page is now rendered per request**: the header reads cookies.
+  That is expected for an app with sign-in; do not "fix" it by removing the
+  header's session lookup.
+- **The header says "Sign in" on `/sessions/new`**, which runs as the
+  fixture user through the `requireUser()` stub. Expected until A3/A4.
+- **The `<select>` reset, refined:** W4's `key` + `defaultValue` advice is
+  right for an uncontrolled select, and also survives a second submit with
+  the same value (checked with a throwaway jsdom test, deleted). A
+  controlled select needs the `defaultSelected` mirror instead.
+- **`<LocationPicker>` has no invalid styling.** It receives
+  `aria-invalid` but its stub `className` has no red border. M2's to style.
+- **Browser pane clicks at an emulated viewport can miss** (above). Check
+  with a click listener before concluding a button is broken.
+
+---
+
 ## 2026-09-29 · W4 stubs and fixtures: the contract for tracks A, S, M
 
 **Branch:** `w4-stubs-fixtures`, fast-forwarded onto `origin/main` at

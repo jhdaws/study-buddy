@@ -117,11 +117,11 @@ flowchart LR
 
 #### W5 · Basic UI
 **L · US-02, US-03 · after W4**
-- [ ] App shell: header, navigation, sign-in / sign-out link
-- [ ] `/sessions`: list and card — course, topic, location, room, time, seats left; "Full" treatment; empty state inviting hosting
-- [ ] `/sessions/new`: department picker with "add a department", course-number typeahead, topic, room, start, end, capacity, `<LocationPicker>`; field errors from `createSessionSchema`
-- [ ] Mobile first: 44px tap targets, `text-base` inputs (ADR 0004)
-- [ ] Works end to end on fixtures: submitting the form validates and lands on the list
+- [x] App shell: header, navigation, sign-in / sign-out link — the header shows "Sign in" until A3 makes a session possible; the sign-out form is component-tested only
+- [x] `/sessions`: list and card — course, topic, location, room, time, seats left; "Full" treatment; empty state inviting hosting. Times in campus time (`CAMPUS_TIME_ZONE`)
+- [x] `/sessions/new`: department picker with "add a department", course-number typeahead, topic, room, start, end, capacity, `<LocationPicker>`; field errors from `createSessionSchema`
+- [x] Mobile first: 44px tap targets, `text-base` inputs (ADR 0004) — checked at 375px in a browser
+- [x] Works end to end on fixtures: submitting the form validates and lands on the list (the stub saves nothing, so the new session does not appear until S3)
 
 #### W6 · Integration and demo
 **M · end of sprint**

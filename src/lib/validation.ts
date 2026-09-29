@@ -15,12 +15,35 @@
 // key exactly: the action parses Object.fromEntries(formData) and hands the
 // field errors back under the same names.
 //
-// Client-safe: nothing here may import server-only code. Forms can import the
-// length constants for maxLength attributes.
+// Client-safe: nothing here may import server-only code. But importing it
+// ships zod, every locale included, to the browser: a Client Component that
+// only needs a length for `maxLength` should import it from @/lib/limits,
+// where the constants live. They are re-exported below unchanged.
 
 import { z } from "zod";
 
 import { ALLOWED_EMAIL_DOMAIN } from "@/lib/env";
+import {
+  DISPLAY_NAME_MAX_LENGTH,
+  LOCATION_LABEL_MAX_LENGTH,
+  MAX_CAPACITY,
+  MIN_CAPACITY,
+  ROOM_MAX_LENGTH,
+  START_GRACE_MINUTES,
+  TOPIC_MAX_LENGTH,
+} from "@/lib/limits";
+
+// The limits are part of this module's contract (docs/contracts.md); they
+// live in limits.ts so Client Components can have them without zod.
+export {
+  DISPLAY_NAME_MAX_LENGTH,
+  LOCATION_LABEL_MAX_LENGTH,
+  MAX_CAPACITY,
+  MIN_CAPACITY,
+  ROOM_MAX_LENGTH,
+  START_GRACE_MINUTES,
+  TOPIC_MAX_LENGTH,
+};
 
 // ---------------------------------------------------------------------------
 // Form state -- what an action returns to useActionState when it does not
@@ -114,8 +137,7 @@ export type SignInField = keyof SignInValues;
 // Display name (US-01, ADR 0008 rule 1) -- A4 calls this in saveDisplayName().
 // ---------------------------------------------------------------------------
 
-/** A2/A4: mirror as a CHECK on profiles.display_name (1..50 after trimming). */
-export const DISPLAY_NAME_MAX_LENGTH = 50;
+// DISPLAY_NAME_MAX_LENGTH: see src/lib/limits.ts.
 
 export const displayNameSchema = z.object({
   displayName: z
@@ -134,30 +156,9 @@ export type DisplayNameField = keyof DisplayNameValues;
 // Create a session (US-02, US-02b) -- S3 calls this in createSession().
 // ---------------------------------------------------------------------------
 
-// Length caps keep a pasted essay out of the database. They are this layer's
-// sanity limits, not product rules; S1 may mirror them as CHECKs.
-export const TOPIC_MAX_LENGTH = 120;
-export const LOCATION_LABEL_MAX_LENGTH = 100;
-export const ROOM_MAX_LENGTH = 50;
-
-/** The host counts as one (ADR 0008 rule 2). S1: `CHECK (capacity >= 2)`. */
-export const MIN_CAPACITY = 2;
-
-/**
- * The top of Postgres's `integer` range -- not a product maximum. There is
- * none (ADR 0008 rule 2); this only stops a huge number reaching the database
- * as a raw out-of-range error.
- */
-export const MAX_CAPACITY = 2_147_483_647;
-
-/**
- * How far in the past a start time may be and still count as "now".
- * `datetime-local` inputs have minute precision, so a host who picks the
- * current minute is already up to 59 seconds late by the time they submit.
- * S1: create_session should allow the same slack (`starts_at >= now() -
- * interval '5 minutes'`) or the database will reject what this accepts.
- */
-export const START_GRACE_MINUTES = 5;
+// TOPIC_MAX_LENGTH, LOCATION_LABEL_MAX_LENGTH, ROOM_MAX_LENGTH, MIN_CAPACITY,
+// MAX_CAPACITY and START_GRACE_MINUTES -- what each is for, and what S1 must
+// mirror: see src/lib/limits.ts.
 
 /**
  * An absolute instant, as ISO 8601 **with** a UTC offset or `Z`

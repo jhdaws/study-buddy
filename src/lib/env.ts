@@ -73,6 +73,24 @@ export const ALLOWED_EMAIL_DOMAIN = "vanderbilt.edu";
 export const CAMPUS_CENTER = { lat: 36.1447, lng: -86.8027 };
 
 /**
+ * The time zone every session time is shown in: campus's, not the viewer's
+ * and not the server's.
+ *
+ * Why explicit: session times are stored and passed around as UTC instants
+ * (`timestamptz`, ISO strings ending in `Z`). Server Components format them,
+ * and on Vercel the server runs in UTC -- so `toLocaleTimeString()` without a
+ * `timeZone` would show a 2 PM session as 7 PM (8 PM in winter). Naming the
+ * zone also makes the answer the same on every machine, CI included, and
+ * matches what a student means by "2 PM": everyone meeting is on campus.
+ * Pass it to `Intl.DateTimeFormat`; see src/lib/format.ts.
+ *
+ * Times going IN are the other direction: the create form converts the
+ * browser's local `datetime-local` value to an ISO instant before submitting
+ * (docs/contracts.md, "Times in").
+ */
+export const CAMPUS_TIME_ZONE = "America/Chicago";
+
+/**
  * How far from CAMPUS_CENTER a session may be placed.
  *
  * Deliberately generous for now -- campus plus the surrounding blocks. Tune it
