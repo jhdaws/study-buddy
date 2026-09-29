@@ -1,14 +1,66 @@
 // Environment variable access, with fail-fast errors on missing config.
 //
-// TODO: implement alongside the database and map work.
-//   - NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
-//   - NEXT_PUBLIC_GOOGLE_MAPS_API_KEY  (browser; restrict by HTTP referrer)
-//   - GOOGLE_MAPS_SERVER_API_KEY       (server only; restrict by IP)
-//   - throw a clear, actionable error when one is missing, so a misconfigured
-//     deploy fails loudly instead of somewhere deep in a request
+// Each getter throws a clear, actionable error when its value is missing, so a
+// misconfigured deploy fails loudly instead of somewhere deep in a request.
+// They are functions rather than constants so that importing this module never
+// throws -- the build and the unit tests run without real values.
+//
+// Every read is a literal `process.env.NEXT_PUBLIC_...` expression on purpose:
+// Next.js inlines those into the client bundle only when written out in full.
+// `process.env[name]` would be undefined in the browser.
 //
 // Never give a server-only key the NEXT_PUBLIC_ prefix: that prefix is what
 // inlines a value into the client bundle.
+
+function required(name: string, value: string | undefined): string {
+  if (!value) {
+    throw new Error(
+      `Missing environment variable ${name}. Locally: copy .env.example to ` +
+        `.env.local and fill it in. Deployed: add it in Vercel under ` +
+        `Settings -> Environment Variables, then redeploy.`,
+    );
+  }
+  return value;
+}
+
+/** Supabase project URL and publishable (anon) key. Both are browser-safe. */
+export function supabaseEnv(): { url: string; anonKey: string } {
+  const url = required(
+    "NEXT_PUBLIC_SUPABASE_URL",
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+  );
+  const anonKey = required(
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+  );
+
+  // The easiest mistake is pasting the Postgres connection string, which also
+  // contains the database password. Catch it before it goes anywhere.
+  if (!/^https?:\/\//.test(url)) {
+    throw new Error(
+      "NEXT_PUBLIC_SUPABASE_URL must be the project's https://<ref>.supabase.co " +
+        "URL (Project Settings -> Data API), not a postgresql:// connection string.",
+    );
+  }
+
+  return { url, anonKey };
+}
+
+/** Maps JavaScript API key. Ships to the browser; restrict it by HTTP referrer. */
+export function googleMapsBrowserKey(): string {
+  return required(
+    "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY",
+    process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
+  );
+}
+
+/** Server-side Places key. Server only; restrict it by IP. */
+export function googleMapsServerKey(): string {
+  return required(
+    "GOOGLE_MAPS_SERVER_API_KEY",
+    process.env.GOOGLE_MAPS_SERVER_API_KEY,
+  );
+}
 
 /** Only this email domain may sign up. Enforced in the database, not here. */
 export const ALLOWED_EMAIL_DOMAIN = "vanderbilt.edu";

@@ -10,8 +10,9 @@ mapping stays honest as the code changes.
 Status: ⬜ not yet written · 🚧 partially covered · ✅ automated and passing
 
 **Everything is ⬜.** An earlier scaffold had 15 passing unit tests; it was
-stripped back so the schema can be designed first. The only test in the repo
-today is a placeholder proving the runner works.
+stripped back so the schema can be designed first. The tests in the repo today
+cover environment configuration and prove the database harness works — neither
+verifies any row below.
 
 | ID | Status | Given | When | Then | Verified by |
 | --- | --- | --- | --- | --- | --- |
@@ -53,15 +54,29 @@ The exact call depends on the schema decision (TASK-00). What matters is that
 B blocks until A commits, and then fails — rather than reading a stale count
 and succeeding.
 
-Write it as soon as there is a schema and a local database to run it against.
-Note what it does *not* need: a browser, a running app, or two people clicking.
-Two connections and a transaction are enough.
+Write it as soon as there is a schema. The local database and the harness
+already exist: `tests/db/harness.test.ts` runs exactly this shape with an
+advisory lock standing in for the join, and was checked to fail when the two
+connections do not contend. Note what the test does *not* need: a browser, a
+running app, or two people clicking. Two connections and a transaction are
+enough.
+
+**Why Vitest with two `pg` clients rather than pgTAP.** pgTAP runs each test
+file inside a single database session, so one connection cannot block on
+another without `dblink` workarounds. US-07b is precisely a two-session test.
+Vitest also keeps database tests in the same language and runner as the unit
+tests. pgTAP remains a good fit for single-session checks such as RLS policies,
+and can be added alongside if the team prefers it there.
+
+**Database tests run in CI** (the `db` job in `ci.yml`), not only locally.
 
 ## Coverage, stated plainly
 
-**Zero.** `npm test` passes, but the only test in the repo asserts that the
-test runner runs. Nothing in this table is verified.
+**Zero.** `npm test` covers `src/lib/env.ts` — missing and malformed
+configuration — and `npm run test:db` proves the database harness can connect
+and make one connection wait on another. Nothing in this table is verified.
 
-That is the correct state for a structure-only push — but it means the green CI
-badge currently certifies that the code compiles and lints, nothing more. Say
+That is the correct state before the schema exists — but it means the green CI
+badge currently certifies that the code compiles, lints, and reaches a
+database, nothing more. Say
 that plainly in the report rather than letting "CI passing" do unearned work.

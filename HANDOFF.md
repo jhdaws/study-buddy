@@ -71,6 +71,58 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-09-29 · Database plumbing on `db-setup` (no schema)
+
+**Branch:** `db-setup` · **Commits made:** see the PR opened this session
+
+### What changed
+- `db-setup` was behind `main` (#2 had merged into it, #3 carried that to
+  `main`). Merged `origin/main` in — no content difference remained.
+- Supabase CLI, `pg`, `@types/pg` as dev dependencies; `supabase init`;
+  local auth `site_url` set to `http://localhost:3000`.
+- `src/lib/env.ts` fail-fast getters; `src/lib/supabase/{client,server,proxy}.ts`
+  and `src/proxy.ts` implemented per their stub comments.
+- `tests/db/` — Vitest + two `pg` clients, local-only guard; `db` CI job.
+- `src/lib/harness.test.ts` deleted (first real unit test landed:
+  `env.test.ts`). `tests/db/harness.test.ts` is the new placeholder, to be
+  deleted when US-07b lands.
+- T-A5 ticked in `docs/tickets.md`; README, `CLAUDE.md`, `test-cases.md`,
+  `supabase/README.md`, `.env.example` updated to match.
+
+### Decided in conversation, not yet written down
+- **The user chose plumbing only — no tables.** All schema questions stay
+  pending for C0, including the display name. Do not write migrations until
+  C0 has happened.
+
+### Verified versus assumed
+- **Verified locally:** lint, typecheck, `npm test`, build, `npm run test:db`.
+  With the user's hosted values, `/`, `/sessions`, `/login` return 200 through
+  the proxy, including with a garbage auth cookie. With the Supabase variables
+  empty, the build still succeeds but every page returns 500 and the log names
+  the missing variable. The lock test was mutated (B takes a different lock)
+  and fails as it should. `supabase db start` was checked in a throwaway
+  project to apply migrations.
+- **Not verified:** the `db` CI job had not run when this entry was written.
+  No sign-in flow exists, so session refresh has never refreshed a real
+  session.
+
+### Things the next agent should be careful about
+- **The deploy breaks without Vercel env vars.** The proxy runs on every page
+  and calls `supabaseEnv()`. If `NEXT_PUBLIC_SUPABASE_URL` / `_ANON_KEY` are
+  not set in Vercel when this merges, production returns 500 on every page.
+  They are inlined at build time, so adding them later needs a redeploy.
+- **Route protection is intentionally absent** from the proxy (T-E1). Adding
+  it before `/login` works locks everyone out of `/sessions`.
+- **Every developer now needs `.env.local` filled in** to run `npm run dev` —
+  hosted values or `npm run db:status` output.
+- `npx supabase status -o env` prints the local keys. They are the CLI's fixed
+  demo keys, not secrets — but do not pipe the hosted project's equivalents
+  anywhere.
+- `supabase db reset`/`start` warn `no files matched pattern: supabase/seed.sql`.
+  Harmless; T-C6 creates the seed.
+
+---
+
 ## 2026-09-28 · Opened PRs for the docs; refined the tickets
 
 **Branch:** `db-setup` → `docs-refine-tickets` · **Commits made:** `b36fe7b`

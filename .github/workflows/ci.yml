@@ -45,3 +45,26 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  # Tests that need real Postgres behaviour -- locks, constraints, RLS. Starts
+  # only the database container, not the whole local Supabase stack, and
+  # applies every migration in supabase/migrations/ on the way up.
+  db:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start local database
+        run: npx supabase db start
+
+      - name: Database tests
+        run: npm run test:db

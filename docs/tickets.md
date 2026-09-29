@@ -118,14 +118,16 @@ No dependencies. Somebody should pick these up on day one.
 
 ### T-A5 · Local database and database test harness
 **M · TASK-03 · blocks C1–C7 · US-07b**
-- [ ] `supabase init` run and `supabase/config.toml` committed
-- [ ] `supabase start` + `supabase db reset` documented in the README, including the Docker requirement
-- [ ] A way to run tests against the local database with **two independent
+- [x] `supabase init` run and `supabase/config.toml` committed
+- [x] `supabase start` + `supabase db reset` documented in the README, including the Docker requirement
+- [x] A way to run tests against the local database with **two independent
       connections** — pgTAP via `supabase test db`, or Vitest with two `pg`
-      clients. Pick one and write down why.
-- [ ] One trivial database test passing, to prove the harness works
-- [ ] Decision recorded: do database tests run in CI (`supabase start` in
+      clients. Pick one and write down why. *(Vitest + `pg`; reasoning in
+      `test-cases.md` under US-07b.)*
+- [x] One trivial database test passing, to prove the harness works
+- [x] Decision recorded: do database tests run in CI (`supabase start` in
       Actions) or locally only? If locally only, say so in `test-cases.md`
+      *(CI — the `db` job.)*
 
 > Track C is developed and tested against this local database, not the hosted
 > project. That is why A1 blocks the deployed app rather than the migrations.
