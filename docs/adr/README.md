@@ -11,8 +11,9 @@ was rejected and why.
 | [0003](./0003-authentication.md) | **Proposed** | Vanderbilt-only sign-in by emailed magic link |
 | [0004](./0004-mobile-first.md) | Accepted | Mobile-first; list view before map |
 | [0005](./0005-ci-in-sprint-one.md) | Accepted | CI from Sprint 1, and a corrected risk register |
-| [0006](./0006-course-model.md) | Accepted | Courses: seeded departments, course numbers learned from use |
-| [0007](./0007-map-provider.md) | Accepted | Google Maps + Places, with a curated campus building layer |
+| [0006](./0006-course-model.md) | Accepted, partly superseded | Courses: seeded departments, course numbers learned from use — departments now user-creatable (0008) |
+| [0007](./0007-map-provider.md) | Accepted, partly superseded | Google Maps + Places — its curated campus building layer and IP-restricted server key are superseded by 0008 |
+| [0008](./0008-sprint-2-schema-decisions.md) | Accepted | Sprint 2 schema: RLS deny by default, derived seats, server-written Places locations, anonymised deletion, user-created departments |
 
 ## On "Proposed"
 

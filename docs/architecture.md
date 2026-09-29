@@ -1,13 +1,14 @@
 # Architecture
 
-> **Schema status:** the class models below are **proposed**, not agreed. They
-> exist to give TASK-00 (the schema discussion) something concrete to argue
-> with. Treat every attribute as a suggestion until the team has walked through
-> them together.
+> **Schema status: Agreed ([ADR 0008](./adr/0008-sprint-2-schema-decisions.md)).**
+> The class models in §2 match the schema the team approved on 2026-09-29.
+> Sprint 2's tables exist as a skeleton migration
+> (`supabase/migrations/*_schema_skeleton.sql`); messages and study requests
+> are drawn here but built in later sprints.
 >
 > The runtime architecture is settled — see [ADR 0001](./adr/0001-stack.md)
 > (stack), [0003](./adr/0003-authentication.md) (auth), and
-> [0007](./adr/0007-map-provider.md) (maps).
+> [0007](./adr/0007-map-provider.md) (maps), as amended by 0008.
 
 ---
 
@@ -136,8 +137,11 @@ actually true. Never let the left column be the only one.
 
 ## 2. Class models
 
-Three views, split so each stays readable. Together they are the proposed
-domain model.
+Three views, split so each stays readable. Together they are the agreed domain
+model ([ADR 0008](./adr/0008-sprint-2-schema-decisions.md)). Attribute names
+are camelCase here and snake_case in the database (`hostId` → `host_id`).
+Operations such as `seatsLeft()` are derived — computed in queries, never
+stored.
 
 ### 2.1 Session domain
 
@@ -150,11 +154,7 @@ classDiagram
 
     class Profile {
         +UUID id
-        +string email
-        +string fullName
-        +string major
-        +string minor
-        +int gradYear
+        +string displayName
         +datetime createdAt
     }
 
@@ -163,12 +163,12 @@ classDiagram
         +UUID hostId
         +UUID courseId
         +UUID locationId
+        +string locationLabel
         +string room
         +string topic
-        +string description
         +datetime startsAt
         +datetime endsAt
-        +int maxCapacity
+        +int capacity
         +SessionStatus status
         +datetime createdAt
         +seatsLeft() int
@@ -185,19 +185,21 @@ classDiagram
     class Message {
         +UUID id
         +UUID sessionId
-        +UUID userId
+        +UUID authorId
         +string body
         +datetime createdAt
+        +isWritable() bool
     }
 
     class StudyRequest {
         +UUID id
-        +UUID userId
+        +UUID posterId
         +UUID courseId
-        +UUID locationId
         +string note
+        +datetime startsAt
+        +datetime endsAt
         +datetime createdAt
-        +datetime expiresAt
+        +hasExpired() bool
     }
 
     class SessionStatus {
@@ -206,36 +208,50 @@ classDiagram
         CANCELLED
     }
 
-    Profile "1" --> "0..*" StudySession : hosts
+    Profile "0..1" --> "0..*" StudySession : hosts
     StudySession "1" *-- "0..*" SessionAttendee : roster
     Profile "1" --> "0..*" SessionAttendee : attends
     StudySession "1" *-- "0..*" Message : transcript
-    Profile "1" --> "0..*" Message : writes
+    Profile "0..1" --> "0..*" Message : writes
     Profile "1" --> "0..*" StudyRequest : posts
     StudySession --> SessionStatus
 
+    note for Profile "displayName is null until the<br/>first-sign-in name step. Email stays<br/>in auth.users, which clients cannot<br/>read — never copied here (US-25)."
     note for SessionAttendee "Composite key (sessionId, userId).<br/>This is what makes a double-join<br/>impossible — capacity is enforced<br/>separately, under a row lock."
-    note for StudySession "seatsLeft() is DERIVED from the<br/>roster, never stored. A stored<br/>counter can drift; a derived one<br/>cannot."
+    note for StudySession "seatsLeft() is DERIVED from the<br/>roster, never stored. hasEnded() is<br/>derived from endsAt — there is no<br/>ENDED status. hostId is null only<br/>after the host deletes their account."
+    note for Message "Later sprint. isWritable() is true<br/>until one week after the session<br/>ends, enforced in RLS. authorId is<br/>null after deletion: 'Deleted user'."
 ```
 
-**Two decisions embedded here that deserve discussion:**
+**Decisions embedded here:**
 
 - `SessionAttendee` is a composite-keyed association, not an entity with its own
   id. That composite key is a correctness mechanism, not a modelling detail — it
   is what makes joining twice impossible at the database level rather than in
   application logic.
-- `seatsLeft()` is a derived operation. The alternative — an `attendeeCount`
-  column — is faster to read and will eventually disagree with the roster.
-  Given the whole product promises accurate seat counts, derived is the safer
-  default at our scale. **This is a genuine tradeoff; argue it in TASK-00.**
+- `seatsLeft()` is derived. An `attendeeCount` column would be faster to read
+  and would eventually disagree with the roster. The product promises accurate
+  seat counts, so derived it is.
+- **Status is `OPEN` or `CANCELLED`.** The host cannot leave their own session;
+  they cancel it. "Ended" is a function of `endsAt`, so it can never be stale.
+- **`locationLabel` is on the session**, typed or accepted by the host and
+  prefilled from Places. Whether Google lets us cache a place's name is
+  unverified (M1), so the label is kept as the host's own text.
+- **Deleting an account anonymises rather than erases** (ADR 0008 rule 5):
+  `hostId` and `authorId` become null and show as "Deleted user"; the user's
+  roster rows are deleted, freeing their seats. `StudyRequest` rows go with
+  the account.
+- `StudyRequest` (US-16, later sprint) carries a poster-set time range and
+  expires at `endsAt`.
 
 The host is expected to appear on their own roster, so seat maths and chat
-membership treat them like any other attendee.
+membership treat them like any other attendee. Capacity includes the host,
+which is why its minimum is 2.
 
 ### 2.2 Course taxonomy
 
-Implements [ADR 0006](./adr/0006-course-model.md): the department list is a
-closed seeded set, course numbers are learned from use.
+Implements [ADR 0006](./adr/0006-course-model.md) as amended by
+[ADR 0008](./adr/0008-sprint-2-schema-decisions.md): a handful of departments
+and courses are seeded, and students add the rest — departments included.
 
 ```mermaid
 classDiagram
@@ -244,6 +260,9 @@ classDiagram
     class Department {
         +string code
         +string name
+        +string mergedInto
+        +UUID createdBy
+        +datetime createdAt
     }
 
     class Course {
@@ -263,75 +282,63 @@ classDiagram
     }
 
     Department "1" --> "0..*" Course : contains
+    Department "0..1" --> "0..*" Department : mergedInto
     Course "1" --> "0..*" StudySession : studied in
     Course "0..1" --> "0..*" Course : mergedInto
 
-    note for Department "Seeded and closed, ~100-150 rows.<br/>Validation against this list is what<br/>keeps course entry from degenerating<br/>into free text."
+    note for Department "A handful seeded; users add the rest.<br/>code is the normalised key: 'cs',<br/>' CS ' and 'C.S.' are one row.<br/>'COMPSCI' is not — it gets merged."
     note for Course "Created on first use.<br/>Unique on (departmentCode, number),<br/>after normalisation: 'cs 3251',<br/>'CS-3251' and 'CS 3251' are one row."
 ```
 
-The self-reference on `mergedInto` exists from day one so duplicate or
-mistyped courses can be collapsed later without a migration. **Do not build a
-merge UI now** — the column alone is enough until the data actually degrades.
+With departments open, normalisation and usage ranking are the only defence
+against `CS` / `C.S.` / `COMPSCI` duplicates — an accepted risk. The
+self-references on `mergedInto` exist from day one so duplicates can be
+collapsed later without a migration. **Do not build a merge UI now** — the
+columns alone are enough until the data actually degrades.
 
-### 2.3 Location hierarchy
+`name` and `title` are optional: better empty than wrong.
 
-Implements [ADR 0007](./adr/0007-map-provider.md): curated campus buildings and
-Google-sourced nearby venues are different things with a shared interface.
+### 2.3 Locations
+
+Implements [ADR 0008](./adr/0008-sprint-2-schema-decisions.md) rules 7 and
+12–14. There is no curated building list: every location, campus buildings
+included, is a Google Places place.
 
 ```mermaid
 classDiagram
-    direction TB
+    direction LR
 
     class Location {
-        <<abstract>>
         +UUID id
-        +string name
+        +string placeId
         +float lat
         +float lng
-        +LocationKind kind
-        +withinCampusRadius() bool
-    }
-
-    class CampusBuilding {
-        +string campusZone
-        +bool verified
-    }
-
-    class PlaceVenue {
-        +string googlePlaceId
         +datetime validatedAt
-    }
-
-    class LocationKind {
-        <<enumeration>>
-        CAMPUS
-        VENUE
+        +withinCampusRadius() bool
     }
 
     class StudySession {
         +UUID locationId
+        +string locationLabel
         +string room
     }
 
-    Location <|-- CampusBuilding
-    Location <|-- PlaceVenue
-    Location --> LocationKind
     Location "1" --> "0..*" StudySession : hosts
 
-    note for CampusBuilding "Curated by us so names match what<br/>students actually say. 'verified'<br/>tracks whether coordinates have been<br/>checked against a real map."
-    note for PlaceVenue "Only googlePlaceId and our validated<br/>coordinates are stored long-term —<br/>Google's terms restrict caching other<br/>Place fields."
-    note for Location "withinCampusRadius() is re-checked<br/>SERVER-SIDE on every session write.<br/>The autocomplete filter is a UX<br/>convenience, not a control."
+    note for Location "One row per Places place, unique on<br/>placeId. Written ONLY by the server,<br/>after a Places lookup and a radius<br/>and type check. No name stored —<br/>the session carries the label."
 ```
 
-`room` belongs on the session, not the location — one building hosts many
-sessions in many rooms.
+One table, no building/venue split and no `kind` discriminator: those only
+existed to separate curated buildings from Google venues.
 
-**Implementation question for TASK-00:** single table with a `kind`
-discriminator, or table-per-subclass? Single-table is simpler and makes the
-foreign key from `StudySession` trivial; table-per-type is cleaner but forces
-either two nullable FKs or a polymorphic reference. At our scale, single-table
-with a discriminator is probably right — but decide it deliberately.
+`room` and `locationLabel` belong on the session, not the location — one
+building hosts many sessions, in many rooms, under whatever name the host
+gives it. `room` is optional because it means nothing in a café.
+
+`withinCampusRadius()` is re-checked **server-side** before a row is written.
+The autocomplete's `locationRestriction` is a UX convenience, not a control.
+`validatedAt` exists because Google may limit how long coordinates can be
+cached — unverified; M1 checks.
 
 ---
 
@@ -413,8 +420,9 @@ bypass it.
 
 **Browsing sessions (US-03, US-06, US-12).** A Server Component loads open,
 not-yet-ended sessions with their seat counts and renders on the server.
-Filtering by course and campus zone happens client-side over the loaded set —
-fine at our scale, and it avoids a round trip per keystroke. The map is loaded
+Filtering by course happens client-side over the loaded set —
+fine at our scale, and it avoids a round trip per keystroke. (Filtering by
+campus zone, US-12, needs rethinking now that there is no building list.) The map is loaded
 client-side only, since the Maps SDK needs a browser.
 
 **Joining and chatting (US-04, US-05).** Join goes through the server action

@@ -73,9 +73,9 @@ flowchart LR
 
 #### W0 · Decisions review
 **All four · 30 min · first thing**
-- [ ] Confirm or change the [technical picks](#to-confirm-at-w0) and the three unconfirmed readings
-- [ ] ADR 0008 written and Accepted — supersedes ADR 0007's campus-building layer and ADR 0006's closed department list
-- [ ] `architecture.md` §2, `data/README.md`, and `supabase/README.md` updated to match
+- [x] Confirm or change the [technical picks](#confirmed-at-w0) and the three unconfirmed readings — all confirmed
+- [x] [ADR 0008](./adr/0008-sprint-2-schema-decisions.md) written and Accepted — supersedes ADR 0007's campus-building layer and ADR 0006's closed department list
+- [x] `architecture.md` §2, `data/README.md`, and `supabase/README.md` updated to match
 - [ ] Worth the same meeting: ratify or overrule ADRs 0001–0003
 
 #### W1 · Finish setup
@@ -90,10 +90,10 @@ flowchart LR
 
 #### W2 · Schema skeleton
 **M · TASK-00 · after W0**
-- [ ] One migration with every Sprint 2 table: `profiles`, `departments`, `courses`, `locations`, `sessions`, `session_attendees` — columns, keys, and foreign keys per ADR 0008
-- [ ] Structure only. Rules, triggers, and policies belong to the owning track
-- [ ] RLS enabled on every table, no policies
-- [ ] Database test that **every table in `public` has RLS enabled** — a permanent guard, not a placeholder
+- [x] One migration with every Sprint 2 table: `profiles`, `departments`, `courses`, `locations`, `sessions`, `session_attendees` — columns, keys, and foreign keys per ADR 0008
+- [x] Structure only. Rules, triggers, and policies belong to the owning track
+- [x] RLS enabled on every table, no policies
+- [x] Database test that **every table in `public` has RLS enabled** — a permanent guard, not a placeholder (`tests/db/rls.test.ts`)
 
 #### W3 · Starter data, seed, types
 **S · TASK-02 (reduced), TASK-05 · after W2**
@@ -244,17 +244,22 @@ Product calls, made 2026-09-29:
 
 The last two reverse parts of ADRs 0006 and 0007. Normalization and usage
 ranking are now the only defence against `CS` / `C.S.` / `COMPSCI` duplicates —
-an accepted risk.
+an accepted risk. All of this is recorded in
+[ADR 0008](./adr/0008-sprint-2-schema-decisions.md).
 
-#### To confirm at W0
+#### Confirmed at W0
+
+Approved 2026-09-29 and recorded in ADR 0008:
 
 - Seats left derived from the roster, never a stored counter
 - Authorization in RLS on every table; server checks exist for error messages
 - Joining (later) through a database function holding a row lock
 - Location rows written only by the server — which brings the Supabase secret key into the app as a server-only variable
 - One `locations` table of Places venues, no building/venue split
-- Store a venue's name, or have the host type a label — M1 finds out what Google allows
-- Three readings of the product calls, not yet confirmed: chat stays writable for the week; "set by the host" still allows sanity checks; users may add departments
+- The session stores a host-editable location label; `locations` stores no name — the default until M1 finds out what Google allows
+- The server Maps key is restricted by API and a daily quota cap, not IP
+- Email is never copied into `profiles`
+- The three readings of the product calls: chat stays writable for the week; "set by the host" still allows sanity checks; users may add departments
 
 ---
 

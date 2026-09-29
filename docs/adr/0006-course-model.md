@@ -1,6 +1,7 @@
 # ADR 0006 — Courses: closed department list, open course numbers
 
 **Status:** Accepted · **Date:** 2026-09-21
+**Superseded in part by [ADR 0008](./0008-sprint-2-schema-decisions.md)** — departments are no longer a closed list; users add them. See its rule 8.
 **Supersedes:** the course half of [ADR 0002](./0002-reference-data.md)
 
 ## Context

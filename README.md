@@ -17,7 +17,7 @@ Jack Dawson · Nate Dalbert · Moses Banda · Tapan Sidhwani
 | Database | PostgreSQL via Supabase, with Row Level Security |
 | Auth | Supabase email OTP, restricted to `@vanderbilt.edu` |
 | Realtime | Supabase Realtime (no socket server of our own) |
-| Map | Google Maps + Places (curated campus layer on top) |
+| Map | Google Maps + Places — every location from Places (ADR 0008) |
 | Tests | Vitest |
 | Hosting | Vercel |
 
@@ -27,11 +27,13 @@ what we rejected and why — is in [`docs/adr/`](./docs/adr/); start with
 
 ## Status
 
-**Scaffold plus database plumbing.** Routes, components, and helpers exist as
-stubs describing what belongs in them. The Supabase clients, session-refreshing
-proxy, local database, and database test harness are real — but there are **no
-tables yet**, no sign-in, and no working feature. The schema waits on the team's
-schema decision (W0 in [`docs/tickets.md`](./docs/tickets.md)).
+**Scaffold plus database plumbing and a schema skeleton.** Routes,
+components, and helpers exist as stubs describing what belongs in them. The
+Supabase clients, session-refreshing proxy, local database, and database test
+harness are real. The Sprint 2 tables exist ([ADR 0008](./docs/adr/0008-sprint-2-schema-decisions.md)),
+with Row Level Security on and **no policies yet** — so nothing is readable
+through the API until each track adds its own. No sign-in and no working
+feature yet.
 
 The toolchain is real and green: lint, typecheck, test, and build all pass, and
 CI runs them on every push.
@@ -98,9 +100,9 @@ src/
     validation.ts          Schemas shared by forms and actions
     errors.ts              Database error codes -> student-facing messages
   proxy.ts                 Session refresh + route protection
-supabase/                  Local config and migrations. No migrations yet.
+supabase/                  Local config and migrations (schema skeleton, RLS on)
 tests/db/                  Database tests (two-connection harness)
-data/                      Seed data (departments, campus buildings). Empty for now.
+data/                      Starter departments and courses (W3). Empty for now.
 docs/                      Backlog, acceptance criteria, architecture decisions
 ```
 
@@ -120,17 +122,15 @@ should contain and any constraint worth knowing before writing it.
   compliance. **Add an entry when you use AI, not the night before a
   deliverable.**
 
-## Two things to settle before writing the database
+## Two things settled before writing the database
 
-Both are schema-shaping and expensive to retrofit. `supabase/README.md` has the
-fuller list.
+Both were schema-shaping and expensive to retrofit; both are decided in
+[ADR 0008](./docs/adr/0008-sprint-2-schema-decisions.md).
 
-**Where the security boundary lives.** Enforcing access in the database (Row
-Level Security policies) means one rule, checked everywhere, including for
-anything that talks to the database directly. Enforcing it in application code
-is more familiar but has to be re-applied at every call site. Pick one; doing
-both halfway is the bad outcome.
+**Where the security boundary lives: in the database.** Row Level Security on
+every table, deny by default. Server checks exist only to give good error
+messages.
 
-**How a join stays correct under concurrent requests.** Two students taking the
-last seat at the same moment must not both succeed. A plain read-then-insert
-does not guarantee that — the check and the write need to be atomic.
+**How a join stays correct under concurrent requests: a database function
+holding a row lock.** A plain read-then-insert lets two students take the last
+seat at once; the check and the write have to be atomic.
