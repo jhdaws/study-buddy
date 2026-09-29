@@ -11,8 +11,10 @@ failed. The template and the rules for writing an entry are in that file.
 ## Current state
 
 This repository is a scaffold. Every route, component, and helper is a stub
-carrying a comment describing what belongs in it. There is no database, no
-auth, and no working feature yet.
+carrying a comment describing what belongs in it. The database has a schema
+skeleton (RLS on, no policies yet), a seed of starter departments and
+courses, and generated TypeScript types — but there is no auth and no
+working feature yet.
 
 **Read the stub comment before you fill one in** — several record a constraint
 that is easy to miss and expensive to get wrong.
@@ -50,8 +52,9 @@ putting your name there is a claim that you understood it and would defend it.
 npm run lint && npm run typecheck && npm test && npm run build
 ```
 
-CI runs exactly this. A seed-freshness check is planned but not yet in
-`ci.yml` — see W3 in `docs/tickets.md`.
+CI runs exactly this, plus a seed-freshness check (`supabase/seed.sql` must
+match `data/`) and, in the `db` job, a check that `src/lib/database.types.ts`
+matches the migrations.
 
 ## Testing
 

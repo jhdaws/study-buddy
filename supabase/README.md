@@ -47,8 +47,13 @@ Decisions every migration should respect (ADR 0008):
 
 ```bash
 npx supabase migration new <name>   # one per PR
-npm run db:reset                    # re-applies every migration locally
-npm run test:db                     # includes the RLS guard
+npm run db:reset                    # re-applies every migration, then seed.sql
+npm run db:types                    # regenerate src/lib/database.types.ts -- commit it
+npm run test:db                     # includes the RLS guard and the seed check
 ```
 
-Never edit a migration once it has merged; add a new one.
+Never edit a migration once it has merged; add a new one. CI fails if the
+committed `database.types.ts` does not match the migrations.
+
+`seed.sql` is generated from `data/` by `npm run db:seed` — edit the JSON,
+not this file. See [`data/README.md`](../data/README.md).

@@ -77,10 +77,10 @@ Treat these three as a group and land them before any public launch.
 | TASK-01 | — | Dropped | ~~Curate the core Vanderbilt academic buildings with verified coordinates.~~ *Dropped 2026-09-29: every location, campus buildings included, comes from Google Places. Recorded in ADR 0008.* |
 | TASK-06 | — | ⬜ | Create the Google Cloud project, enable Maps/Places, set up billing, and **restrict both API keys** (browser key by HTTP referrer; server key by API plus a daily quota cap, not IP — ADR 0008) before either is committed anywhere. |
 | TASK-07 | — | Dropped | ~~Ask VU Facilities/IT whether Vanderbilt publishes campus GIS building data.~~ *Dropped with TASK-01 — it only fed the curated building layer.* |
-| TASK-02 | — | ⬜ | ~~Compile the full department list (~100–150 rows, closed set).~~ **Reduced 2026-09-29:** seed ~10 departments and a few courses; users add the rest, departments included. See W3. |
+| TASK-02 | — | ✅ | ~~Compile the full department list (~100–150 rows, closed set).~~ **Reduced 2026-09-29:** seed ~10 departments and a few courses; users add the rest, departments included. *Done in W3: `data/`, from the 2026-27 catalogue.* |
 | TASK-03 | — | 🚧 | Create the Supabase project, apply migrations, and add env vars to Vercel. *Hosted project created; local database and test harness landed (#4). Vercel env vars and migrations outstanding.* |
 | TASK-04 | — | ⬜ | Keyboard and screen-reader pass over the core flows. |
-| TASK-05 | — | ⬜ | Generate TypeScript types from the schema once TASK-03 is done, rather than hand-maintaining them. |
+| TASK-05 | — | ✅ | Generate TypeScript types from the schema once TASK-03 is done, rather than hand-maintaining them. *Done in W3: `npm run db:types` → `src/lib/database.types.ts`; CI checks it is current.* |
 
 ## Estimate sanity check
 

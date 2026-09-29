@@ -97,11 +97,11 @@ flowchart LR
 
 #### W3 · Starter data, seed, types
 **S · TASK-02 (reduced), TASK-05 · after W2**
-- [ ] ~10 departments the team takes and a few course numbers each, in `data/`
-- [ ] Course-number format checked (four digits? letter suffix?) and noted for S2
-- [ ] `supabase/seed.sql` built from `data/`; `npm run db:reset` loads it
-- [ ] `npm run db:types` generating `src/lib/database.types.ts`
-- [ ] CI check that the seed matches `data/` — `CLAUDE.md` says one exists; it does not yet
+- [x] ~10 departments the team takes and a few course numbers each, in `data/`
+- [x] Course-number format checked (four digits? letter suffix?) and noted for S2 — four digits plus an optional `W` or `L`; findings in [`data/README.md`](../data/README.md#for-s2-what-the-catalogue-says-about-the-format)
+- [x] `supabase/seed.sql` built from `data/` (`npm run db:seed`); `npm run db:reset` loads it
+- [x] `npm run db:types` generating `src/lib/database.types.ts`
+- [x] CI check that the seed matches `data/` (`verify` job), plus one that the types match the migrations (`db` job)
 
 #### W4 · Stubs and fixtures
 **M · after W3 · unblocks A, S, M**
