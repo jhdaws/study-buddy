@@ -50,7 +50,8 @@ putting your name there is a claim that you understood it and would defend it.
 npm run lint && npm run typecheck && npm test && npm run build
 ```
 
-CI runs exactly this, plus the seed-freshness check.
+CI runs exactly this. A seed-freshness check is planned but not yet in
+`ci.yml` — see T-C6 in `docs/tickets.md`.
 
 ## Testing
 
