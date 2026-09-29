@@ -11,8 +11,9 @@ Status: ⬜ not yet written · 🚧 partially covered · ✅ automated and passi
 
 **Everything is ⬜.** An earlier scaffold had 15 passing unit tests; it was
 stripped back so the schema can be designed first. The tests in the repo today
-cover environment configuration and prove the database harness works — neither
-verifies any row below.
+cover environment configuration, prove the database harness works, and guard
+that every table has Row Level Security enabled — none of them verifies any
+row below.
 
 | ID | Status | Given | When | Then | Verified by |
 | --- | --- | --- | --- | --- | --- |
@@ -73,10 +74,19 @@ and can be added alongside if the team prefers it there.
 ## Coverage, stated plainly
 
 **Zero.** `npm test` covers `src/lib/env.ts` — missing and malformed
-configuration — and `npm run test:db` proves the database harness can connect
-and make one connection wait on another. Nothing in this table is verified.
+configuration. `npm run test:db` proves the database harness can connect and
+make one connection wait on another, and runs one permanent structural guard:
+`tests/db/rls.test.ts` fails if any table in `public` has Row Level Security
+switched off (checked to fail when a table without RLS was added). Nothing in
+this table is verified.
 
-That is the correct state before the schema exists — but it means the green CI
-badge currently certifies that the code compiles, lints, and reaches a
-database, nothing more. Say
-that plainly in the report rather than letting "CI passing" do unearned work.
+The RLS guard is not authorization coverage. It proves RLS is *on*, not that
+any policy is *right* — and today there are no policies at all, so every
+table is simply closed. US-05b, US-11b, and every other access rule still
+need their own tests once their policies exist.
+
+The schema skeleton (W2) exists, but no acceptance criterion depends on
+structure alone, so W2 verifies none of them. The green CI badge certifies
+that the code compiles, lints, reaches a database, and has RLS switched on
+everywhere — nothing more. Say that plainly in the report rather than letting
+"CI passing" do unearned work.

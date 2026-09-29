@@ -1,35 +1,54 @@
 # Supabase
 
 Local development is set up — `config.toml`, and `npm run db:start` brings up
-the whole Supabase stack in Docker (see the root README). **There are no
-migrations yet, on purpose:** the schema is written once the team has agreed
-what it looks like (W0 and W2 in `docs/tickets.md`).
+the whole Supabase stack in Docker (see the root README). The schema is
+agreed in [ADR 0008](../docs/adr/0008-sprint-2-schema-decisions.md).
 
 ## What goes here
 
 ```
 supabase/
-  migrations/        Numbered SQL migrations, applied in filename order
-  seed.sql           Reference data loaded by `supabase db reset`
+  migrations/        Timestamped SQL migrations, applied in filename order
+  seed.sql           Starter data loaded by `supabase db reset` (W3)
   config.toml        Created by `supabase init`
 ```
 
-## Before writing the first migration
+## The schema today
 
-Decide these as a team — they are schema-shaping and expensive to change later:
+One migration, `migrations/*_schema_skeleton.sql` (W2), creates every
+Sprint 2 table as **structure only**: `profiles`, `departments`, `courses`,
+`locations`, `sessions`, `session_attendees`, and the `session_status` enum.
+The migration's header says which track owns which table.
 
-- **Tables and relationships.** Sessions, attendees, messages, profiles at
-  minimum. What else?
-- **Where capacity is enforced.** A stored attendee count is easy to read and
-  easy to let drift; a derived count cannot drift but costs a join. Pick one
-  deliberately.
-- **How a join stays correct under concurrent requests.** Two students taking
-  the last seat at the same moment must not both succeed.
-- **Authorization model.** Row Level Security policies in the database, or
-  checks in application code. Doing both halfway is the bad outcome.
-- **Reference data.** Courses settled by ADR 0006 (seeded departments, course
-  numbers learned from use); locations by ADR 0007 (curated campus buildings
-  plus Google Places venues). Both need tables. See `data/README.md`.
+**Row Level Security is enabled on every table, with no policies.** Nothing
+is readable or writable through the Data API until the owning track adds its
+policies. That is intended — a missing policy fails closed. Do not add broad
+policies to "make it work". `tests/db/rls.test.ts` fails if any table in
+`public` is created without RLS.
 
-See `docs/adr/` for the earlier thinking, but treat it as input rather than a
-settled decision — the schema discussion has not happened yet.
+The rules each track adds, in its own migration:
+
+| Track | Adds |
+| --- | --- |
+| A2 | Signup triggers (Vanderbilt-only, create the profile row); profile policies |
+| S1 | Session `CHECK`s; `create_session`; session and roster policies |
+| S2 | Normalisation and create-on-use for departments and courses; their policies |
+| M3 | Read policy on `locations`; rows written only by the server |
+
+Decisions every migration should respect (ADR 0008):
+
+- **Seats left are derived** from `session_attendees`, never stored.
+- **Joining goes through a database function holding a row lock** (later
+  sprint) — never a plain client `INSERT`.
+- **Email is never copied into `profiles`.** It stays in `auth.users`.
+- **Views bypass RLS** unless created `with (security_invoker = true)`.
+
+## Adding a migration
+
+```bash
+npx supabase migration new <name>   # one per PR
+npm run db:reset                    # re-applies every migration locally
+npm run test:db                     # includes the RLS guard
+```
+
+Never edit a migration once it has merged; add a new one.

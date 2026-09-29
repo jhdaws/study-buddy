@@ -71,6 +71,97 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-09-29 · W2 schema skeleton and ADR 0008
+
+**Branch:** `w2-schema-skeleton` (reset onto `origin/main` at `d7efbdb`; the
+earlier stopped attempt had no commits) · **Commits made:** `2938eb4` (the
+work) and the one adding this entry. PR opened this session against `main`;
+**not merged**.
+
+### What changed
+- `supabase/migrations/20260929162814_schema_skeleton.sql` — the six Sprint 2
+  tables and the `session_status` enum, structure only, RLS on, no policies.
+  Its header names the track that owns each table's rules.
+- `tests/db/rls.test.ts` — permanent guard: every table in `public` has RLS.
+- `docs/adr/0008-sprint-2-schema-decisions.md` — Accepted. One-line
+  "superseded in part" notes added under the Status lines of ADRs 0006 and
+  0007 (bodies untouched); ADR index updated.
+- `docs/architecture.md` — banner now "Agreed (ADR 0008)"; §2 redrawn; one
+  sentence in §4 about the campus-zone filter.
+- `data/README.md`, `supabase/README.md` rewritten; `.env.example` server-key
+  comment fixed and a commented `SUPABASE_SECRET_KEY=` added.
+- Stale statements fixed beyond the brief, because this PR made them wrong:
+  root `README.md` (status, map row, tree, the "settle before writing the
+  database" section); `docs/backlog.md` TASK-00, -01, -06 notes; the
+  `googleMapsServerKey()` doc comment in `src/lib/env.ts` (comment only).
+- Bookkeeping: W0's first three boxes and all four W2 boxes ticked; "To
+  confirm at W0" is now "Confirmed at W0"; `test-cases.md`; AI-log row.
+
+### Names W3, W4 and the tracks build on
+- `profiles(id → auth.users, display_name null, created_at)`
+- `departments(code PK, name null, merged_into → departments.code, created_by → profiles null, created_at)`
+- `courses(id, department_code → departments.code, number, title null, merged_into → courses null, created_by → profiles null, created_at)`, unique `(department_code, number)`
+- `locations(id, place_id unique, lat, lng, validated_at)` — `double precision` coordinates, no name
+- `sessions(id, host_id → profiles null, course_id, location_id, location_label, room null, topic, starts_at, ends_at, capacity integer, status session_status default 'open', created_at)`
+- `session_attendees(session_id, user_id → profiles, joined_at)`, PK `(session_id, user_id)`
+- Enum `session_status`: `open`, `cancelled`. All timestamps `timestamptz`.
+
+### Verified versus assumed
+- **Verified locally:** `npx supabase db reset` applies the migration;
+  `npm run lint`, `typecheck`, `npm test`, `npm run test:db` pass;
+  `npm run build` passes with CI's placeholder Supabase values (this
+  worktree has no `.env.local`). The RLS test failed, naming the table, when
+  a table without RLS was added by hand, and passed once it was dropped. CI's
+  path (`supabase db start`, not `db reset`) was checked in a throwaway
+  project on port 55322, since stopped. In a rolled-back transaction: an
+  `authenticated` client saw zero rows and could not insert into
+  `locations`; deleting an auth user removed the profile, nulled
+  `sessions.host_id` and both `created_by` columns, and deleted the roster
+  row; deleting a used course or location was refused. The three §2
+  diagrams were rendered with `mmdc` and looked at.
+- **Not verified:** anything about Google's caching terms or key
+  restrictions (ADR 0008 rules 14–15; M1's job). CI had not run on the PR
+  when this entry was written. Nothing was applied to the hosted project.
+
+### Open questions for the user
+- Choices the brief left to the agent, reviewable in the PR:
+  `departments.code` as primary key (as ADR 0006 sketched) rather than a
+  uuid; `departments.name` nullable; `topic` required and `room` optional;
+  a surrogate `locations.id` with `place_id` unique. Tightening a nullable
+  column later needs a backfill.
+- TASK-00 left 🚧 in `backlog.md`; it can go ✅ once this PR merges.
+
+### Things the next agent should be careful about
+- **`sessions.host_id` is nullable** so account deletion can anonymise.
+  `create_session` (S1) must always set it; code reading sessions must
+  handle a null host ("Deleted user").
+- **US-24 must cancel the user's unended hosted sessions before deleting
+  them**, and must hard-delete the auth user. The foreign keys alone leave an
+  orphaned session `open` — seen in the manual check.
+- **Grants are Supabase's defaults:** `anon` and `authenticated` hold every
+  privilege on the new tables; RLS is the only gate. "No client write" means
+  "no write policy".
+- **Views bypass RLS** unless created `with (security_invoker = true)`. The
+  guard test does not check views. Watch S4's seats-left query.
+- **"Start not in the past" cannot be a CHECK** — it belongs in
+  `create_session`. ADR 0008 says why.
+- **W3's seed** inserts departments by code, then courses with
+  `department_code`; `created_by` stays null for seeded rows. Seeding sessions
+  would need `auth.users` rows — probably leave sessions to W4's fixtures.
+- **Still stale, deliberately not touched (W4 rewrites them):** the stub
+  comments in `LocationPicker.tsx`, `SessionMap.tsx`,
+  `CreateSessionForm.tsx`, `sessions/new/page.tsx`, `sessions/page.tsx`, and
+  `validation.ts` still describe a curated building list, a building
+  dropdown, or campus zones.
+- **`CLAUDE.md` "Current state" still says "There is no database".** Not
+  edited — it is the project's instruction file, so the user should change
+  it.
+- In a worktree-isolated agent session, shell loops and variables in
+  `npx`/`sed` commands were refused by the isolation guard; plain commands
+  and short Python scripts worked.
+
+---
+
 ## 2026-09-29 · Tickets reorganised into four Sprint 2 tracks
 
 **Branch:** `sprint-2-tracks` (from `main` after #5 merged) · **Commits made:**

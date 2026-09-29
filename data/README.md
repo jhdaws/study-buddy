@@ -1,42 +1,48 @@
 # Reference data
 
-Seed data loaded into the database. Lands with the database push.
+Starter data loaded into the database by `supabase/seed.sql`. Empty until W3
+adds it. Decided in [ADR 0008](../docs/adr/0008-sprint-2-schema-decisions.md),
+which amends ADRs 0006 and 0007.
 
-## Courses — decided ([ADR 0006](../docs/adr/0006-course-model.md))
+## Departments and courses — a handful seeded, the rest learned from use
 
-- **`departments.json`** — the closed set of subject codes (`CS`, `MATH`, …)
-  with full names. Roughly 100–150 rows, compiled from the public catalog.
-  This is the only course data we seed. **TASK-02.**
+- **A starter set only:** roughly ten departments the team actually takes,
+  and a few course numbers in each. **W3** adds them here and builds
+  `supabase/seed.sql` from them. There is no full department list to
+  compile — TASK-02 was reduced to this.
 
-- **Course numbers are not seeded.** They are created on first use: a student
-  picks a department and types a number, and that becomes a suggestion for
-  everyone after. See ADR 0006 for normalization and validation rules.
+- **Students add the rest, departments included.** A student picks a
+  department — or adds one — and types a course number; the first person to
+  use a course creates it, and it becomes a suggestion for everyone after.
+  Normalisation (S2) makes `cs`, ` CS ` and `C.S.` one department, and
+  `CS-3251` and `CS 3251` one course.
 
-## Locations — decided ([ADR 0007](../docs/adr/0007-map-provider.md))
+- **Duplicates are an accepted risk.** Nothing stops `COMPSCI` being added
+  alongside `CS`. Usage ranking floats the real one, and `merged_into` on
+  both tables lets duplicates be collapsed later without a migration.
 
-Google Maps for the basemap, Google Places for nearby venues, and our own
-curated campus buildings rendered on top.
+- **Course-number format** (four digits? a letter suffix?) is checked by W3
+  and encoded by S2. Check it against the catalogue, not memory.
 
-- **`buildings.json`** — the core Vanderbilt academic buildings: id, name,
-  campus zone, coordinates. Curated by hand so names match what students
-  actually say ("Featheringill", "Stevenson"). Roughly 25 rows. **TASK-01.**
+## Locations — nothing seeded
 
-- **Nearby venues are not seeded.** They come from Place Autocomplete at
-  session-creation time, restricted to a radius around campus. We store the
-  `place_id` and the coordinates we validated — Google's terms restrict
-  caching most other Place fields.
+There is **no curated building list**. Every location, campus buildings
+included, comes from Google Places at session-creation time, through
+Autocomplete restricted to a radius around campus. TASK-01 (curating
+buildings) and TASK-07 (asking VU for campus GIS data) were dropped.
 
-### Still worth asking
-
-Vanderbilt may publish authoritative campus GIS building data (footprints,
-official names, entrances). If it exists it beats hand-curation and it is
-free — **TASK-07**. Ask in parallel; do not block TASK-01 on the answer.
+When a host picks a place, the server looks it up, checks the radius and
+place type, and stores the `place_id` with the coordinates it validated. The
+place's name is not stored in `locations`: whether Google's terms allow
+caching it is unverified (M1). The host's editable label is stored on the
+session instead.
 
 ### The constraint that does not change
 
-**No free-form address entry.** Selection is limited to curated campus
-buildings and public venues inside the radius, and that radius is re-checked
-on the server — the autocomplete filter is a UX convenience, not a control.
+**No free-form address entry.** Selection is limited to public places inside
+the radius, of place types that exclude residences, and the radius is
+re-checked on the server — the autocomplete filter is a UX convenience, not a
+control.
 
 This platform sends students to meet people they do not know, in person.
 Arbitrary address input means someone can post a session at a private

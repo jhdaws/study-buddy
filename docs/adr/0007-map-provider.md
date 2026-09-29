@@ -1,6 +1,7 @@
 # ADR 0007 — Google Maps and Places, with a curated campus layer
 
 **Status:** Accepted · **Date:** 2026-09-21
+**Superseded in part by [ADR 0008](./0008-sprint-2-schema-decisions.md)** — no curated campus layer (every location comes from Places), and the server key is restricted by API and quota, not IP. See its rules 7 and 13–15.
 **Supersedes:** the Leaflet/OpenStreetMap choice in [ADR 0001](./0001-stack.md)
 and the location half of [ADR 0002](./0002-reference-data.md)
 

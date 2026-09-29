@@ -54,7 +54,7 @@ export function googleMapsBrowserKey(): string {
   );
 }
 
-/** Server-side Places key. Server only; restrict it by IP. */
+/** Server-side Places key. Server only; restrict it by API and a daily quota, not IP (ADR 0008). */
 export function googleMapsServerKey(): string {
   return required(
     "GOOGLE_MAPS_SERVER_API_KEY",
