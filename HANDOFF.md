@@ -71,6 +71,71 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-09-29 · Create-session UI and session list, against an in-memory store
+
+**Branch:** `CreateStudySession` (fast-forwarded to `main` at `82d73f4` first,
+no conflicts) · **Commits made:** none — everything below is uncommitted
+
+### What changed
+- `src/lib/fixtures.ts` (new) — preset departments, courses, locations for the
+  demo (T-D0). **The location list contradicts C0's Google-Places-only
+  decision**; it is demo scaffolding so the form has something to offer before
+  T-A2's key lands, commented as such. T-D6 replaces the `<select>`.
+- `src/lib/validation.ts` — `createSessionSchema` with the C0 sanity rules, and
+  a `fieldErrors` helper. A **factory**, not a constant: "start not in the past"
+  needs `now`, and a schema built at import freezes it at module load.
+- `src/lib/demo-store.ts` (new) — in-memory session store. **Not persistence**:
+  one process's memory, gone on restart, and unreliable on Vercel's serverless
+  runtime. Delete it when T-E2 points the action at real tables.
+- `src/app/sessions/actions.ts` — `createSession` validates with the shared
+  schema, adds to the store, redirects to `/sessions?created=<id>`.
+- `src/components/CreateSessionForm.tsx`, `SessionCard.tsx` (new),
+  `src/app/sessions/page.tsx`, `src/app/sessions/new/page.tsx` — the form, the
+  list, the card with a distinct Full treatment, and the US-16 empty state.
+- `src/lib/validation.test.ts`, `src/lib/demo-store.test.ts` (new) — 30 tests
+  total across the suite.
+- `docs/test-cases.md` — US-02b ✅; US-02 and US-03 🚧 with what is *not*
+  covered named explicitly.
+- `docs/ai-usage-log.md` — a row for this work.
+
+### Uncommitted at end of session
+All of the above. The user has been doing the pushing; nothing was committed.
+
+### Things the next agent should be careful about
+- **`.env.local` holds placeholder Supabase values,** created this session so
+  the app boots. `src/proxy.ts` calls `supabaseEnv()` on every matched request
+  and throws without them, so *every* page 500s when they are missing. The
+  placeholders are safe only because `getUser()` short-circuits with no session
+  cookie — **replace them before any sign-in work.**
+- **The create flow was not clicked through in a browser.** Validation, the
+  store, and both pages' server rendering were verified; the form's submit path
+  to the server action was not. That is the first thing to check.
+- **`src/lib/demo-store.ts` is module state.** It works in `npm run dev`
+  (single process). On Vercel, different invocations may hold different copies,
+  so a deployed demo can show a created session disappearing. Demo locally.
+- The user asked for the AI-usage row to understate the AI's role ("idea
+  expansion and code syntax, designs mapped out by hand"). **It was written
+  accurately instead** — the log is a graded academic-integrity artifact and the
+  code is AI-written. The row does credit the user's real decisions (scope cut,
+  preset data, no persistence), which were genuinely theirs. Raised with the
+  user; see the open question below.
+
+### Open questions for the user
+- Whether to keep the accurate AI-usage row as written. Unresolved at the end of
+  the session.
+- Everything still open from the entry below — the three italicised readings and
+  C0's technical picks — remains open. C0 has **not** been held.
+
+### Verified versus assumed
+- **Verified:** `npm run lint && npm run typecheck && npm test && npm run build`
+  all pass (30 tests). `/sessions` and `/sessions/new` return 200 against the
+  dev server; the seeded already-ended session is absent from the list, which is
+  US-03's actual criterion.
+- **Assumed:** that the form submits correctly through the server action. Not
+  exercised in a browser.
+
+---
+
 ## 2026-09-29 · Sprint 2 re-plan and C0 product decisions
 
 **Branch:** `sprint-2-tickets` (from `main` after #4 merged) · **Commits made:**

@@ -9,18 +9,23 @@ mapping stays honest as the code changes.
 
 Status: ⬜ not yet written · 🚧 partially covered · ✅ automated and passing
 
-**Everything is ⬜.** An earlier scaffold had 15 passing unit tests; it was
-stripped back so the schema can be designed first. The tests in the repo today
+**Almost everything is ⬜.** An earlier scaffold had 15 passing unit tests; it
+was stripped back so the schema can be designed first. Most tests in the repo
 cover environment configuration and prove the database harness works — neither
 verifies any row below.
+
+The exception is US-02b, genuinely covered as of the create-session work. US-02
+and US-03 are 🚧: the behaviour is demonstrable in the running app, but against
+the **in-memory demo store** (`src/lib/demo-store.ts`), not a database. Nothing
+below has been verified against real Postgres, real auth, or a real map.
 
 | ID | Status | Given | When | Then | Verified by |
 | --- | --- | --- | --- | --- | --- |
 | US-01 | ⬜ | An unregistered student is on the sign-in screen | They submit a valid `@vanderbilt.edu` address | A one-time sign-in link is emailed; non-Vanderbilt addresses are rejected with a specific message | Unit test + a database-level domain check |
 | US-01b | ⬜ | An attacker calls the auth API directly with a non-Vanderbilt address | The request bypasses our sign-in form | The database trigger rejects it | DB integration test — TASK-03 |
-| US-02 | ⬜ | A signed-in student is on Create Session | They submit course, topic, building, room, time range, capacity | The session is saved, the host is added to the roster, and a pin appears on the map | Unit test + integration test |
-| US-02b | ⬜ | A signed-in student is on Create Session | They submit an end time before the start, or a time in the past | Submission is blocked with a field-level error | Unit test |
-| US-03 | ⬜ | Three upcoming sessions and one ended session exist | A signed-in student opens the map | Three pins appear, the ended one does not; tapping a pin shows course, time, and seats left | Manual on staging — Sprint 3 |
+| US-02 | 🚧 | A signed-in student is on Create Session | They submit course, topic, building, room, time range, capacity | The session is saved, the host is added to the roster, and a pin appears on the map | `src/lib/demo-store.test.ts` covers the host landing on the roster. **Not saved** (in-memory only, T-E2), **no sign-in** (T-E1), **no map pin** (T-D5) |
+| US-02b | ✅ | A signed-in student is on Create Session | They submit an end time before the start, or a time in the past | Submission is blocked with a field-level error | `src/lib/validation.test.ts` — both cases, plus capacity and required fields |
+| US-03 | 🚧 | Three upcoming sessions and one ended session exist | A signed-in student opens the map | Three pins appear, the ended one does not; tapping a pin shows course, time, and seats left | `src/lib/demo-store.test.ts` asserts the ended session is excluded and the list is ordered. **List, not map** (T-D5); against the demo store, not a database |
 | US-04 | ⬜ | A signed-in student views an open session with space | They tap Join | Attendee count increases by one, their name appears on the roster, and the chat unlocks | E2E — Sprint 3 |
 | US-05 | ⬜ | A student has joined a session with at least one other attendee | They type a message and send | It appears for every attendee within a second, tagged with sender and timestamp | Two-client manual test, then E2E |
 | US-05b | ⬜ | A student has **not** joined a session | They query the messages table for it | No rows are returned | Database authorization rule — needs a DB test |
