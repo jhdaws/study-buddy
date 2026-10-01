@@ -4,11 +4,14 @@ import { z } from "zod";
 import {
   DISPLAY_NAME_MAX_LENGTH,
   MIN_CAPACITY,
+  OTP_CODE_MAX_LENGTH,
+  OTP_CODE_MIN_LENGTH,
   START_GRACE_MINUTES,
   createSessionSchema,
   displayNameSchema,
   invalidFormState,
   signInSchema,
+  verifyCodeSchema,
 } from "./validation";
 
 // A fixed clock for every time rule, so the tests do not depend on when they
@@ -80,6 +83,58 @@ describe("signInSchema (US-01)", () => {
 
 // ---------------------------------------------------------------------------
 
+describe("verifyCodeSchema (US-01)", () => {
+  const email = "jane@vanderbilt.edu";
+
+  it("accepts the code, dropping spaces and hyphens a paste might add", () => {
+    for (const code of ["123456", " 123 456 ", "123-456"]) {
+      expect(verifyCodeSchema.safeParse({ email, code })).toEqual({
+        success: true,
+        data: { email, code: "123456" },
+      });
+    }
+  });
+
+  it(`accepts every length Supabase can be set to (${OTP_CODE_MIN_LENGTH}-${OTP_CODE_MAX_LENGTH} digits)`, () => {
+    expect(OTP_CODE_MIN_LENGTH).toBe(6);
+    expect(OTP_CODE_MAX_LENGTH).toBe(10);
+    for (let length = OTP_CODE_MIN_LENGTH; length <= OTP_CODE_MAX_LENGTH; length++) {
+      expect(verifyCodeSchema.safeParse({ email, code: "7".repeat(length) }).success).toBe(true);
+    }
+  });
+
+  it.each([
+    ["too short", "12345"],
+    ["too long", "12345678901"],
+    ["letters", "12a456"],
+    ["a full-width digit", "12345\uff16"],
+  ])("rejects a code that is %s", (_case, code) => {
+    expect(fieldErrors(verifyCodeSchema.safeParse({ email, code })).code).toEqual([
+      "Enter the code from the email — digits only.",
+    ]);
+  });
+
+  it("asks for the code when it is blank or missing", () => {
+    expect(fieldErrors(verifyCodeSchema.safeParse({ email, code: "  " })).code?.[0]).toBe(
+      "Enter the code from the email.",
+    );
+    expect(fieldErrors(verifyCodeSchema.safeParse({ email })).code?.[0]).toBe(
+      "Enter the code from the email.",
+    );
+  });
+
+  it("re-checks the address with the sign-in rule", () => {
+    expect(fieldErrors(verifyCodeSchema.safeParse({ email: "jane@gmail.com", code: "123456" })).email)
+      .toEqual(["Use your @vanderbilt.edu email address."]);
+    expect(verifyCodeSchema.safeParse({ email: " Jane@Vanderbilt.EDU", code: "123456" })).toEqual({
+      success: true,
+      data: { email: "jane@vanderbilt.edu", code: "123456" },
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+
 describe("displayNameSchema (US-01, ADR 0008 rule 1)", () => {
   it("accepts a name, trimmed", () => {
     expect(displayNameSchema.safeParse({ displayName: "  Priya  " })).toEqual({
@@ -92,6 +147,16 @@ describe("displayNameSchema (US-01, ADR 0008 rule 1)", () => {
     expect(fieldErrors(displayNameSchema.safeParse({ displayName: "   " })).displayName).toEqual([
       "Enter a display name.",
     ]);
+  });
+
+  it("trims tabs and no-break spaces too, as A2's CHECK does", () => {
+    expect(
+      fieldErrors(displayNameSchema.safeParse({ displayName: "\t\u00a0\u3000" })).displayName,
+    ).toEqual(["Enter a display name."]);
+    expect(displayNameSchema.safeParse({ displayName: "\u00a0Sam\n" })).toEqual({
+      success: true,
+      data: { displayName: "Sam" },
+    });
   });
 
   it(`rejects a name longer than ${DISPLAY_NAME_MAX_LENGTH} characters`, () => {

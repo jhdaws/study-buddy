@@ -142,32 +142,52 @@ flowchart LR
 #### A1 · Hosted auth settings
 **S · US-01 · start now**
 - [ ] Supabase Auth Site URL = production URL; redirect URLs cover localhost and Vercel previews
-- [ ] Magic-link email template points at `/auth/confirm` with `token_hash`
-- [ ] Same settings in `supabase/config.toml` for local (local emails appear in Mailpit at http://127.0.0.1:54324)
-- [ ] Free-plan email rate limit checked — fine for four testers, matters for a demo
+- [ ] Magic-link email template points at `/auth/confirm` with `token_hash` — written (`supabase/templates/magic_link.html`, a 6-digit code plus the link); **not yet pasted into the hosted dashboard** — steps in [`supabase/README.md`](../supabase/README.md#hosted-auth-settings-a1)
+- [x] Same settings in `supabase/config.toml` for local (local emails appear in Mailpit at http://127.0.0.1:54324) — never run locally (Docker down)
+- [x] Free-plan email rate limit checked — **2 emails an hour for the whole project, delivered only to Supabase organization members** (Supabase docs, 2026-09-30). The "done when" needs both people in the organization, or custom SMTP
 
 #### A2 · Profile rules
-**M · US-01, US-25 · after W2**
-- [ ] Trigger rejecting non-`@vanderbilt.edu` signups
+**M · US-01, US-25 · after W2 · 🚧 written, not yet run on a real Supabase database**
+
+`supabase/migrations/20260930210000_profile_rules.sql` and
+`tests/db/profiles.test.ts` exist, but Docker was not available when they
+were written: the migration has **not** been applied with `supabase db reset`
+and `npm run test:db` has **not** run. They were run against PGlite (Postgres
+17 in WASM) with a hand-made imitation of Supabase's `auth` schema and roles —
+all pass, and nine deliberate breakages of the migration each fail a test —
+which shows the SQL is valid and the tests can fail, not that it works on
+Supabase. Tick the boxes once `npm run test:db` passes locally or in CI.
+- [ ] Trigger rejecting non-`@vanderbilt.edu` signups — also on an email change
 - [ ] Trigger creating a `profiles` row on signup
 - [ ] `display_name` CHECK matching `displayNameSchema`: 1–50 characters after trimming (`DISPLAY_NAME_MAX_LENGTH` in `src/lib/limits.ts`)
 - [ ] RLS: signed-in users read display names; users update only their own
-- [ ] **Don't copy email into `profiles`.** It already lives in `auth.users`,
-      which clients cannot read — that satisfies US-25 without column grants
+- [x] **Don't copy email into `profiles`.** It already lives in `auth.users`,
+      which clients cannot read — that satisfies US-25 without column grants.
+      (A column grant *is* used, but for a different reason: so a user can
+      update only `display_name`, not `id` or `created_at`.)
 - [ ] Database tests: US-01b (direct non-Vanderbilt signup rejected); a user cannot update someone else's profile
 
 #### A3 · Magic-link sign-in
-**M · US-01, US-21 · start now**
-- [ ] `signIn()` validates with `signInSchema` and sends the link
-- [ ] `/login` page with "check your inbox" state and `role="alert"` errors
-- [ ] `/auth/confirm` exchanges the token and redirects **only to same-origin paths**
-- [ ] `signOut()` (US-21)
+**M · US-01, US-21 · start now · 🚧 written and unit-tested against a mocked Supabase; never run against Supabase Auth**
+
+Scope added by the user: the email carries a **one-time code as well as the
+link**, and `/login` takes the code (`verifyCode()`). Reason: Vanderbilt mail
+goes through Outlook, whose Safe Links scanning can open links before the
+student does; the code also works across devices. **Caveat found while
+building it:** link and code are one token, so a scanner that opens the link
+spends the code as well — see `supabase/README.md`, "Hosted auth settings".
+ADR 0003 still says "magic link" — not edited.
+- [ ] `signIn()` validates with `signInSchema` and sends the link — written; no email has actually been sent
+- [x] `/login` page with "check your inbox" state and `role="alert"` errors — component-tested (`SignInForm.test.tsx`), plus the code step
+- [ ] `/auth/confirm` exchanges the token and redirects **only to same-origin paths** — the redirect rule is unit-tested (`safe-next.test.ts`, `route.test.ts`); the token exchange has not run against Supabase
+- [ ] Code sign-in: `verifyCode()` — written and unit-tested; not run against Supabase
+- [ ] `signOut()` (US-21) — written and unit-tested; not run against Supabase
 
 #### A4 · Display name and route protection
-**M · US-01 · after W2, A3**
-- [ ] First sign-in without a display name goes to a name step before anything else; `saveDisplayName()`
-- [ ] Proxy redirects signed-out users away from `/sessions*`, keeping `?next=`
-- [ ] `requireUser()` implemented — S3 calls it
+**M · US-01 · after W2, A3 · 🚧 written and unit-tested against a mocked Supabase; never run against Supabase**
+- [ ] First sign-in without a display name goes to a name step (`/login/name`) before anything else; `saveDisplayName()` — written and unit-tested; the update has not run against A2's policies. A nameless student who skips the step can still *browse* `/sessions` (the proxy only checks sign-in); every page or action that calls `requireUser()` — `/sessions/new`, `createSession` — sends them back to it, which is what ADR 0008 rule 1 requires
+- [x] Proxy redirects signed-out users away from `/sessions*`, keeping `?next=` — unit-tested (`proxy.test.ts`), including that the redirect keeps refreshed cookies; Supabase mocked
+- [ ] `requireUser()` implemented — S3 calls it — written and unit-tested (`server.test.ts`), Supabase mocked
 
 ---
 

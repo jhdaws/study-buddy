@@ -3,7 +3,7 @@
  *
  * Presentational: the header decides `signedIn` (SiteHeader.tsx) so this can
  * be tested without a session. Sign-out is a plain form posting to the
- * signOut Server Function (src/app/login/actions.ts, a stub until A3 #16),
+ * signOut Server Function (src/app/login/actions.ts, real since A3 #16),
  * so it works before JavaScript loads.
  */
 

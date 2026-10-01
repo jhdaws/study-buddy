@@ -17,10 +17,14 @@ detail than the table below. Read it before you start.
 
 | Seam | File | Signature | Owner | The stub | The real body must |
 | --- | --- | --- | --- | --- | --- |
-| Current user | `src/lib/supabase/server.ts` | `requireUser(): Promise<CurrentUser>` | A4 [#17](https://github.com/jhdaws/study-buddy/issues/17) | Always returns `FIXTURE_USER`. Checks nothing | `getUser()` (never `getSession()`); signed out → redirect to `/login?next=…`; no display name → redirect to the name step; return `{ id, displayName }` |
-| Sign in | `src/app/login/actions.ts` | `signIn(prev: SignInState, formData: FormData): Promise<SignInState>` | A3 [#16](https://github.com/jhdaws/study-buddy/issues/16) | Validates with `signInSchema`; returns `{ sentTo }`. **Sends nothing** | `signInWithOtp` with `emailRedirectTo` → `/auth/confirm` on this origin; auth errors → `formError` via `errors.ts`; same reply whether or not the account exists |
-| Display name | `src/app/login/actions.ts` | `saveDisplayName(prev: DisplayNameState, formData: FormData): Promise<DisplayNameState>` | A4 [#17](https://github.com/jhdaws/study-buddy/issues/17) | Validates with `displayNameSchema`; redirects to `/sessions`. **Saves nothing** | `getCurrentUser()` — not `requireUser()`, which would bounce back to the name step; update the caller's own profile; redirect to the hidden `next` field if it is a same-origin path, else `/sessions` |
-| Sign out | `src/app/login/actions.ts` | `signOut(): Promise<void>` | A3 [#16](https://github.com/jhdaws/study-buddy/issues/16) | Redirects to `/` | `supabase.auth.signOut()`, then redirect to `/` |
+| Current user | `src/lib/supabase/server.ts` | `requireUser(): Promise<CurrentUser>` (now `cache(...)`-wrapped; same call) | A4 [#17](https://github.com/jhdaws/study-buddy/issues/17) | **Replaced by A4.** | Done: `getUser()` (never `getSession()`); signed out → `/login?next=<this path>` (the proxy forwards the path in `REQUEST_PATH_HEADER`); no display name → `/login/name?next=…`; returns `{ id, displayName }`. Also new in the same file: `fetchDisplayName(supabase, userId)`, `pathAfterSignIn(supabase, userId, next)`, `type ServerClient`; `createClient()` is now typed with `Database` |
+| Sign in | `src/app/login/actions.ts` | `signIn(prev: SignInState, formData: FormData): Promise<SignInState>` | A3 [#16](https://github.com/jhdaws/study-buddy/issues/16) | **Replaced by A3.** | Done: `signInSchema` → `signInWithOtp` with `emailRedirectTo` = `<this origin>/auth/confirm?next=<safe next or /sessions>` (always with a query string — the email template appends `&token_hash=…`); errors via `signInErrorMessage()`; `{ sentTo }` whether or not the account existed. The email carries a code **and** a link |
+| Sign in with the code | `src/app/login/actions.ts` | `verifyCode(prev: VerifyCodeState, formData: FormData): Promise<VerifyCodeState>`; `type VerifyCodeState = FormState<VerifyCodeField>` | A3 [#16](https://github.com/jhdaws/study-buddy/issues/16) — **new, not a W4 seam** | — | `verifyCodeSchema` (`email`, `code`: 6–10 digits, spaces and hyphens dropped) → `verifyOtp({ email, token, type: "email" })` → errors via `verifyCodeErrorMessage()` → `redirect()` to the safe `next` (A4: or the name step). Fields: `email` and `next` hidden, `code`. Added at the user's request (Outlook's Safe Links scanning; cross-device sign-in). Link and code are **one token**: whichever is used first works, so a scanner that opens the link spends the code too |
+| Magic-link landing | `src/app/auth/confirm/route.ts` | `GET /auth/confirm?next=…&token_hash=…&type=email` → `303` | A3 [#16](https://github.com/jhdaws/study-buddy/issues/16) | **Replaced by A3** (was an empty TODO) | `verifyOtp({ type, token_hash })`; success → the safe `next` (A4: or the name step); failure or a bad request → `/login?error=link&next=…`. Only `email`, `magiclink`, `signup` types |
+| Safe `next` | `src/lib/safe-next.ts` | `safeNextPath(value: unknown): string \| null`, `safeNext(value): string`, `loginPath(next?)`, `displayNamePath(next?)`, `firstParam()`, `DEFAULT_NEXT_PATH`, `LINK_ERROR` | A3 — not a stub | — | Every redirect to a URL that came from outside goes through `safeNextPath()`: a path starting with one `/`, no backslash, whitespace or control characters, still same-origin when parsed |
+| Display name | `src/app/login/actions.ts` | `saveDisplayName(prev: DisplayNameState, formData: FormData): Promise<DisplayNameState>` | A4 [#17](https://github.com/jhdaws/study-buddy/issues/17) | **Replaced by A4.** | Done: `getCurrentUser()` (signed out → `/login`); `displayNameSchema`; updates the caller's own `profiles` row through their client (A2's RLS and column grant); database errors via `databaseErrorMessage()`; no row updated is an error; `redirect()` to the safe `next`, else `/sessions`. The form is `<DisplayNameForm>` on **`/login/name`** |
+| Route protection | `src/lib/supabase/proxy.ts` | `updateSession(request)`, `isProtectedPath(pathname)` | A4 [#17](https://github.com/jhdaws/study-buddy/issues/17) | — | Signed-out `GET`/`HEAD` of `/sessions` or `/sessions/*` → `307 /login?next=<path+query>`, carrying every refreshed cookie and no-cache header; POSTs (Server Actions) and `/api/*` are never redirected. Sets `REQUEST_PATH_HEADER` on every request |
+| Sign out | `src/app/login/actions.ts` | `signOut(): Promise<void>` | A3 [#16](https://github.com/jhdaws/study-buddy/issues/16) | **Replaced by A3.** | Done: `supabase.auth.signOut({ scope: "local" })` — this device only (US-21: a shared device) — then `redirect("/")` |
 | Create a session | `src/app/sessions/actions.ts` | `createSession(prev: CreateSessionState, formData: FormData): Promise<CreateSessionState>` | S3 [#20](https://github.com/jhdaws/study-buddy/issues/20) | `requireUser()`; validates with `createSessionSchema()`; checks the place with `resolvePlace()`; redirects to `/sessions`. **Saves nothing** — the new session does not appear | `requireUser()` → validate → `resolvePlace()` → S2's create-on-use course → S1's `create_session` → database errors via `errors.ts` → `redirect("/sessions")` outside any `try` |
 | Session list | `src/lib/sessions.ts` | `listSessions(): Promise<SessionListItem[]>` | S4 [#21](https://github.com/jhdaws/study-buddy/issues/21) | The four listable fixture sessions, soonest first (one full, one host-only) | Query through the cookie-bound client so RLS applies; leave out cancelled and ended (`ends_at <= now()`); derive `attendeeCount` from the roster; soonest first; a view, if used, must be `security_invoker` |
 | Departments | `src/lib/sessions.ts` | `listDepartments(): Promise<Department[]>` | S4 [#21](https://github.com/jhdaws/study-buddy/issues/21) | The five fixture departments, ordered by code | Read `departments`, leave out merged ones, order by code |
@@ -31,7 +35,7 @@ detail than the table below. Read it before you start.
 | Location picker | `src/components/LocationPicker.tsx` | `<LocationPicker name? id? defaultValue? onSelect? required? disabled? aria-invalid? aria-describedby? />` | M2 [#23](https://github.com/jhdaws/study-buddy/issues/23) | A `<select>` of the three fixture places | Places Autocomplete (New) with `locationRestriction` (circle of `CAMPUS_RADIUS_METERS` around `CAMPUS_CENTER`), `includedPrimaryTypes` excluding residences, session tokens; submits a place ID, never coordinates; calls `onSelect({ placeId, label })` |
 | Form rules | `src/lib/validation.ts` | `signInSchema`, `displayNameSchema`, `createSessionSchema(now?: Date)` | W4; S2 [#19](https://github.com/jhdaws/study-buddy/issues/19) replaces the two course placeholders | Real, not stubs — unit tested in `validation.test.ts` | S2 swaps the `departmentCode` and `courseNumber` placeholder rules for its normalisers. Every rule here should have a database twin (S1, A2) |
 
-`createSession`, `signIn`, `saveDisplayName` and `signOut` live in
+`createSession`, `signIn`, `verifyCode`, `saveDisplayName` and `signOut` live in
 `"use server"` files, so they are Server Functions: a form can use them
 directly, and each is also a public POST endpoint. `sessions.ts` and
 `places.ts` are `import "server-only"`: importing a *value* from them into a
@@ -74,6 +78,7 @@ From the action files:
 
 ```ts
 export type SignInState = FormState<SignInField> & { sentTo?: string };
+export type VerifyCodeState = FormState<VerifyCodeField>; // "email" | "code"
 export type DisplayNameState = FormState<DisplayNameField>;
 export type CreateSessionState = FormState<CreateSessionField>;
 ```
@@ -238,9 +243,14 @@ Handler**:
 
 ## Not yet a contract
 
-- **`src/lib/errors.ts`** has no signature yet. S3 writes the first mapping
-  for `create_session`'s errors; A3 and A4 add theirs to the same file.
-- **The display-name route** is A4's to choose (`/login/name`, say). Nothing
-  links to it yet.
+- **`src/lib/errors.ts`** — A2/A3 wrote the first mappings:
+  `databaseErrorMessage(error: { code?, message?, details? }): string` maps a
+  PostgREST error by **constraint name** first (`CONSTRAINT_MESSAGES`), then
+  by SQLSTATE (`SQLSTATE_MESSAGES`), else `GENERIC_ERROR_MESSAGE`;
+  `signInErrorMessage(error: { code?, status?, message? }): string` maps a
+  Supabase `AuthError` by its `code`. S3 adds `create_session`'s constraint
+  names and SQLSTATEs to the two tables; it should not need a new function.
+- **The display-name route** is `/login/name?next=…` (A4). `/auth/confirm`,
+  `verifyCode()` and `requireUser()` send nameless students there.
 - **Joining, leaving, cancelling, chat** are later sprints. The note about
   atomic joins is in `src/app/sessions/actions.ts`.
