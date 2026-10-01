@@ -228,8 +228,14 @@ flowchart LR
 #### M3 · Validate and store locations
 **M · US-02 · after W2, M1**
 - [ ] Replace the `resolvePlace()` stub: look the place up with the server key, check the distance and place type, store it, return a location id
-- [ ] Distance check as a pure function, unit tested
+      — **code written, not yet verified:** no Google call has been made (no
+      key exists until M1) and it has never written to a database. Fixture
+      IDs keep working until M2 (see the comment in `places.ts`)
+- [x] Distance check as a pure function, unit tested (`src/lib/geo.ts`; the
+      type and response rules in `src/lib/place-policy.ts`, also unit tested)
 - [ ] Location rows written only by the server, the way W0 decided; RLS lets clients read, never write
+      — **migration and `tests/db/locations.test.ts` written, never run:**
+      Docker was down, so neither has touched a database
 
 #### M4 · Map view (stretch)
 **M · US-03 · only once M1–M3 are done**
