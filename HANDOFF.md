@@ -71,6 +71,150 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-10-01 · Track S (S1–S3): session rules, course normalisation, wired createSession()
+
+**Branch:** `s1-us-02-session-rules`, from `main` at `2a6ee7e` (after #30) ·
+**Commits made:** none — everything below is uncommitted
+
+### What changed
+- `supabase/migrations/20261001031738_s1_session_rules.sql` (new) — S1: CHECKs
+  (`ends_at > starts_at`, `capacity >= 2`); `create_session()`, SECURITY
+  DEFINER, the only way a row reaches `sessions` or `session_attendees` (no
+  INSERT policy on either — the same no-plain-INSERT logic ADR 0008 rule 11
+  gives the later join function); read-only RLS for signed-in users on both
+  tables.
+- `supabase/migrations/20261001031739_s2_course_normalization.sql` (new) —
+  S2: CHECKs pinning the normalised shape in the database, not just at
+  insert; `normalize_department_code()` / `normalize_course_number()`, the
+  SQL twin of the new JS functions; `get_or_create_course()`, SECURITY
+  INVOKER against new read+insert RLS policies on `departments`/`courses`
+  (no update or delete).
+- `src/lib/validation.ts` — `createSessionSchema`'s two placeholder rules
+  replaced with real normalisation (`normalizeDepartmentCode`,
+  `normalizeCourseNumber`, exported) and a course-number format check
+  (`^[0-9]{4}[A-Z]?$`, from data/README.md's catalogue findings).
+- `src/lib/errors.ts` — written for real (was `export {}`):
+  `mapDatabaseError()` maps every message `create_session` /
+  `get_or_create_course` can raise, and `check_violation` (23514) by pulling
+  the constraint name out of Postgres's own message, to copy a student
+  should see.
+- `src/app/sessions/actions.ts` — `createSession()` stub replaced: validates,
+  resolves the place, calls `get_or_create_course` then `create_session` over
+  `supabase.rpc`, maps any error, redirects on success.
+- `src/lib/validation.test.ts`, `errors.test.ts` (new), plus
+  `tests/db/session-rules.test.ts`, `course-normalization.test.ts`,
+  `auth-fixtures.ts` (all new, see below) — 24 new unit tests on top of the
+  129 that already existed.
+- `docs/tickets.md` — S1–S3 checked off, each box honest about what is and
+  is not verified (below). `docs/ai-usage-log.md` — a row for this session.
+
+### Uncommitted at end of session
+All of the above. Nothing has been pushed; no PR opened.
+
+### Verified versus assumed — read this before trusting the migrations
+**Verified:** `npm run lint`, `npm run typecheck`, `npm test` (129 tests, 24
+new), and `npm run build` all pass.
+
+**The migrations and both new `tests/db/` files were also actually run** —
+not against Docker (`docker: command not found` in this environment, so
+`npm run db:start` cannot bring up the real local stack), but against a
+throwaway plain Postgres 16 instance (Homebrew, not Supabase's image) built by
+hand in a scratch directory: `initdb`, a hand-written `auth` schema with a
+minimal `auth.users` table and an `auth.uid()` reading the same
+`request.jwt.claim(s)` settings Supabase's does, `anon`/`authenticated`
+roles, and the same default grants ADR 0008 describes. All three migrations
+(`schema_skeleton`, `s1_session_rules`, `s2_course_normalization`) applied
+cleanly in order on top of that, `supabase/seed.sql` loaded without error
+afterward (confirms the two new CHECK constraints don't reject the real
+seed — still 10 departments, 27 courses), and `npm run test:db` — the real
+script, unmodified, run three separate times against a freshly rebuilt
+database each time — passed all 38 tests (`rls`, `seed`, `harness`,
+`session-rules`, `course-normalization`) every time, including with real
+file-level parallelism.
+
+**This caught two real bugs, both fixed and re-verified:**
+- `get_or_create_course`'s original parameters were named `department_code`
+  and `course_number` — identical to the column names on `courses` — which
+  made `select id from courses where department_code = ...` raise "column
+  reference is ambiguous". Renamed the parameters to `p_department_code` /
+  `p_course_number` in the migration; **`createSession()`'s RPC call in
+  `sessions/actions.ts` was updated to match** (Supabase RPC matches
+  parameters by name).
+- My own `course-normalization.test.ts` had a CHECK-constraint test that
+  committed a real `'CHK'` department row (no `created_by`, inserted
+  directly to set up a foreign key) with no cleanup — invisible when run
+  alone, but a real race against `seed.test.ts` running concurrently in
+  another worker, which asserts `departments` is *exactly* the seeded set
+  and intermittently saw `CHK` too. Fixed by wrapping that test in an
+  explicit `BEGIN`/`ROLLBACK` so the row never commits.
+
+**Still not verified, and these are real gaps, not formalities:**
+- **Not the actual Supabase stack.** No GoTrue, no PostgREST, no Realtime —
+  a hand-built `auth.users`/`auth.uid()` facsimile, not Supabase's own init
+  SQL. If GoTrue's real schema requires columns this didn't set, or if
+  Supabase's real `auth.uid()` differs in some edge case, this would not
+  have caught it. **Run `npm run db:start && npm run test:db` for real
+  before trusting this further** — high confidence, not certainty.
+- `src/lib/database.types.ts` was **not regenerated** — no Supabase CLI
+  `gen types` was run (the throwaway instance isn't a CLI-managed project).
+  CI's `db` job runs `npm run db:types` and diffs it, so this will fail that
+  job as committed. Needs `npm run db:start && npm run db:types` before a PR.
+- **`createSession()`'s new RPC calls still cannot be exercised end to end
+  through the app**, real stack or not: `requireUser()` is still Track W's
+  stub — it returns `FIXTURE_USER` without ever establishing a real Supabase
+  session, so `auth.uid()` is null server-side and both RPCs will raise
+  `not_signed_in`. That needs Track A (A3/A4) landed.
+- `resolvePlace()` is also still a stub (M3, Moses's branch
+  `m3-us-02-resolve-place`, open and unmerged): it returns a fixture
+  location id that is not a real row in a real `locations` table, so even
+  with Track A done, `create_session`'s foreign key on `location_id` would
+  fail until M3 merges.
+
+### Decided in conversation, not yet written down
+- **`create_session` and the roster insert are SECURITY DEFINER with no
+  INSERT policy on `sessions` or `session_attendees` at all** — not even one
+  restricted to the function. This was this session's reading of "no client
+  INSERT on session_attendees" (tickets.md, S1) as applying symmetrically to
+  `sessions`, by analogy with the later join function (ADR 0008 rule 11).
+  Not discussed with the team. If wrong, the fix is adding an INSERT policy
+  and switching the function to SECURITY INVOKER, matching S2's pattern.
+- **`get_or_create_course` does not resolve `merged_into`.** A normalised
+  code or number that happens to match an already-merged row will create a
+  fresh duplicate rather than using the canonical one. Not discussed; matches
+  ADR 0008's already-accepted duplicate risk, but worth a line in an ADR if
+  the team wants it on record.
+
+### Open questions for the user
+- Is the SECURITY DEFINER / no-INSERT-policy design for `sessions` and
+  `session_attendees` what the team actually wants, or should `sessions`
+  get its own INSERT policy (host_id = auth.uid()) like `departments` and
+  `courses` did?
+- None of the "Not verified" items above are questions so much as
+  **blockers for a PR** — they need a session with Docker before this goes
+  up for review.
+
+### Things the next agent should be careful about
+- **Do not trust these migrations applied cleanly** until someone has
+  actually run `npm run db:start && npm run db:reset`. They were written by
+  reading the W2 skeleton and ADR 0008 carefully, not by testing against
+  them.
+- **S4 (`listSessions`, `listDepartments`, `searchCourses` for real) is still
+  open** — `src/lib/sessions.ts` still returns fixtures. Until it is done,
+  a session created through the now-real `createSession()` will not appear
+  in the list even once Track A and M3 are in place: the ticket was
+  completed for *writing*, not *reading*.
+- **This branch sits on a different base than Moses's `m3-us-02-resolve-place`
+  branch** (also off `main` at `2a6ee7e`). Whoever merges second will need to
+  rebase; `resolvePlace()`'s real body and `create_session`'s `location_id`
+  foreign key are the seam to watch.
+- The session before this one abandoned a different branch
+  (`CreateStudySession`) that duplicated this ticket's scope against an
+  in-memory store, after the team's W5 had already landed the real UI on
+  `main`. That branch was left alone, not deleted — someone should clean it
+  up once this work is confirmed to supersede it.
+
+---
+
 ## 2026-09-29 · Form in Nashville time; docs audited after W2–W5
 
 **Branch:** `docs-audit-campus-time` (from `main` after #29) · **Commits made:**

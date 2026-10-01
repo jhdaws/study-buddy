@@ -184,6 +184,35 @@ function blankAsMissing(value: unknown): unknown {
   return typeof value === "string" && value.trim() === "" ? undefined : value;
 }
 
+// ---------------------------------------------------------------------------
+// Department and course normalisation (S2, #19; US-02). The SQL twin lives in
+// supabase/migrations/20261001031739_s2_course_normalization.sql --
+// normalize_department_code and normalize_course_number must stay in
+// lockstep with these, or a course the form thinks is new collides with one
+// the database already has.
+//
+// Format verified against the 2026-27 undergraduate catalogue
+// (data/README.md "For S2"): course numbers are four digits, optionally
+// followed by one uppercase letter (`3251`, `2100W`, `1601L`); the suffix is
+// part of the number, so it is never stripped. Department codes are
+// uppercase letters and digits -- the six hyphenated exceptions
+// (`PSY-PC` and siblings) collapse to their letters, a named, accepted risk
+// (ADR 0008), and none is seeded.
+// ---------------------------------------------------------------------------
+
+/** `cs`, ` CS `, `C.S.` -> `CS`. Strips everything but letters and digits. */
+export function normalizeDepartmentCode(raw: string): string {
+  return raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+/** `cs-3251`, ` 3251 `, `3251w` -> `3251`, `3251`, `3251W`. */
+export function normalizeCourseNumber(raw: string): string {
+  return raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+/** Four digits, optionally followed by one uppercase letter -- data/README.md. */
+const COURSE_NUMBER_PATTERN = /^[0-9]{4}[A-Z]?$/;
+
 /**
  * The create-session form. A factory so "now" is injectable: the start-time
  * rule depends on the clock, and tests pass a fixed one. Call it per request
@@ -193,26 +222,30 @@ function blankAsMissing(value: unknown): unknown {
  * Output: strings trimmed; `room` is `null` when blank; `startsAt`/`endsAt`
  * are `Date`s; `capacity` is an integer.
  *
- * Not done here: department and course normalisation (`cs`, ` CS `, `C.S.` ->
- * `CS`; `3251w` -> `3251W`). That is S2's (#19), informed by W3's findings in
- * data/README.md ("For S2"). S2 replaces the two placeholder rules below with
- * its normalisers; until then they only require something non-blank.
+ * Department and course numbers are normalised here (S2, #19) the same way
+ * the database does (see the SQL twin, named above).
  */
 export function createSessionSchema(now: Date = new Date()) {
   const earliestStart = new Date(now.getTime() - START_GRACE_MINUTES * 60_000);
 
   return z
     .object({
-      // Placeholder -- S2 (#19) replaces.
       departmentCode: z
         .string({ error: "Choose or add a department." })
         .trim()
-        .min(1, { error: "Choose or add a department." }),
-      // Placeholder -- S2 (#19) replaces.
+        .min(1, { error: "Choose or add a department." })
+        .transform(normalizeDepartmentCode)
+        .refine((value) => value.length > 0, {
+          error: "Choose or add a department.",
+        }),
       courseNumber: z
         .string({ error: "Enter a course number." })
         .trim()
-        .min(1, { error: "Enter a course number." }),
+        .min(1, { error: "Enter a course number." })
+        .transform(normalizeCourseNumber)
+        .refine((value) => COURSE_NUMBER_PATTERN.test(value), {
+          error: "Enter a 4-digit course number, like 3251 or 2100W.",
+        }),
       topic: z
         .string({ error: "Say what you'll be studying." })
         .trim()

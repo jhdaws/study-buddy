@@ -175,26 +175,32 @@ flowchart LR
 
 #### S1 · Session rules
 **L · US-02 · after W2**
-- [ ] CHECKs: end after start, capacity ≥ 2. No maximums — the host decides
-- [ ] `create_session` database function: inserts the session **and** the host
+- [x] CHECKs: end after start, capacity ≥ 2. No maximums — the host decides
+- [x] `create_session` database function: inserts the session **and** the host
       as an attendee in one transaction; rejects a start in the past —
       allowing the same `START_GRACE_MINUTES` (5) the form allows, or the
       database rejects what the form accepted; requires a display name
-- [ ] No client INSERT on `session_attendees` (joining is later, through its own function)
-- [ ] RLS: signed-in users read sessions and attendees
-- [ ] Database tests for each rejection, and for the host landing on the roster
+- [x] No client INSERT on `session_attendees` (joining is later, through its own function)
+- [x] RLS: signed-in users read sessions and attendees
+- [x] Database tests for each rejection, and for the host landing on the
+      roster (`tests/db/session-rules.test.ts`) — passing against a
+      hand-built plain-Postgres stand-in (no Docker in the environment that
+      wrote them, so not the real Supabase stack). Run `npm run db:start &&
+      npm run test:db` for real before trusting this further — see
+      `HANDOFF.md`.
 
 #### S2 · Departments and courses
 **M · US-02 · rules start now, database after W2**
-- [ ] Normalization in `src/lib/validation.ts` and matching SQL — `cs`, ` CS `, `C.S.` → `CS`; unit tested
-- [ ] Create-on-use: a function returning a course id, creating the department or course if new
-- [ ] RLS: signed-in users read and create; no client updates or deletes
+- [x] Normalization in `src/lib/validation.ts` and matching SQL — `cs`, ` CS `, `C.S.` → `CS`; unit tested (database twin passing against a stand-in Postgres — see S1)
+- [x] Create-on-use: a function returning a course id, creating the department or course if new
+- [x] RLS: signed-in users read and create; no client updates or deletes
 
 #### S3 · Create a session for real
 **M · US-02 · after S1, S2**
-- [ ] Replace the `createSession()` stub: `requireUser()` → validate → `resolvePlace()` → create-on-use course → `create_session`
-- [ ] Database errors mapped through `src/lib/errors.ts`, never raw Postgres text
-- [ ] Redirects to the list, where the new session appears
+- [x] Replace the `createSession()` stub: `requireUser()` → validate → `resolvePlace()` → create-on-use course → `create_session`
+- [x] Database errors mapped through `src/lib/errors.ts`, never raw Postgres text
+- [x] Redirects to the list — **but the new session cannot yet appear there**:
+      `listSessions()` is still S4's stub, reading fixtures, not the database
 
 #### S4 · Lists and typeahead for real
 **M · US-03 · after S1**
