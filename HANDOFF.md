@@ -88,6 +88,19 @@ template, README, tickets, usage log, CLAUDE.md, both HANDOFF entries)
   (227 passed), build.
 - Everything listed as not verified in the entry below still is.
 
+### Open questions for the user
+- **Hosted Supabase auth settings still not applied.** Pushing them with
+  `supabase config push` was blocked by the agent's permission checks. A
+  scratch copy of `config.toml` with production URLs exists in the session
+  scratchpad. It must also set `[auth.email] enable_confirmations = true`
+  before any push: the repo's local value is `false`, and `config push` sends
+  every declared property. Answer **n** to non-auth sections. The dashboard
+  route in `supabase/README.md` avoids all of that.
+- **Vercel Deployment Protection:** Moses's Vercel login only sees team
+  `moses-bandas-projects`; the study-buddy project is on jhdaws's account.
+  jhdaws has to change it, or add Moses to that team.
+- Email delivery (org members vs custom SMTP) is still undecided.
+
 ---
 
 ## 2026-10-01 · Track A sign-in (A1 repo half, A2, A3, A4); M3 in PR #31
