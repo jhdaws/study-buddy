@@ -142,9 +142,9 @@ flowchart LR
 #### A1 · Hosted auth settings
 **S · US-01 · start now**
 - [ ] Supabase Auth Site URL = production URL; redirect URLs cover localhost and Vercel previews
-- [ ] Magic-link email template points at `/auth/confirm` with `token_hash`
-- [ ] Same settings in `supabase/config.toml` for local (local emails appear in Mailpit at http://127.0.0.1:54324)
-- [ ] Free-plan email rate limit checked — fine for four testers, matters for a demo
+- [ ] Magic-link email template points at `/auth/confirm` with `token_hash` — written (`supabase/templates/magic_link.html`, a 6-digit code plus the link); **not yet pasted into the hosted dashboard** — steps in [`supabase/README.md`](../supabase/README.md#hosted-auth-settings-a1)
+- [x] Same settings in `supabase/config.toml` for local (local emails appear in Mailpit at http://127.0.0.1:54324) — never run locally (Docker down)
+- [x] Free-plan email rate limit checked — **2 emails an hour for the whole project, delivered only to Supabase organization members** (Supabase docs, 2026-09-30). The "done when" needs both people in the organization, or custom SMTP
 
 #### A2 · Profile rules
 **M · US-01, US-25 · after W2 · 🚧 written, not yet run on a real Supabase database**

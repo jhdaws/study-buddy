@@ -11,11 +11,13 @@ failed. The template and the rules for writing an entry are in that file.
 ## Current state
 
 Sprint 2 is in progress (`docs/tickets.md`). The database has a schema
-skeleton (RLS on, **no policies yet**), a seed of starter departments and
-courses, and generated TypeScript types; the hosted project has the same.
-The screens — header, session list, create-session form — are built, but on
-**stubs returning fixture data**: nothing is saved or read, and nobody can
-sign in yet. Every stub, its owner, and what its real body must do is in
+skeleton (RLS on; policies so far only on `profiles`, from A2), a seed of
+starter departments and courses, and generated TypeScript types; the hosted
+project has the same. The screens — header, session list, create-session
+form — are built, but on **stubs returning fixture data**: nothing is saved
+or read. Sign-in (Track A: an emailed code or link, Vanderbilt only, a
+display-name step, route protection) is written, but waits on the hosted
+auth settings in `supabase/README.md`. Every stub, its owner, and what its real body must do is in
 `docs/contracts.md`. Routes and components for later sprints are still
 comment-only stubs.
 
