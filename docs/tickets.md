@@ -168,11 +168,20 @@ Supabase. Tick the boxes once `npm run test:db` passes locally or in CI.
 - [ ] Database tests: US-01b (direct non-Vanderbilt signup rejected); a user cannot update someone else's profile
 
 #### A3 · Magic-link sign-in
-**M · US-01, US-21 · start now**
-- [ ] `signIn()` validates with `signInSchema` and sends the link
-- [ ] `/login` page with "check your inbox" state and `role="alert"` errors
-- [ ] `/auth/confirm` exchanges the token and redirects **only to same-origin paths**
-- [ ] `signOut()` (US-21)
+**M · US-01, US-21 · start now · 🚧 written and unit-tested against a mocked Supabase; never run against Supabase Auth**
+
+Scope added by the user: the email carries a **one-time code as well as the
+link**, and `/login` takes the code (`verifyCode()`). Reason: Vanderbilt mail
+goes through Outlook, whose Safe Links scanning can open links before the
+student does; the code also works across devices. **Caveat found while
+building it:** link and code are one token, so a scanner that opens the link
+spends the code as well — see `supabase/README.md`, "Hosted auth settings".
+ADR 0003 still says "magic link" — not edited.
+- [ ] `signIn()` validates with `signInSchema` and sends the link — written; no email has actually been sent
+- [x] `/login` page with "check your inbox" state and `role="alert"` errors — component-tested (`SignInForm.test.tsx`), plus the code step
+- [ ] `/auth/confirm` exchanges the token and redirects **only to same-origin paths** — the redirect rule is unit-tested (`safe-next.test.ts`, `route.test.ts`); the token exchange has not run against Supabase
+- [ ] Code sign-in: `verifyCode()` — written and unit-tested; not run against Supabase
+- [ ] `signOut()` (US-21) — written and unit-tested; not run against Supabase
 
 #### A4 · Display name and route protection
 **M · US-01 · after W2, A3**

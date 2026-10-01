@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CODE_RATE_LIMITED_MESSAGE,
+  CODE_REJECTED_MESSAGE,
   databaseErrorMessage,
   GENERIC_ERROR_MESSAGE,
   SIGN_IN_RATE_LIMITED_MESSAGE,
   signInErrorMessage,
+  verifyCodeErrorMessage,
 } from "./errors";
 
 // The error shapes below are copied from what PostgREST and Supabase Auth
@@ -112,5 +115,36 @@ describe("signInErrorMessage", () => {
     ]) {
       expect(signInErrorMessage(error)).toBe(GENERIC_ERROR_MESSAGE);
     }
+  });
+});
+
+describe("verifyCodeErrorMessage", () => {
+  it("gives one message for a wrong code and an expired one", () => {
+    // Supabase Auth answers both with this.
+    expect(
+      verifyCodeErrorMessage({
+        code: "otp_expired",
+        status: 403,
+        message: "Token has expired or is invalid",
+      }),
+    ).toBe(CODE_REJECTED_MESSAGE);
+    expect(verifyCodeErrorMessage({ status: 403, message: "Forbidden" })).toBe(
+      CODE_REJECTED_MESSAGE,
+    );
+    expect(CODE_REJECTED_MESSAGE).not.toMatch(/Token|invalid/);
+  });
+
+  it("maps the verification rate limit", () => {
+    expect(verifyCodeErrorMessage({ code: "over_request_rate_limit", status: 429 })).toBe(
+      CODE_RATE_LIMITED_MESSAGE,
+    );
+    expect(verifyCodeErrorMessage({ status: 429 })).toBe(CODE_RATE_LIMITED_MESSAGE);
+  });
+
+  it("falls back to a generic message, never the raw text", () => {
+    expect(
+      verifyCodeErrorMessage({ code: "unexpected_failure", status: 500, message: "db down" }),
+    ).toBe(GENERIC_ERROR_MESSAGE);
+    expect(verifyCodeErrorMessage(null)).toBe(GENERIC_ERROR_MESSAGE);
   });
 });

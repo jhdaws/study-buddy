@@ -11,6 +11,17 @@
 // Moved out of validation.ts by W5 (#12); the names and values are W4's and
 // part of the contract in docs/contracts.md. Keep this file dependency-free.
 
+/**
+ * The one-time sign-in code in the email (A3): digits only, 6 to 10 of them.
+ * Supabase's "Email OTP Length" setting can be anything in that range
+ * (`auth.email.otp_length` in config.toml, 6 locally; the hosted project's
+ * is a dashboard setting, and some hosted projects default to 8). Accepting
+ * the whole range means the form never refuses a real code because someone
+ * changed that setting.
+ */
+export const OTP_CODE_MIN_LENGTH = 6;
+export const OTP_CODE_MAX_LENGTH = 10;
+
 /** A2/A4: mirror as a CHECK on profiles.display_name (1..50 after trimming). */
 export const DISPLAY_NAME_MAX_LENGTH = 50;
 

@@ -28,6 +28,8 @@ import {
   LOCATION_LABEL_MAX_LENGTH,
   MAX_CAPACITY,
   MIN_CAPACITY,
+  OTP_CODE_MAX_LENGTH,
+  OTP_CODE_MIN_LENGTH,
   ROOM_MAX_LENGTH,
   START_GRACE_MINUTES,
   TOPIC_MAX_LENGTH,
@@ -40,6 +42,8 @@ export {
   LOCATION_LABEL_MAX_LENGTH,
   MAX_CAPACITY,
   MIN_CAPACITY,
+  OTP_CODE_MAX_LENGTH,
+  OTP_CODE_MIN_LENGTH,
   ROOM_MAX_LENGTH,
   START_GRACE_MINUTES,
   TOPIC_MAX_LENGTH,
@@ -132,6 +136,38 @@ export const signInSchema = z.object({
 
 export type SignInValues = z.output<typeof signInSchema>;
 export type SignInField = keyof SignInValues;
+
+// ---------------------------------------------------------------------------
+// The one-time code from the sign-in email (US-01) -- A3 calls this in
+// verifyCode(). The same email carries a link too; why both is at
+// verifyCode() in src/app/login/actions.ts.
+// ---------------------------------------------------------------------------
+
+const CODE_MESSAGE = "Enter the code from the email — digits only.";
+
+/**
+ * The address the code was sent to (a hidden field, re-checked with
+ * signInSchema's rule) and the code. Spaces and hyphens are dropped, so a
+ * code pasted as `123 456` or `123-456` still works; what is left must be
+ * OTP_CODE_MIN_LENGTH to OTP_CODE_MAX_LENGTH digits.
+ */
+export const verifyCodeSchema = z.object({
+  email: signInSchema.shape.email,
+  code: z
+    .string({ error: "Enter the code from the email." })
+    .transform((code) => code.replace(/[\s-]/g, ""))
+    .pipe(
+      z
+        .string()
+        .min(1, { error: "Enter the code from the email." })
+        .regex(/^\d+$/, { error: CODE_MESSAGE })
+        .min(OTP_CODE_MIN_LENGTH, { error: CODE_MESSAGE })
+        .max(OTP_CODE_MAX_LENGTH, { error: CODE_MESSAGE }),
+    ),
+});
+
+export type VerifyCodeValues = z.output<typeof verifyCodeSchema>;
+export type VerifyCodeField = keyof VerifyCodeValues;
 
 // ---------------------------------------------------------------------------
 // Display name (US-01, ADR 0008 rule 1) -- A4 calls this in saveDisplayName().

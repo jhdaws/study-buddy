@@ -7,8 +7,9 @@
 // against a live database are cheap to unit test (errors.test.ts).
 //
 // Mappings so far:
-//   - A2/A3 (#15, #16): sign-in errors from Supabase Auth, and the profile
-//     rules from supabase/migrations/*_profile_rules.sql.
+//   - A2/A3 (#15, #16): sign-in errors from Supabase Auth (sending a link or
+//     code, and checking a code), and the profile rules from
+//     supabase/migrations/*_profile_rules.sql.
 // Still to come:
 //   - S3 (#20): create_session's errors (S1, #18). Add its constraint names
 //     to CONSTRAINT_MESSAGES and any custom SQLSTATEs to SQLSTATE_MESSAGES.
@@ -121,5 +122,38 @@ export function signInErrorMessage(error: AuthErrorLike | null | undefined): str
     return "We couldn't create an account for that address. Use your @vanderbilt.edu email.";
   }
   if (error.status === 429) return SIGN_IN_RATE_LIMITED_MESSAGE;
+  return GENERIC_ERROR_MESSAGE;
+}
+
+// ---------------------------------------------------------------------------
+// verifyOtp() with the code from the email -- A3's verifyCode().
+// ---------------------------------------------------------------------------
+
+export const CODE_REJECTED_MESSAGE =
+  "That code didn't work. Check it against the latest email — codes expire after an hour — or ask for a new one.";
+
+export const CODE_RATE_LIMITED_MESSAGE =
+  "Too many tries. Wait a few minutes, then try again.";
+
+const VERIFY_CODE_MESSAGES: Record<string, string> = {
+  // Supabase Auth gives the same 403 for a wrong code and an expired one
+  // ("Token has expired or is invalid"), so the message covers both.
+  otp_expired: CODE_REJECTED_MESSAGE,
+  validation_failed: CODE_REJECTED_MESSAGE,
+  // Verifications are rate limited per IP (30 per 5 minutes by default),
+  // which is also what makes guessing a code impractical.
+  over_request_rate_limit: CODE_RATE_LIMITED_MESSAGE,
+  otp_disabled: "Sign-in is switched off right now. Try again later.",
+};
+
+/** A message for an error from verifyOtp({ email, token }), safe to show. */
+export function verifyCodeErrorMessage(error: AuthErrorLike | null | undefined): string {
+  if (!error) return GENERIC_ERROR_MESSAGE;
+  if (error.code && error.code in VERIFY_CODE_MESSAGES) {
+    return VERIFY_CODE_MESSAGES[error.code];
+  }
+  if (error.status === 429) return CODE_RATE_LIMITED_MESSAGE;
+  // A 403 without a code we know is still a refused token.
+  if (error.status === 403) return CODE_REJECTED_MESSAGE;
   return GENERIC_ERROR_MESSAGE;
 }
