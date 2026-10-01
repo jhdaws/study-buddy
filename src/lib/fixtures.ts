@@ -39,7 +39,11 @@ import type { CurrentUser } from "@/lib/supabase/server";
 // People
 // ---------------------------------------------------------------------------
 
-/** Who requireUser() returns until A4 lands. Hosts the host-only session. */
+/**
+ * The fixture sessions' "you": hosts the host-only session. requireUser()
+ * returned this until A4 (#17) made it real; now only the fixture data and
+ * tests use it.
+ */
 export const FIXTURE_USER: CurrentUser = {
   id: "00000000-0000-4000-8000-000000000001",
   displayName: "Fixture Student",

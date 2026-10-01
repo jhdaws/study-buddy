@@ -184,10 +184,10 @@ ADR 0003 still says "magic link" — not edited.
 - [ ] `signOut()` (US-21) — written and unit-tested; not run against Supabase
 
 #### A4 · Display name and route protection
-**M · US-01 · after W2, A3**
-- [ ] First sign-in without a display name goes to a name step before anything else; `saveDisplayName()`
-- [ ] Proxy redirects signed-out users away from `/sessions*`, keeping `?next=`
-- [ ] `requireUser()` implemented — S3 calls it
+**M · US-01 · after W2, A3 · 🚧 written and unit-tested against a mocked Supabase; never run against Supabase**
+- [ ] First sign-in without a display name goes to a name step (`/login/name`) before anything else; `saveDisplayName()` — written and unit-tested; the update has not run against A2's policies. A nameless student who skips the step can still *browse* `/sessions` (the proxy only checks sign-in); every page or action that calls `requireUser()` — `/sessions/new`, `createSession` — sends them back to it, which is what ADR 0008 rule 1 requires
+- [x] Proxy redirects signed-out users away from `/sessions*`, keeping `?next=` — unit-tested (`proxy.test.ts`), including that the redirect keeps refreshed cookies; Supabase mocked
+- [ ] `requireUser()` implemented — S3 calls it — written and unit-tested (`server.test.ts`), Supabase mocked
 
 ---
 

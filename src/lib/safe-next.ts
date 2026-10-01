@@ -17,6 +17,14 @@
  */
 export const LINK_ERROR = "link";
 
+/**
+ * The request header the proxy sets to the path being requested (pathname
+ * plus query), so requireUser() can send a signed-out student back to it.
+ * The proxy always overwrites it, so a client cannot choose it; and it is
+ * still only ever used through safeNextPath().
+ */
+export const REQUEST_PATH_HEADER = "x-study-buddy-path";
+
 /** Where a signed-in student lands when no (safe) `next` was given. */
 export const DEFAULT_NEXT_PATH = "/sessions";
 

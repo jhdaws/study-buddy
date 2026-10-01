@@ -3,18 +3,24 @@
 import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createClient } from "@/lib/supabase/server";
+import { safeNext } from "@/lib/safe-next";
+import { createClient, pathAfterSignIn } from "@/lib/supabase/server";
 
 import { GET } from "./route";
 
-// The route's only dependency is the cookie-bound Supabase client; it is
-// replaced with one whose verifyOtp() the test controls.
-vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
+// The route's dependencies are the cookie-bound Supabase client, replaced
+// with one whose verifyOtp() the test controls, and pathAfterSignIn() (the
+// name-step check, tested in server.test.ts), which by default just applies
+// safeNext() as it does for a student who has a name.
+vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(), pathAfterSignIn: vi.fn() }));
 
 const verifyOtp = vi.fn();
 
 function mockClient() {
   vi.mocked(createClient).mockResolvedValue({ auth: { verifyOtp } } as never);
+  if (!vi.mocked(pathAfterSignIn).getMockImplementation()) {
+    vi.mocked(pathAfterSignIn).mockImplementation(async (_client, _id, next) => safeNext(next));
+  }
 }
 
 const ORIGIN = "https://study-buddy-jdaws.vercel.app";
@@ -42,6 +48,17 @@ describe("GET /auth/confirm", () => {
     expect(location?.origin).toBe(ORIGIN);
     expect(location?.pathname).toBe("/sessions/new");
     expect(response.headers.get("cache-control")).toContain("no-store");
+  });
+
+  it("sends a first-time student to the name step (A4)", async () => {
+    verifyOtp.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    vi.mocked(pathAfterSignIn).mockResolvedValueOnce("/login/name?next=%2Fsessions%2Fnew");
+    const { location } = await visit("next=%2Fsessions%2Fnew&token_hash=abc123&type=email");
+
+    expect(vi.mocked(pathAfterSignIn)).toHaveBeenCalledWith(expect.anything(), "u1", "/sessions/new");
+    expect(location?.origin).toBe(ORIGIN);
+    expect(location?.pathname).toBe("/login/name");
+    expect(location?.searchParams.get("next")).toBe("/sessions/new");
   });
 
   it("defaults to /sessions without a next", async () => {

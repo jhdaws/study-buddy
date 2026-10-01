@@ -13,10 +13,14 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
-import { signInErrorMessage, verifyCodeErrorMessage } from "@/lib/errors";
+import {
+  databaseErrorMessage,
+  signInErrorMessage,
+  verifyCodeErrorMessage,
+} from "@/lib/errors";
 import { requestOrigin } from "@/lib/request-origin";
-import { DEFAULT_NEXT_PATH, safeNext, safeNextPath } from "@/lib/safe-next";
-import { createClient } from "@/lib/supabase/server";
+import { DEFAULT_NEXT_PATH, loginPath, safeNext, safeNextPath } from "@/lib/safe-next";
+import { createClient, getCurrentUser, pathAfterSignIn } from "@/lib/supabase/server";
 import {
   displayNameSchema,
   formValues,
@@ -131,37 +135,62 @@ export async function verifyCode(
     return { formError: verifyCodeErrorMessage(error), values: formValues(formData) };
   }
 
+  // First sign-in without a display name: the name step first (A4).
+  const destination = await pathAfterSignIn(supabase, data.user.id, formData.get("next"));
   // Outside any try/catch: redirect() works by throwing.
-  redirect(safeNext(formData.get("next")));
+  redirect(destination);
 }
 
-// ===========================================================================
-// STUB (W4, #11) -- replaced by A4 (#17). Keep the signature.
+// ---------------------------------------------------------------------------
+// saveDisplayName -- A4 (#17). Replaced W4's stub, which saved nothing.
 //
-// Validates for real, then redirects to /sessions. NOTHING IS SAVED.
+// The name step at /login/name (ADR 0008 rule 1: required at first sign-in).
+// Form fields: `displayName`, and an optional hidden `next`.
 //
-// The real body must:
 //   1. getCurrentUser() -- NOT requireUser(), which would bounce a user
-//      without a name back to this very step. Signed out: redirect to /login.
-//   2. displayNameSchema.safeParse(Object.fromEntries(formData)); on failure
-//      return invalidFormState(...).
-//   3. Update the caller's own profiles.display_name (A2's RLS policy allows
-//      only their own row). Errors through src/lib/errors.ts.
-//   4. redirect() to the form's hidden `next` field if it is a same-origin
-//      path (starts with "/" but not "//"), else to /sessions. Outside any
-//      try/catch.
-// ===========================================================================
+//      without a name back to this very step. Signed out: to /login.
+//   2. displayNameSchema; on failure, field errors.
+//   3. Update the caller's own profiles row, through their own client: A2's
+//      RLS policy and column grant allow exactly that, and nothing else.
+//      A2's CHECK repeats the schema's rule; its error is mapped by
+//      databaseErrorMessage(). No row updated (no profile, or A2's policy
+//      missing) is an error too, not a silent success.
+//   4. redirect() to the safe `next`, else /sessions -- outside any try.
+// ---------------------------------------------------------------------------
+
+/** Shown when the update matched no row: there is no profile to name. */
+const NO_PROFILE_MESSAGE =
+  "We couldn't find your profile to save that name. Sign out, sign in again, and retry.";
 
 /** Save the display name at first sign-in (US-01, ADR 0008 rule 1). */
 export async function saveDisplayName(
   _prev: DisplayNameState,
   formData: FormData,
 ): Promise<DisplayNameState> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect(loginPath(formData.get("next")));
+  }
+
   const parsed = displayNameSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return invalidFormState(parsed.error, formData);
   }
-  redirect("/sessions");
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ display_name: parsed.data.displayName })
+    .eq("id", user.id)
+    .select("id");
+  if (error) {
+    return { formError: databaseErrorMessage(error), values: formValues(formData) };
+  }
+  if (!data || data.length === 0) {
+    return { formError: NO_PROFILE_MESSAGE, values: formValues(formData) };
+  }
+
+  redirect(safeNext(formData.get("next")));
 }
 
 // ---------------------------------------------------------------------------

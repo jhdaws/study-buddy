@@ -2,7 +2,9 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { signIn, signOut, verifyCode } from "./actions";
+import { safeNext } from "@/lib/safe-next";
+
+import { saveDisplayName, signIn, signOut, verifyCode } from "./actions";
 
 // Everything the actions reach outside themselves is replaced: the request
 // headers, redirect(), and the cookie-bound Supabase client.
@@ -25,7 +27,30 @@ const auth = vi.hoisted(() => ({
   verifyOtp: vi.fn(),
   signOut: vi.fn(),
 }));
-vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ auth }) }));
+const server = vi.hoisted(() => ({
+  // profiles.update(...).eq(...).select(...) -- the chain saveDisplayName uses.
+  update: vi.fn(),
+  eq: vi.fn(),
+  select: vi.fn(),
+  user: null as { id: string } | null,
+  pathAfterSignIn: vi.fn(),
+}));
+vi.mock("@/lib/supabase/server", () => {
+  const client = {
+    auth,
+    from: (table: string) => {
+      if (table !== "profiles") throw new Error(`unexpected table ${table}`);
+      return { update: server.update };
+    },
+  };
+  server.update.mockImplementation(() => ({ eq: server.eq }));
+  server.eq.mockImplementation(() => ({ select: server.select }));
+  return {
+    createClient: async () => client,
+    getCurrentUser: async () => server.user,
+    pathAfterSignIn: (...args: unknown[]) => server.pathAfterSignIn(...args),
+  };
+});
 
 function form(entries: Record<string, string>): FormData {
   const data = new FormData();
@@ -44,6 +69,11 @@ async function redirectOf(promise: Promise<unknown>): Promise<string> {
 
 beforeEach(() => {
   requestHeaders.current = new Headers({ origin: "https://study-buddy-jdaws.vercel.app" });
+  server.user = null;
+  // The real one also checks for a display name; see server.test.ts.
+  server.pathAfterSignIn.mockImplementation(async (_client, _id, next) => safeNext(next));
+  server.update.mockImplementation(() => ({ eq: server.eq }));
+  server.eq.mockImplementation(() => ({ select: server.select }));
 });
 
 afterEach(() => {
@@ -119,6 +149,16 @@ describe("verifyCode", () => {
     expect(path).toBe("/sessions/new");
   });
 
+  it("sends a first-time student to the name step (A4)", async () => {
+    auth.verifyOtp.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    server.pathAfterSignIn.mockResolvedValue("/login/name?next=%2Fsessions%2Fnew");
+    const path = await redirectOf(
+      verifyCode({}, form({ email: "jane@vanderbilt.edu", code: "123456", next: "/sessions/new" })),
+    );
+    expect(server.pathAfterSignIn).toHaveBeenCalledWith(expect.anything(), "u1", "/sessions/new");
+    expect(path).toBe("/login/name?next=%2Fsessions%2Fnew");
+  });
+
   it("never redirects off-site", async () => {
     auth.verifyOtp.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
     const path = await redirectOf(
@@ -142,6 +182,65 @@ describe("verifyCode", () => {
     expect(state.formError).toMatch(/didn't work/);
     expect(state.formError).not.toMatch(/Token/);
     expect(state.values?.code).toBe("123456");
+  });
+});
+
+describe("saveDisplayName", () => {
+  beforeEach(() => {
+    server.user = { id: "u1" };
+  });
+
+  it("saves the trimmed name on the caller's own row, then goes on to next", async () => {
+    server.select.mockResolvedValue({ data: [{ id: "u1" }], error: null });
+    const path = await redirectOf(
+      saveDisplayName({}, form({ displayName: "  Priya  ", next: "/sessions/new" })),
+    );
+    expect(server.update).toHaveBeenCalledWith({ display_name: "Priya" });
+    expect(server.eq).toHaveBeenCalledWith("id", "u1");
+    expect(path).toBe("/sessions/new");
+  });
+
+  it("never redirects off-site", async () => {
+    server.select.mockResolvedValue({ data: [{ id: "u1" }], error: null });
+    const path = await redirectOf(
+      saveDisplayName({}, form({ displayName: "Priya", next: "https://evil.example" })),
+    );
+    expect(path).toBe("/sessions");
+  });
+
+  it("sends a signed-out caller to /login without touching the database", async () => {
+    server.user = null;
+    const path = await redirectOf(
+      saveDisplayName({}, form({ displayName: "Priya", next: "/sessions/new" })),
+    );
+    expect(path).toBe("/login?next=%2Fsessions%2Fnew");
+    expect(server.update).not.toHaveBeenCalled();
+  });
+
+  it("returns field errors for a blank name", async () => {
+    const state = await saveDisplayName({}, form({ displayName: "   " }));
+    expect(state.fieldErrors?.displayName).toEqual(["Enter a display name."]);
+    expect(server.update).not.toHaveBeenCalled();
+  });
+
+  it("maps a database refusal to our own message", async () => {
+    server.select.mockResolvedValue({
+      data: null,
+      error: {
+        code: "23514",
+        message: 'new row for relation "profiles" violates check constraint "profiles_display_name_check"',
+      },
+    });
+    const state = await saveDisplayName({}, form({ displayName: "Priya" }));
+    expect(state.formError).toMatch(/1 to 50 characters/);
+    expect(state.formError).not.toMatch(/violates/);
+    expect(state.values?.displayName).toBe("Priya");
+  });
+
+  it("does not pretend to have saved when no row was updated", async () => {
+    server.select.mockResolvedValue({ data: [], error: null });
+    const state = await saveDisplayName({}, form({ displayName: "Priya" }));
+    expect(state.formError).toMatch(/couldn't find your profile/);
   });
 });
 

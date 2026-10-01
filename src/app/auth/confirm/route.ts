@@ -13,9 +13,11 @@
 // 3. Failure (expired, already used, unknown): /login?error=link, keeping
 //    `next`, so they can ask for a new link and still end up where they
 //    were going.
-// 4. Success: on to `next` -- ONLY a same-origin path (safeNextPath), else
-//    /sessions. Accepting an absolute URL here would make this an open
-//    redirect on a page every student is sent to by email.
+// 4. Success, first sign-in without a display name: the name step
+//    (/login/name, A4), carrying `next` -- ADR 0008 rule 1.
+// 5. Success otherwise: on to `next` -- ONLY a same-origin path
+//    (safeNextPath), else /sessions. Accepting an absolute URL here would
+//    make this an open redirect on a page every student is sent to by email.
 //
 // ONE-TIME LINKS AND MAIL SCANNERS: a GET here spends the token. A mail
 // security scanner that follows links before the student does (Microsoft
@@ -26,7 +28,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 
 import { LINK_ERROR, safeNext } from "@/lib/safe-next";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, pathAfterSignIn } from "@/lib/supabase/server";
 
 /**
  * The OTP types our emails carry. The template sends `email`; `magiclink`
@@ -55,7 +57,7 @@ export async function GET(request: NextRequest) {
     return redirectTo(request, loginWithError(next));
   }
 
-  return redirectTo(request, next);
+  return redirectTo(request, await pathAfterSignIn(supabase, data.user.id, next));
 }
 
 function loginWithError(next: string): string {
