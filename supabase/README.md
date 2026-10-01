@@ -15,12 +15,20 @@ supabase/
 
 ## The schema today
 
-One migration, `migrations/*_schema_skeleton.sql` (W2), creates every
+`migrations/*_profile_rules.sql` (A2) adds the first rules: Vanderbilt-only
+`auth.users` (on signup and on an email change), a profile row per new user,
+the `display_name` CHECK, and the profiles policies and grants. Its functions
+live in a `private` schema the Data API does not expose. **It was written
+without Docker and has not yet been applied to a Supabase database** — run
+`npm run db:reset && npm run test:db` before relying on it.
+
+The first migration, `migrations/*_schema_skeleton.sql` (W2), creates every
 Sprint 2 table as **structure only**: `profiles`, `departments`, `courses`,
 `locations`, `sessions`, `session_attendees`, and the `session_status` enum.
 The migration's header says which track owns which table.
 
-**Row Level Security is enabled on every table, with no policies.** Nothing
+**Row Level Security is enabled on every table, with no policies** (A2 has
+since added the policies for `profiles`). Nothing
 is readable or writable through the Data API until the owning track adds its
 policies. That is intended — a missing policy fails closed. Do not add broad
 policies to "make it work". `tests/db/rls.test.ts` fails if any table in

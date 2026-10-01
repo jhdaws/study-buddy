@@ -147,13 +147,24 @@ flowchart LR
 - [ ] Free-plan email rate limit checked — fine for four testers, matters for a demo
 
 #### A2 · Profile rules
-**M · US-01, US-25 · after W2**
-- [ ] Trigger rejecting non-`@vanderbilt.edu` signups
+**M · US-01, US-25 · after W2 · 🚧 written, not yet run on a real Supabase database**
+
+`supabase/migrations/20260930210000_profile_rules.sql` and
+`tests/db/profiles.test.ts` exist, but Docker was not available when they
+were written: the migration has **not** been applied with `supabase db reset`
+and `npm run test:db` has **not** run. They were run against PGlite (Postgres
+17 in WASM) with a hand-made imitation of Supabase's `auth` schema and roles —
+all pass, and nine deliberate breakages of the migration each fail a test —
+which shows the SQL is valid and the tests can fail, not that it works on
+Supabase. Tick the boxes once `npm run test:db` passes locally or in CI.
+- [ ] Trigger rejecting non-`@vanderbilt.edu` signups — also on an email change
 - [ ] Trigger creating a `profiles` row on signup
 - [ ] `display_name` CHECK matching `displayNameSchema`: 1–50 characters after trimming (`DISPLAY_NAME_MAX_LENGTH` in `src/lib/limits.ts`)
 - [ ] RLS: signed-in users read display names; users update only their own
-- [ ] **Don't copy email into `profiles`.** It already lives in `auth.users`,
-      which clients cannot read — that satisfies US-25 without column grants
+- [x] **Don't copy email into `profiles`.** It already lives in `auth.users`,
+      which clients cannot read — that satisfies US-25 without column grants.
+      (A column grant *is* used, but for a different reason: so a user can
+      update only `display_name`, not `id` or `created_at`.)
 - [ ] Database tests: US-01b (direct non-Vanderbilt signup rejected); a user cannot update someone else's profile
 
 #### A3 · Magic-link sign-in

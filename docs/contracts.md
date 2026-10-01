@@ -238,8 +238,13 @@ Handler**:
 
 ## Not yet a contract
 
-- **`src/lib/errors.ts`** has no signature yet. S3 writes the first mapping
-  for `create_session`'s errors; A3 and A4 add theirs to the same file.
+- **`src/lib/errors.ts`** — A2/A3 wrote the first mappings:
+  `databaseErrorMessage(error: { code?, message?, details? }): string` maps a
+  PostgREST error by **constraint name** first (`CONSTRAINT_MESSAGES`), then
+  by SQLSTATE (`SQLSTATE_MESSAGES`), else `GENERIC_ERROR_MESSAGE`;
+  `signInErrorMessage(error: { code?, status?, message? }): string` maps a
+  Supabase `AuthError` by its `code`. S3 adds `create_session`'s constraint
+  names and SQLSTATEs to the two tables; it should not need a new function.
 - **The display-name route** is A4's to choose (`/login/name`, say). Nothing
   links to it yet.
 - **Joining, leaving, cancelling, chat** are later sprints. The note about
