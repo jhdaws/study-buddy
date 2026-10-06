@@ -92,6 +92,7 @@ flowchart LR
 - [x] **Before M1 creates any keys:** secret scanning and push protection on
 - [x] `main` ruleset: PR with one approval required, `verify` check required, no force push, no deletion
 - [ ] Add the `db` check to the ruleset's required checks
+- [ ] Require branches to be up to date before merging (ruleset → required status checks). #31–#33 were each green alone; merged together, 21 `db` tests failed (2026-10-06 review)
 - [ ] "Automatically delete head branches" on (Settings → General)
 - [ ] Dependabot config for npm and GitHub Actions
 
@@ -135,6 +136,26 @@ flowchart LR
 - [ ] `docs/test-cases.md` updated with what is genuinely verified
 - [ ] Fixtures no longer used by the app kept only where tests need them
 
+#### W7 · Deploy migrations from CI
+**S · TASK-03 · now — before #31–#33's migrations need to reach the hosted project**
+
+The hosted database changes only when someone runs `supabase db push` by hand, while Vercel deploys `main` on every merge. Once #31–#33 merge, production would run code calling `create_session` before the hosted database has it.
+- [ ] A job on push to `main`: `supabase link`, then `supabase db push` to the hosted project, with `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` in a GitHub `production` environment
+- [ ] Runs only after `verify` and `db` pass for that commit
+- [ ] No `--include-seed`: reseeding the hosted project stays a deliberate, manual step
+- [ ] Every migration must work with the app version already deployed: Vercel deploys at the same time, and nothing orders the two. Additive changes are fine (functions, policies, CHECKs that existing rows pass); renames and drops take two steps
+- [ ] First run: compare the hosted project's `supabase migration list` with `supabase/migrations/`
+- [ ] Documented in `supabase/README.md`
+
+#### W8 · End-to-end smoke test in CI
+**M · Sprint 3 · after S4, M5**
+
+One browser test of the Sprint 2 "done when", so the main path is checked on every PR rather than by hand at demo time. Not before S4 and M5: until then it could only click through fixtures.
+- [ ] Playwright, one test: two `@vanderbilt.edu` users sign in with the code read from Mailpit's API; one names themselves and creates a session; the other sees it in the list with the right seat count
+- [ ] Runs in CI against the full local stack (`supabase start`) with the app built and started (`next build && next start`), at 375px (ADR 0004)
+- [ ] A Playwright trace uploaded as a workflow artifact on failure
+- [ ] Added to the ruleset's required checks once it has run a week without flaking
+
 ---
 
 ## Track A · Auth
@@ -168,6 +189,14 @@ flowchart LR
 - [ ] First sign-in without a display name goes to a name step before anything else; `saveDisplayName()`
 - [ ] Proxy redirects signed-out users away from `/sessions*`, keeping `?next=`
 - [ ] `requireUser()` implemented — S3 calls it
+
+#### A5 · Demo email delivery
+**S · US-01 · after A1, #33**
+
+Per #33, Supabase's built-in sender reaches only members of the Supabase organization, about 2 emails an hour — not enough for the demo.
+- [ ] Every tester can receive a sign-in email: custom SMTP (Authentication → SMTP), or every tester in the Supabase organization
+- [ ] Rate limit enough for the demo: four testers, a few retries each
+- [ ] A real sign-in email to an `@vanderbilt.edu` address: does Outlook's link scanning spend the token before the student does (the code then fails too)? If so, the fix in `supabase/README.md`, "Mail scanners" (#33)
 
 ---
 
@@ -234,6 +263,22 @@ flowchart LR
 #### M4 · Map view (stretch)
 **M · US-03 · only once M1–M3 are done**
 - [ ] List / map toggle on `/sessions`; one marker per session, distinct when full; loads client-side only
+
+#### M5 · A location sessions can use before M2
+**S · US-02 · decide now; build after #31, #32**
+
+Once #31 and #32 merge, the stub picker's fixture place ids resolve to `20000000-…` location ids that are not rows, so `create_session` fails its foreign key and the student sees "Something went wrong saving that" (checked 2026-10-06 with #31–#33 merged locally). Until M1 and M2 land, nothing can be created anywhere — which blocks W6's demo and W8.
+- [ ] Decide: wait for M1 and M2, or put the three fixture locations into local and CI databases only — never the hosted project
+- [ ] If seeding: check how `supabase db push --include-seed` picks seed files, so they cannot reach the hosted project; production keeps refusing fixture ids once the server key is set (#31 already does)
+- [ ] W6 can create a session locally
+
+#### M6 · Refresh stored coordinates
+**S · Sprint 3 · after M1, M3**
+
+#31 reports Google's terms allow caching a place's coordinates for 30 days at most — not yet checked on Google's own page. `locations.validated_at` exists for this.
+- [ ] Check the rule on Google's page; record it in ADR 0008
+- [ ] A scheduled job (Vercel Cron or `pg_cron`) re-validating locations older than the limit. Not a delete: `sessions.location_id` restricts deletes
+- [ ] Decide what happens to a place Google no longer returns
 
 ---
 
