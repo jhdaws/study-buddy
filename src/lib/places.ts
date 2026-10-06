@@ -8,13 +8,27 @@
 // to use it, and only to write `locations`.
 //
 // Next.js resolves "server-only" itself, so it is not a dependency; Vitest
-// cannot import this file. Put pure helpers -- M3's distance check, which is
-// unit tested -- in a separate module without the import (src/lib/geo.ts,
-// say) and import them here.
+// cannot import this file. So every rule lives in pure, unit-tested modules
+// without the import -- the distance check in src/lib/geo.ts; the id check,
+// response parsing, excluded types and error mapping in
+// src/lib/place-policy.ts -- and this file only does the I/O around them.
 
 import "server-only";
 
+import { googleMapsServerKey } from "@/lib/env";
 import { FIXTURE_LOCATIONS } from "@/lib/fixtures";
+import type { LatLng } from "@/lib/geo";
+import {
+  classifyPlaceDetailsError,
+  isWellFormedPlaceId,
+  isWellFormedSessionToken,
+  judgePlace,
+  parseGoogleError,
+  parsePlaceDetails,
+  type PlaceDetails,
+} from "@/lib/place-policy";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/supabase/server";
 
 export type ResolvedPlace = {
   /** `locations.id` -- what `sessions.location_id` references */
@@ -52,38 +66,215 @@ export class PlaceError extends Error {
 }
 
 // ===========================================================================
-// STUB (W4, #11) -- replaced by M3 (#24). Keep the signature.
+// M3 (#24). Replaced the W4 stub; signature kept, one optional parameter
+// added (the stub comment's suggestion -- it breaks no caller).
 //
-// Maps FIXTURE_PLACES' fake ids to FIXTURE_LOCATIONS; anything else is
-// "unknown_place". No network, no database.
+// For a `placeId` the client sent -- untrusted input, possibly a direct POST:
+//   1. Fixture ids (below) are answered without Google or the database.
+//   2. The id must look like a Google id (place-policy.ts) or it is
+//      `unknown_place` -- a malformed id never reaches a URL. It is still
+//      encoded.
+//   2b. In a production build, a real signed-in user (getCurrentUser(), not
+//      requireUser()) or `lookup_failed` -- see SIGNED-IN ONLY below.
+//   3. Place Details (New) with the server key, field mask `location,types`
+//      (both Place Details Essentials; see FIELD_MASK), a timeout, and no
+//      Next.js caching. Google's errors are mapped by
+//      classifyPlaceDetailsError() and logged; its text never reaches the
+//      student.
+//   4. judgePlace(): excluded type, then distance from CAMPUS_CENTER. This
+//      is the control; the picker's filtering is a convenience.
+//   5. Upsert `locations` on `place_id` with Google's coordinates -- never
+//      the client's -- and validated_at = now, through the secret-key client
+//      (src/lib/supabase/admin.ts). No client write policy exists, by design.
+//   6. Return { locationId }.
+// No name is stored (ADR 0008 rule 14), and none is requested: displayName
+// is a Pro field.
 //
-// The real body must, for a `placeId` the client sent (untrusted input):
-//   1. Look the place up with Places API (New) Place Details, using the
-//      server key (googleMapsServerKey()). Request only the fields needed --
-//      location and types -- to keep the SKU cheap. Encode the id in the URL.
-//      If the picker used a session token, accepting it here may let Google
-//      bill the typing and this lookup as one session (M1 checks the pricing).
-//      To pass it, ADD an optional second parameter -- `resolvePlace(placeId,
-//      { sessionToken })` -- and a form field; that breaks no caller.
-//   2. Check the distance from CAMPUS_CENTER against CAMPUS_RADIUS_METERS
-//      (both in src/lib/env.ts -- the picker restricts with the same values)
-//      and the place types. The picker's filtering is a convenience, this is
-//      the control (data/README.md, "The constraint that does not change").
-//   3. Upsert `locations` on `place_id` with the coordinates Google returned
-//      -- never ones from the client -- and a fresh `validated_at`, using the
-//      Supabase secret key (SUPABASE_SECRET_KEY, never NEXT_PUBLIC_). No
-//      client write policy exists on `locations`, by design.
-//   4. Return { locationId }. Throw PlaceError for every refusal; never leak
-//      Google's or Postgres's own error text.
-// Do not store the place's name (ADR 0008 rule 14): the session carries the
-// host's label.
+// MISSING CONFIGURATION is not a PlaceError. With no GOOGLE_MAPS_SERVER_API_KEY
+// or SUPABASE_SECRET_KEY, env.ts throws and createSession() lets it through
+// to the error page: a deploy without its keys should fail loudly, not tell
+// students their place does not exist.
+//
+// THE FIXTURE IDS (`ChIJ-FAKE-...`) are still all the stub <LocationPicker>
+// offers until M2 lands. Sent to Google they would fail, and the create form
+// would stop working. So a fixture id resolves to its fixture location --
+// no Google call, no database write -- ONLY while either:
+//   - this is not a production build (`next dev`, tests), or
+//   - this deployment has no server Maps key yet (today's production).
+// A production build WITH the key refuses them as `unknown_place`, still
+// without calling Google. Once M1's key is in Vercel, production therefore
+// needs M2's real picker to create sessions; that is intended.
+// Why this is not a bypass of the radius and type checks: it writes nothing,
+// and the location ids it returns (FIXTURE_LOCATIONS, `20000000-...`) are not
+// rows in any real database -- they are not seeded -- so a session pointing
+// at one fails `sessions.location_id`'s foreign key once S3 saves for real.
+// Any other id goes the full route above. W6 deletes this once M2 lands.
+//
+// SIGNED-IN ONLY. Every real lookup is a billed Google call and a write with
+// the secret key. createSession() is a public POST endpoint, and its
+// requireUser() is a stub returning FIXTURE_USER until A4 (#17) -- so this
+// checks for itself rather than trusting its caller. In a production build
+// it asks Supabase for the session's user (getUser(), revalidated); nobody,
+// and the lookup is refused before Google is called. Until A4 lets anyone
+// sign in, that closes the real path in production entirely, even with the
+// keys set. Not checked outside production, so M3 and M2 can be tried
+// locally before sign-in exists. NOT done yet: per-user rate limiting -- a
+// signed-in student can still trigger lookups in a loop (Google's daily
+// quota cap, M1, is the backstop).
 // ===========================================================================
 
+/** Optional extras for resolvePlace(). */
+export type ResolvePlaceOptions = {
+  /**
+   * The picker's Autocomplete session token (M2), if it sends one. Passing it
+   * ends Google's billing session with this lookup. A token Google would
+   * reject is dropped, not an error: it only affects billing.
+   */
+  sessionToken?: string;
+};
+
+const PLACE_DETAILS_URL = "https://places.googleapis.com/v1/places/";
+
+// Both fields are in the Place Details Essentials SKU (checked 2026-09-30).
+// Adding displayName or primaryType makes the call Pro -- and, when it ends an
+// Autocomplete session, bills it as Enterprise + Atmosphere. Do not widen this
+// without checking the pricing page.
+const FIELD_MASK = "location,types";
+
+// Long enough for a slow Google response, short enough that a hung request
+// does not hold the form's pending state for the platform's whole timeout.
+const LOOKUP_TIMEOUT_MS = 5_000;
+
+const FIXTURE_ID_PREFIX = "ChIJ-FAKE-";
+
 /** Validate a Places id and return the `locations` row to attach a session to. */
-export async function resolvePlace(placeId: string): Promise<ResolvedPlace> {
-  const location = FIXTURE_LOCATIONS.find((row) => row.place_id === placeId);
-  if (!location) {
+export async function resolvePlace(
+  placeId: string,
+  options: ResolvePlaceOptions = {},
+): Promise<ResolvedPlace> {
+  // fixtures.ts promises a fake id is never sent to Google, whatever happens.
+  if (placeId.startsWith(FIXTURE_ID_PREFIX)) {
+    const fixture = FIXTURE_LOCATIONS.find((row) => row.place_id === placeId);
+    if (fixture && fixturePlacesAllowed()) {
+      return { locationId: fixture.id };
+    }
     throw new PlaceError("unknown_place", placeId);
   }
-  return { locationId: location.id };
+
+  if (!isWellFormedPlaceId(placeId)) {
+    throw new PlaceError("unknown_place", placeId);
+  }
+
+  if (process.env.NODE_ENV === "production" && !(await getCurrentUser())) {
+    console.error("resolvePlace: refused a lookup with no signed-in user", { placeId });
+    throw new PlaceError("lookup_failed", placeId);
+  }
+
+  const place = await lookUpPlace(placeId, options.sessionToken);
+
+  const verdict = judgePlace(place);
+  if (verdict !== "ok") {
+    throw new PlaceError(verdict, placeId);
+  }
+
+  return { locationId: await storeLocation(placeId, place.location) };
+}
+
+/** See THE FIXTURE IDS above. Checked per request, so adding the key needs no rebuild. */
+function fixturePlacesAllowed(): boolean {
+  return (
+    process.env.NODE_ENV !== "production" || !process.env.GOOGLE_MAPS_SERVER_API_KEY
+  );
+}
+
+/** Place Details (New) for one id. Throws PlaceError for every failure. */
+async function lookUpPlace(placeId: string, sessionToken?: string): Promise<PlaceDetails> {
+  // Outside the try: a missing key is a config error, not a failed lookup.
+  const apiKey = googleMapsServerKey();
+
+  const url = new URL(PLACE_DETAILS_URL + encodeURIComponent(placeId));
+  if (sessionToken && isWellFormedSessionToken(sessionToken)) {
+    url.searchParams.set("sessionToken", sessionToken);
+  }
+
+  let response: Response;
+  let body: unknown;
+  try {
+    response = await fetch(url, {
+      headers: { "X-Goog-Api-Key": apiKey, "X-Goog-FieldMask": FIELD_MASK },
+      signal: AbortSignal.timeout(LOOKUP_TIMEOUT_MS),
+      // Never Next.js's data cache: Google's terms do not allow caching
+      // Places content beyond what we store deliberately.
+      cache: "no-store",
+    });
+    body = await response.json().catch(() => null);
+  } catch (error) {
+    // Network failure or timeout. Log the kind, not the error object: it
+    // could carry the request, and the request carries the key.
+    console.error("resolvePlace: Place Details request failed", {
+      placeId,
+      error: error instanceof Error ? error.name : "unknown",
+    });
+    throw new PlaceError("lookup_failed", placeId);
+  }
+
+  if (!response.ok) {
+    const googleError = parseGoogleError(body);
+    const reason = classifyPlaceDetailsError(response.status, googleError);
+    // Logged even when the student is told "unknown place": a run of these
+    // can mean our request is wrong, not their pick.
+    console.error("resolvePlace: Place Details refused", {
+      placeId,
+      httpStatus: response.status,
+      ...googleError,
+      mappedTo: reason,
+    });
+    throw new PlaceError(reason, placeId);
+  }
+
+  const place = parsePlaceDetails(body);
+  if (!place) {
+    console.error("resolvePlace: Place Details returned no usable location", { placeId });
+    throw new PlaceError("lookup_failed", placeId);
+  }
+  return place;
+}
+
+/** Upsert the validated place and return its `locations.id`. */
+async function storeLocation(placeId: string, location: LatLng): Promise<string> {
+  // Outside the try, like the Maps key: a missing secret key is a config error.
+  const admin = createAdminClient();
+
+  try {
+    const { data, error } = await admin
+      .from("locations")
+      .upsert(
+        {
+          place_id: placeId,
+          lat: location.lat,
+          lng: location.lng,
+          validated_at: new Date().toISOString(),
+        },
+        { onConflict: "place_id" },
+      )
+      .select("id")
+      .single();
+    if (error || !data) {
+      // Postgres's text goes to the server log only, never into PlaceError.
+      console.error("resolvePlace: storing the location failed", {
+        placeId,
+        code: error?.code,
+        message: error?.message,
+      });
+      throw new PlaceError("lookup_failed", placeId);
+    }
+    return data.id;
+  } catch (error) {
+    if (error instanceof PlaceError) throw error;
+    console.error("resolvePlace: storing the location failed", {
+      placeId,
+      error: error instanceof Error ? error.name : "unknown",
+    });
+    throw new PlaceError("lookup_failed", placeId);
+  }
 }
