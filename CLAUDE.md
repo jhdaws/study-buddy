@@ -80,3 +80,10 @@ localhost. CI runs them in a separate `db` job.
 once US-07b lands.** `docs/test-cases.md` tracks what is genuinely verified
 versus what is assumed — keep it honest, because a green CI badge should never
 imply coverage we do not have.
+
+## Bugs
+
+Found a defect — not just "this isn't built yet," an actual "this was wrong"?
+Log it in [`docs/bug_database.md`](./docs/bug_database.md), even if you fix
+it in the same sitting. It is the project's index of what broke and why;
+`test-cases.md` tracks story coverage, this tracks defects.
