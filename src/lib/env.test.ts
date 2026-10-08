@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { googleMapsServerKey, supabaseEnv } from "./env";
+import { googleMapsServerKey, supabaseEnv, supabaseSecretKey } from "./env";
 
 const URL_VAR = "NEXT_PUBLIC_SUPABASE_URL";
 const KEY_VAR = "NEXT_PUBLIC_SUPABASE_ANON_KEY";
@@ -40,5 +40,25 @@ describe("googleMapsServerKey", () => {
     vi.stubEnv("GOOGLE_MAPS_SERVER_API_KEY", "");
 
     expect(() => googleMapsServerKey()).toThrow("GOOGLE_MAPS_SERVER_API_KEY");
+  });
+});
+
+describe("supabaseSecretKey", () => {
+  it("returns the key when set", () => {
+    vi.stubEnv("SUPABASE_SECRET_KEY", "sb_secret_test");
+
+    expect(supabaseSecretKey()).toBe("sb_secret_test");
+  });
+
+  it("throws rather than returning undefined when unset", () => {
+    vi.stubEnv("SUPABASE_SECRET_KEY", "");
+
+    expect(() => supabaseSecretKey()).toThrow("SUPABASE_SECRET_KEY");
+  });
+
+  it("rejects the publishable key pasted in its place", () => {
+    vi.stubEnv("SUPABASE_SECRET_KEY", "sb_publishable_test");
+
+    expect(() => supabaseSecretKey()).toThrow(/publishable key/);
   });
 });
