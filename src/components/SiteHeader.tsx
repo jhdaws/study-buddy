@@ -26,7 +26,7 @@ import { createClient, fetchDisplayName } from "@/lib/supabase/server";
 
 export default function SiteHeader() {
   return (
-    <header className="sticky top-0 z-30 border-b border-white/50 bg-sky-50/70 backdrop-blur-xl">
+    <header className="sticky top-0 z-30 border-b border-white/50 bg-sky-50/70 backdrop-blur-xl lg:hidden">
       <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-2">
         <Link href="/" className="inline-flex min-h-11 items-center rounded-full">
           <Logo />

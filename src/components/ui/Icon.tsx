@@ -24,6 +24,8 @@ const PATHS = {
   refresh: "M20 12a8 8 0 1 1-2.3-5.6M20 4v4.5h-4.5",
   alert: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-13v5m0 3.5v.01",
   sparkle: "M12 3v4m0 10v4M3 12h4m10 0h4M6 6l2.5 2.5m7 7L18 18M6 18l2.5-2.5m7-7L18 6",
+  check: "m5 12.5 4.5 4.5L19 7.5",
+  minus: "M5 12h14",
 } as const;
 
 export type IconName = keyof typeof PATHS;

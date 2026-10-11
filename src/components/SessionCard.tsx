@@ -11,7 +11,7 @@
  * No hooks, so it renders as a Server Component today and still works if
  * SessionBrowser becomes a Client Component for M4's map toggle. Times are
  * formatted in campus time explicitly (src/lib/format.ts), so either side
- * prints the same thing.
+ * prints the same words (the spacing characters can differ; see `when`).
  *
  * The spec's avatar stack needs attendee names, which SessionListItem does
  * not carry (and showing who is going is US-23, a later sprint). The seats
@@ -35,6 +35,8 @@ export type SessionCardProps = {
   /** The request's "now", for "Today"/"Tomorrow" and "Happening now". */
   now: Date;
   variant?: "full" | "compact";
+  /** The course heading's level: h3 when the list groups cards under day headings. */
+  headingLevel?: "h2" | "h3";
 };
 
 export function SeatsPill({ seatsLeft }: { seatsLeft: number }) {
@@ -101,7 +103,13 @@ function SeatsBar({ taken, capacity, full }: { taken: number; capacity: number; 
   );
 }
 
-export default function SessionCard({ session, now, variant = "full" }: SessionCardProps) {
+export default function SessionCard({
+  session,
+  now,
+  variant = "full",
+  headingLevel = "h2",
+}: SessionCardProps) {
+  const Heading = headingLevel;
   const full = session.seatsLeft === 0;
   const live = isInProgress(session.startsAt, session.endsAt, now);
   const headingId = `session-${session.id}`;
@@ -112,19 +120,24 @@ export default function SessionCard({ session, now, variant = "full" }: SessionC
       {session.room && <> · {session.room}</>}
     </>
   );
+  // suppressHydrationWarning: Node's ICU and the browser's put different
+  // invisible spaces around the dash and before AM/PM (see format.test.ts).
+  // The words are identical; only this element's text may differ.
   const when = (
-    <time dateTime={session.startsAt}>
+    <time dateTime={session.startsAt} suppressHydrationWarning>
       {formatSessionTime(session.startsAt, session.endsAt, now)}
     </time>
   );
 
   const heading = (
-    <h2 id={headingId} className="text-base leading-snug">
+    // scroll-mt clears the sticky top bar when the home page's "View" links
+    // jump to /sessions#session-<id>.
+    <Heading id={headingId} className="scroll-mt-24 text-base leading-snug">
       <span className="font-extrabold">{formatCourseCode(session.course)}</span>
       {session.course.title && (
         <span className="font-medium text-white/72"> · {session.course.title}</span>
       )}
-    </h2>
+    </Heading>
   );
 
   if (variant === "compact") {

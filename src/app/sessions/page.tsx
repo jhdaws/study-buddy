@@ -9,8 +9,9 @@
  * If listSessions() throws, ./error.tsx shows a retry screen rather than a
  * blank page.
  *
- * Filters (US-06 course, US-12 campus zone) and the map (M4) come later; see
- * the comment in SessionBrowser.tsx.
+ * Search and filter chips run in the browser over this list
+ * (SessionBrowser, src/lib/session-filters.ts). A server-side course filter
+ * (US-06) and the map (M4) come later; see the comment in SessionBrowser.tsx.
  */
 
 import type { Metadata } from "next";
@@ -38,7 +39,7 @@ export default async function SessionsPage() {
   const now = new Date();
 
   return (
-    <main>
+    <main className="min-w-0 lg:max-w-4xl">
       <div className="mb-5 flex items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-navy-900">Study sessions</h1>

@@ -4,6 +4,7 @@ import "./globals.css";
 
 import AppShell from "@/components/AppShell";
 import SiteHeader from "@/components/SiteHeader";
+import SiteSidebar from "@/components/SiteSidebar";
 import TabBar from "@/components/TabBar";
 
 export const metadata: Metadata = {
@@ -29,10 +30,9 @@ export const viewport = {
 // Typed explicitly rather than with Next's generated `LayoutProps<"/">`, so
 // `npm run typecheck` works on a clean checkout without a build first.
 //
-// The shell: <AppShell> wraps every page in the top bar, one centred,
-// single-column container (ADR 0004: a max-width cap, not a desktop grid
-// that collapses) and the phone tab bar -- except sign-in, which is a
-// full-screen scene. Manrope is self-hosted from npm (@fontsource-variable),
+// The shell: <AppShell> wraps every page in the top bar and phone tab bar
+// (one centred column, ADR 0004), or from lg up the desktop sidebar --
+// except sign-in, which is a full-screen scene. Manrope is self-hosted from npm (@fontsource-variable),
 // so builds do not need to reach Google Fonts. Pages render their own <main>.
 export default function RootLayout({
   children,
@@ -42,7 +42,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full bg-sky-100">
-        <AppShell header={<SiteHeader />} tabBar={<TabBar />}>
+        <AppShell header={<SiteHeader />} sidebar={<SiteSidebar />} tabBar={<TabBar />}>
           {children}
         </AppShell>
       </body>

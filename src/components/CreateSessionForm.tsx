@@ -59,6 +59,8 @@ import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { createSession, type CreateSessionState } from "@/app/sessions/actions";
 import CourseNumberInput from "@/components/CourseNumberInput";
 import LocationPicker, { type PickedPlace } from "@/components/LocationPicker";
+import SessionPreview, { EMPTY_PREVIEW, type PreviewValues } from "@/components/SessionPreview";
+import Icon from "@/components/ui/Icon";
 import {
   BUTTON_PRIMARY_LIGHT,
   FIELD,
@@ -171,6 +173,49 @@ export default function CreateSessionForm({
     isoToLocalInput(initialState.values?.endsAt),
   );
 
+  // --- Live preview ---------------------------------------------------------
+  // Read from the form itself, so it covers controlled and uncontrolled
+  // fields alike and adds nothing to what is submitted. Refreshed on every
+  // input event, and after each render for changes made in code (a typeahead
+  // pick, a prefilled label); the comparison stops that from looping.
+  const formRef = useRef<HTMLFormElement>(null);
+  const [preview, setPreview] = useState<PreviewValues>(EMPTY_PREVIEW);
+  const [previewNow] = useState(() => new Date());
+  const refreshPreview = () => {
+    if (!formRef.current) return;
+    const data = new FormData(formRef.current);
+    const read = (key: keyof PreviewValues) => String(data.get(key) ?? "");
+    const next: PreviewValues = {
+      departmentCode: read("departmentCode"),
+      courseNumber: read("courseNumber"),
+      topic: read("topic"),
+      locationLabel: read("locationLabel"),
+      room: read("room"),
+      startsAt: read("startsAt"),
+      endsAt: read("endsAt"),
+      capacity: read("capacity"),
+    };
+    setPreview((current) =>
+      (Object.keys(next) as (keyof PreviewValues)[]).every((k) => current[k] === next[k])
+        ? current
+        : next,
+    );
+  };
+  useEffect(refreshPreview);
+
+  // --- Capacity stepper (spec page 7) ----------------------------------------
+  // Nudges the real number input, which stays uncontrolled so React's
+  // post-action reset still restores the submitted value.
+  const capacityInput = useRef<HTMLInputElement>(null);
+  const stepCapacity = (delta: 1 | -1) => {
+    const input = capacityInput.current;
+    if (!input) return;
+    const current = Number.parseInt(input.value, 10);
+    const next = Number.isFinite(current) ? current + delta : MIN_CAPACITY;
+    input.value = String(Math.max(MIN_CAPACITY, next));
+    refreshPreview();
+  };
+
   // --- Errors ---------------------------------------------------------------
   const ids = (field: CreateSessionField) => ({
     input: `${prefix}-${field}`,
@@ -194,7 +239,15 @@ export default function CreateSessionForm({
   ).length;
 
   return (
-    <form action={formAction} noValidate className="flex flex-col gap-5">
+    <form
+      ref={formRef}
+      action={formAction}
+      noValidate
+      onInput={refreshPreview}
+      onChange={refreshPreview}
+      className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start"
+    >
+      <div className="flex min-w-0 flex-col gap-5">
       {/* ------------------------------------------------------------ Course */}
       <fieldset className={SECTION}>
         <legend className={LEGEND}>
@@ -410,27 +463,50 @@ export default function CreateSessionForm({
               How many people, including you?
             </label>
             <p id={ids("capacity").hint} className={HINT}>
-              At least {MIN_CAPACITY} &mdash; you count as one.
+              At least {MIN_CAPACITY} &mdash; you count as one. There&apos;s no maximum.
             </p>
-            <input
-              id={ids("capacity").input}
-              name="capacity"
-              type="number"
-              inputMode="numeric"
-              defaultValue={values.capacity}
-              required
-              min={MIN_CAPACITY}
-              step={1}
-              {...a11y("capacity", true)}
-              className={INPUT}
-            />
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => stepCapacity(-1)}
+                aria-label="One fewer person"
+                className="grid size-14 shrink-0 place-items-center rounded-full border border-white/20 bg-white/[0.08] text-white hover:bg-white/[0.14]"
+              >
+                <Icon name="minus" className="size-5" />
+              </button>
+              <input
+                ref={capacityInput}
+                id={ids("capacity").input}
+                name="capacity"
+                type="number"
+                inputMode="numeric"
+                defaultValue={values.capacity}
+                required
+                min={MIN_CAPACITY}
+                step={1}
+                placeholder={String(MIN_CAPACITY)}
+                {...a11y("capacity", true)}
+                className={`${INPUT} text-center text-lg font-extrabold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+              />
+              <button
+                type="button"
+                onClick={() => stepCapacity(1)}
+                aria-label="One more person"
+                className="grid size-14 shrink-0 place-items-center rounded-full border border-white/20 bg-white/[0.08] text-white hover:bg-white/[0.14]"
+              >
+                <Icon name="plus" className="size-5" />
+              </button>
+            </div>
             <FieldError id={ids("capacity").error} message={errorFor("capacity")} />
           </div>
         </div>
       </fieldset>
 
-      {/* ------------------------------------------------------------ Submit */}
-      <div className="flex flex-col gap-3">
+      </div>
+
+      {/* ------------------------------------------- Preview and submit */}
+      <div className="flex flex-col gap-4 lg:sticky lg:top-8">
+        <SessionPreview values={preview} now={previewNow} />
         {state.formError && (
           <p role="alert" className={PAGE_ALERT}>
             {state.formError}

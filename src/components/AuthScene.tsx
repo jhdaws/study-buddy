@@ -3,20 +3,32 @@
  * library wall of book spines, one pendant lamp, and a single frosted glass
  * card in its pool of warm light. Used by /login and /login/name.
  *
- * Pure CSS and inline SVG -- no image files. The spines are repeating
- * gradients; the lamp's glow is the only warm colour in the app.
+ * Pure CSS and inline SVG -- no image files. The spines are generated
+ * divs; the lamp's glow is the only warm colour in the app.
  */
 
 import Logo from "@/components/ui/Logo";
 
-// Book-spine rows: widths and navy tones vary per shelf so the wall does not
-// look tiled.
-const SHELVES = [
-  "repeating-linear-gradient(90deg,#173563 0 14px,#0f2748 14px 22px,#1e4378 22px 40px,#0b1e3a 40px 46px,#16335f 46px 60px,#0d2444 60px 66px,#21497f 66px 80px,#0a1a36 80px 84px)",
-  "repeating-linear-gradient(90deg,#102a4f 0 10px,#1c3f71 10px 28px,#0b1d38 28px 34px,#183a6a 34px 46px,#0f2646 46px 52px,#234c84 52px 70px,#0c203f 70px 76px)",
-  "repeating-linear-gradient(90deg,#1a3b6b 0 18px,#0c213f 18px 24px,#14305a 24px 36px,#1f4579 36px 52px,#0a1b37 52px 56px,#11294d 56px 72px)",
-  "repeating-linear-gradient(90deg,#0e2546 0 12px,#1d4174 12px 26px,#0b1d39 26px 31px,#163460 31px 47px,#21487e 47px 58px,#0c2140 58px 64px)",
-];
+// Book spines: widths, heights and tones from a small fixed-seed generator,
+// so every render (server and client) draws the same shelves and none of
+// them looks tiled.
+const TONES = ["#173563", "#0f2748", "#1e4378", "#0b1e3a", "#16335f", "#21497f", "#12305e", "#1b3f6e"];
+
+function spinesFor(shelf: number) {
+  let seed = 9301 * (shelf + 1);
+  const next = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  return Array.from({ length: 70 }, () => ({
+    width: 9 + Math.round(next() * 12),
+    height: 68 + Math.round(next() * 30),
+    tone: TONES[Math.floor(next() * TONES.length)],
+    gap: next() < 0.12 ? 6 : 1,
+  }));
+}
+
+const SHELVES = [0, 1, 2, 3].map(spinesFor);
 
 export default function AuthScene({ children }: { children: React.ReactNode }) {
   return (
@@ -26,7 +38,20 @@ export default function AuthScene({ children }: { children: React.ReactNode }) {
         <div className="mx-auto flex h-full max-w-5xl flex-col gap-3 pt-6 opacity-90">
           {SHELVES.map((spines, i) => (
             <div key={i} className="relative flex-1">
-              <div className="absolute inset-x-0 top-[12%] bottom-2" style={{ background: spines }} />
+              <div className="absolute inset-x-0 top-[10%] bottom-2 flex items-end justify-center overflow-hidden">
+                {spines.map((spine, j) => (
+                  <span
+                    key={j}
+                    className="shrink-0 rounded-t-[2px]"
+                    style={{
+                      width: spine.width,
+                      height: `${spine.height}%`,
+                      marginRight: spine.gap,
+                      background: `linear-gradient(90deg, ${spine.tone}, ${spine.tone} 70%, rgba(255,255,255,0.06) 72%, ${spine.tone} 76%)`,
+                    }}
+                  />
+                ))}
+              </div>
               <div className="absolute inset-x-0 bottom-0 h-2 bg-[#081630]" />
             </div>
           ))}

@@ -1,10 +1,11 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { signOut } from "@/app/login/actions";
 
 import AccountMenu from "./AccountMenu";
 import NavLinks from "./NavLinks";
+import SidebarNav from "./SidebarNav";
 import TabBar from "./TabBar";
 
 // SiteHeader itself is an async Server Component (it reads the session), so
@@ -24,25 +25,58 @@ describe("<AccountMenu>", () => {
     expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
   });
 
-  it("offers sign-out as a form posting to signOut when signed in", () => {
-    const { container } = render(<AccountMenu signedIn />);
-    const button = screen.getByRole("button", { name: "Sign out" });
+  it("opens an account sheet from the avatar, with sign-out as a form posting to signOut", () => {
+    render(<AccountMenu signedIn displayName="Moses" />);
+    expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
 
+    const avatar = screen.getByRole("button", { name: "Account" });
+    expect(avatar.textContent).toBe("M");
+    fireEvent.click(avatar);
+
+    const sheet = screen.getByRole("dialog", { name: "Sign out of Study Buddy?" });
+    const button = screen.getByRole("button", { name: "Sign out" });
+    expect(sheet.contains(button)).toBe(true);
     expect(button.getAttribute("type")).toBe("submit");
-    expect(container.querySelector("form")?.contains(button)).toBe(true);
+    expect(button.closest("form")).not.toBeNull();
+    expect(document.activeElement).toBe(button);
     expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
     expect(signOut).not.toHaveBeenCalled();
+    // US-25: the display name, never an email.
+    expect(sheet.textContent).toContain("Moses");
+    expect(sheet.textContent).not.toMatch(/@/);
   });
 
-  it("shows the display name's initial, never an email (US-25)", () => {
-    const { container } = render(<AccountMenu signedIn displayName="moses" />);
-    expect(container.textContent).toContain("M");
-    expect(container.textContent).not.toMatch(/@/);
+  it("closes the sheet with Cancel or Escape and returns focus to the avatar", () => {
+    render(<AccountMenu signedIn displayName="Moses" />);
+    const avatar = screen.getByRole("button", { name: "Account" });
+
+    fireEvent.click(avatar);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(avatar);
+
+    fireEvent.click(avatar);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("falls back to a neutral avatar without a display name", () => {
-    const { container } = render(<AccountMenu signedIn displayName={null} />);
-    expect(container.textContent).toContain("?");
+    render(<AccountMenu signedIn displayName={null} />);
+    expect(screen.getByRole("button", { name: "Account" }).textContent).toBe("?");
+  });
+});
+
+describe("<NavLinks>", () => {
+  it("links both pages and marks the current one", () => {
+    pathname.current = "/sessions/new";
+    render(<NavLinks />);
+
+    const sessions = screen.getByRole("link", { name: "Sessions" });
+    const host = screen.getByRole("link", { name: "Host a session" });
+    expect(sessions.getAttribute("href")).toBe("/sessions");
+    expect(host.getAttribute("href")).toBe("/sessions/new");
+    expect(host.getAttribute("aria-current")).toBe("page");
+    expect(sessions.getAttribute("aria-current")).toBeNull();
   });
 });
 
@@ -67,16 +101,15 @@ describe("<TabBar>", () => {
   });
 });
 
-describe("<NavLinks>", () => {
-  it("links both pages and marks the current one", () => {
-    pathname.current = "/sessions/new";
-    render(<NavLinks />);
-
-    const sessions = screen.getByRole("link", { name: "Sessions" });
-    const host = screen.getByRole("link", { name: "Host a session" });
-    expect(sessions.getAttribute("href")).toBe("/sessions");
-    expect(host.getAttribute("href")).toBe("/sessions/new");
-    expect(host.getAttribute("aria-current")).toBe("page");
-    expect(sessions.getAttribute("aria-current")).toBeNull();
+describe("<SidebarNav>", () => {
+  it("links only pages that exist and marks the current one", () => {
+    pathname.current = "/";
+    render(<SidebarNav />);
+    expect(screen.getAllByRole("link").map((link) => link.getAttribute("href"))).toEqual([
+      "/",
+      "/sessions",
+      "/sessions/new",
+    ]);
+    expect(screen.getByRole("link", { name: "Home" }).getAttribute("aria-current")).toBe("page");
   });
 });

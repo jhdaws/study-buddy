@@ -71,6 +71,57 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-10-11 (later) · Second UI pass: closer to the PDF, better sessions page
+
+**Branch:** `ui-design-refresh` (pushed) · **Commits made:** one, on top of
+the restyle. No PR yet: it waits on #33 merging.
+
+### What changed
+- **Desktop (lg+):** a sticky glass sidebar (`SiteSidebar`, `SidebarNav`)
+  replaces the top bar; the home page uses a grid (ring, soonest session, Up
+  next; then the feed; then the host nudge). Phones unchanged in structure.
+- **Phone home** follows spec p19: hero with the soonest session large, Up
+  next with a date tile, the swipe feed, a "Campus right now" ring (seats
+  taken across open sessions -- real numbers, not the spec's personal stats).
+- **Account sheet** (`AccountSheet`, spec p15): the avatar opens a sheet with
+  sign-out. Portalled to `<body>` (see "careful" below).
+- **/sessions:** search, chips (All / Happening now / Today / This week, plus
+  Has seats), day headings, a live count, a no-match state. Pure rules in
+  `src/lib/session-filters.ts`. `SessionBrowser` is now a Client Component.
+- **Host form:** capacity stepper (nudges the uncontrolled input, so the
+  post-action reset still works) and a live `SessionPreview` card, sticky
+  beside the form on desktop. Neither adds a field to what is submitted.
+- ADR 0004 has a dated, **proposed** note about the desktop layout;
+  `docs/test-cases.md` marks US-06 🚧 for the client-side search.
+
+### Verified versus assumed
+- **Verified:** lint, typecheck, 300 unit tests, `next build`; screenshots
+  of every screen as real 375x812 frames and at 1440 px, against the same
+  throwaway fake Supabase as the entry below. No sideways scroll at 375.
+- **Not verified:** real Supabase, real phones, a screen-reader pass.
+
+### Open questions for the user
+- The team still has to accept the desktop layout (ADR 0004 note).
+- Signing in lands on `/sessions` (`safeNext`'s default, from #33). With a
+  home dashboard, `/` may be the better landing page; not changed here.
+
+### Things the next agent should be careful about
+- **`backdrop-filter` makes an element the containing block for
+  `position: fixed` descendants.** Anything fixed inside the top bar (which
+  blurs) is pinned to the bar. That is why `AccountSheet` uses a portal.
+- **Never call a function exported from a `"use client"` file in a Server
+  Component** -- it compiles, passes unit tests, and throws at render. Shared
+  helpers live in `src/lib/format.ts` (`formatInitial` moved there for this).
+- **SVG gradient ids must be unique per document**; the logo renders twice
+  (top bar and sidebar, one hidden), so its tile is a CSS gradient now.
+- Times formatted on both server and client differ in invisible spacing
+  (ICU); `SessionCard`'s `<time>` has `suppressHydrationWarning` for that.
+- Phone screenshots: capture 375x812 viewport frames, not `fullPage` -- a
+  full-page phone capture is an unreadable strip, and fixed bars land
+  mid-page.
+
+---
+
 ## 2026-10-11 · Claude Design restyle of everything Sprints 1-3 built
 
 **Branch:** `ui-design-refresh`, from `a-us-01-sign-in` (#33) with `main`
