@@ -27,6 +27,8 @@
 import Link from "next/link";
 
 import SessionCard from "@/components/SessionCard";
+import Icon from "@/components/ui/Icon";
+import { BUTTON_PRIMARY } from "@/components/ui/styles";
 import type { SessionListItem } from "@/lib/sessions";
 
 export type SessionBrowserProps = {
@@ -41,7 +43,7 @@ export default function SessionBrowser({ sessions, now }: SessionBrowserProps) {
   }
 
   return (
-    <ul className="flex flex-col gap-3" aria-label="Upcoming study sessions">
+    <ul className="flex flex-col gap-4" aria-label="Upcoming study sessions">
       {sessions.map((session) => (
         <li key={session.id}>
           <SessionCard session={session} now={now} />
@@ -55,19 +57,23 @@ function EmptyState() {
   return (
     <section
       aria-labelledby="no-sessions"
-      className="rounded-lg border border-dashed border-neutral-300 px-4 py-8 text-center dark:border-neutral-700"
+      className="glass-dark flex flex-col items-center rounded-card px-5 py-10 text-center text-white"
     >
-      <h2 id="no-sessions" className="text-lg font-semibold">
+      <span
+        aria-hidden
+        className="grid size-16 place-items-center rounded-full border border-white/15 bg-white/[0.08] text-blue-200"
+      >
+        <Icon name="calendar" className="size-8" />
+      </span>
+      <h2 id="no-sessions" className="mt-4 text-xl font-extrabold">
         No study sessions yet
       </h2>
-      <p className="mt-2 text-base text-neutral-600 dark:text-neutral-400">
+      <p className="mt-2 max-w-sm text-base text-white/80">
         Studying something today? Start a session and classmates taking the
         same course can find you and join.
       </p>
-      <Link
-        href="/sessions/new"
-        className="mt-5 inline-flex min-h-11 items-center justify-center rounded-md bg-neutral-900 px-5 text-base font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-      >
+      <Link href="/sessions/new" className={`${BUTTON_PRIMARY} mt-6`}>
+        <Icon name="plus" />
         Host the first session
       </Link>
     </section>

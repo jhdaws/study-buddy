@@ -59,6 +59,15 @@ import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { createSession, type CreateSessionState } from "@/app/sessions/actions";
 import CourseNumberInput from "@/components/CourseNumberInput";
 import LocationPicker, { type PickedPlace } from "@/components/LocationPicker";
+import {
+  BUTTON_PRIMARY_LIGHT,
+  FIELD,
+  FIELD_ERROR,
+  HINT,
+  INPUT,
+  LABEL,
+  SELECT,
+} from "@/components/ui/styles";
 import { isoToLocalInput, localInputToIso } from "@/lib/datetime-local";
 import {
   LOCATION_LABEL_MAX_LENGTH,
@@ -74,15 +83,27 @@ import type { CreateSessionField } from "@/lib/validation";
 /** The department <select>'s value for "Add a department". Never submitted. */
 export const ADD_DEPARTMENT = "__add__";
 
-const INPUT =
-  "block min-h-11 w-full rounded-md border border-neutral-300 bg-white px-3 text-base " +
-  "aria-[invalid=true]:border-red-600 dark:border-neutral-700 dark:bg-neutral-900 " +
-  "dark:aria-[invalid=true]:border-red-400";
-const LABEL = "block text-base font-medium";
-const HINT = "mt-0.5 text-sm text-neutral-600 dark:text-neutral-400";
-const FIELD = "flex flex-col gap-1.5";
-const LEGEND = "text-lg font-semibold";
-const GROUP = "mt-3 flex flex-col gap-5";
+// Each fieldset is a dark glass section (Claude Design spec, pages 6-7). The
+// legend floats so it sits inside the card rather than on its border.
+const SECTION = "glass-dark min-w-0 rounded-card p-5 text-white sm:p-6";
+const LEGEND =
+  "float-left mb-5 flex w-full items-center gap-3 text-xl font-extrabold tracking-tight";
+const GROUP = "clear-both flex flex-col gap-5";
+const DATE_INPUT = `${INPUT} [color-scheme:dark]`;
+/** A problem on the sky surface below the sections. */
+const PAGE_ALERT =
+  "rounded-inner border border-danger-on-light/25 bg-white/75 px-4 py-3 text-base font-semibold text-danger-on-light";
+
+function StepBadge({ n }: { n: number }) {
+  return (
+    <span
+      aria-hidden
+      className="grid size-8 shrink-0 place-items-center rounded-full bg-white/[0.12] text-sm font-extrabold text-blue-200"
+    >
+      {n}
+    </span>
+  );
+}
 
 export type CreateSessionFormProps = {
   /** From listDepartments(), ordered by code. */
@@ -173,10 +194,13 @@ export default function CreateSessionForm({
   ).length;
 
   return (
-    <form action={formAction} noValidate className="flex flex-col gap-6">
+    <form action={formAction} noValidate className="flex flex-col gap-5">
       {/* ------------------------------------------------------------ Course */}
-      <fieldset className="min-w-0">
-        <legend className={LEGEND}>Course</legend>
+      <fieldset className={SECTION}>
+        <legend className={LEGEND}>
+          <StepBadge n={1} />
+          Course
+        </legend>
         <div className={GROUP}>
           <div className={FIELD}>
             <label htmlFor={`${prefix}-department`} className={LABEL}>
@@ -191,7 +215,7 @@ export default function CreateSessionForm({
               onChange={(event) => setDepartmentChoice(event.target.value)}
               required
               {...(adding ? {} : a11y("departmentCode"))}
-              className={INPUT}
+              className={SELECT}
             >
               <option value="">Choose a department</option>
               {departments.map((department) => (
@@ -269,8 +293,11 @@ export default function CreateSessionForm({
       </fieldset>
 
       {/* ------------------------------------------------------------- Where */}
-      <fieldset className="min-w-0">
-        <legend className={LEGEND}>Where</legend>
+      <fieldset className={SECTION}>
+        <legend className={LEGEND}>
+          <StepBadge n={2} />
+          Where
+        </legend>
         <div className={GROUP}>
           <div className={FIELD}>
             <label htmlFor={ids("placeId").input} className={LABEL}>
@@ -314,7 +341,7 @@ export default function CreateSessionForm({
 
           <div className={FIELD}>
             <label htmlFor={ids("room").input} className={LABEL}>
-              Room <span className="font-normal text-neutral-600 dark:text-neutral-400">(optional)</span>
+              Room <span className="font-normal text-white/72">(optional)</span>
             </label>
             <input
               id={ids("room").input}
@@ -332,8 +359,11 @@ export default function CreateSessionForm({
       </fieldset>
 
       {/* -------------------------------------------------------------- When */}
-      <fieldset className="min-w-0">
-        <legend className={LEGEND}>When</legend>
+      <fieldset className={SECTION}>
+        <legend className={LEGEND}>
+          <StepBadge n={3} />
+          When
+        </legend>
         <div className={GROUP}>
           <div className={FIELD}>
             <label htmlFor={ids("startsAt").input} className={LABEL}>
@@ -349,7 +379,7 @@ export default function CreateSessionForm({
               onChange={(event) => setStartsAtLocal(event.target.value)}
               required
               {...a11y("startsAt", true)}
-              className={INPUT}
+              className={DATE_INPUT}
             />
             <input type="hidden" name="startsAt" value={localInputToIso(startsAtLocal)} />
             <FieldError id={ids("startsAt").error} message={errorFor("startsAt")} />
@@ -369,7 +399,7 @@ export default function CreateSessionForm({
               onChange={(event) => setEndsAtLocal(event.target.value)}
               required
               {...a11y("endsAt", true)}
-              className={INPUT}
+              className={DATE_INPUT}
             />
             <input type="hidden" name="endsAt" value={localInputToIso(endsAtLocal)} />
             <FieldError id={ids("endsAt").error} message={errorFor("endsAt")} />
@@ -402,12 +432,12 @@ export default function CreateSessionForm({
       {/* ------------------------------------------------------------ Submit */}
       <div className="flex flex-col gap-3">
         {state.formError && (
-          <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-base text-red-800 dark:bg-red-950 dark:text-red-200">
+          <p role="alert" className={PAGE_ALERT}>
             {state.formError}
           </p>
         )}
         {errorCount > 0 && (
-          <p role="alert" className="text-base text-red-700 dark:text-red-400">
+          <p role="alert" className={PAGE_ALERT}>
             {errorCount === 1
               ? "Check the field marked above."
               : `Check the ${errorCount} fields marked above.`}
@@ -416,7 +446,7 @@ export default function CreateSessionForm({
         <button
           type="submit"
           disabled={pending}
-          className="min-h-11 rounded-md bg-neutral-900 px-5 text-base font-medium text-white hover:bg-neutral-700 disabled:cursor-wait disabled:opacity-60 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+          className={`${BUTTON_PRIMARY_LIGHT} h-14 w-full disabled:cursor-wait`}
         >
           {pending ? "Creating session…" : "Create session"}
         </button>
@@ -428,7 +458,7 @@ export default function CreateSessionForm({
 function FieldError({ id, message }: { id: string; message: string | undefined }) {
   if (!message) return null;
   return (
-    <p id={id} role="alert" className="text-sm text-red-700 dark:text-red-400">
+    <p id={id} role="alert" className={FIELD_ERROR}>
       {message}
     </p>
   );

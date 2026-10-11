@@ -32,6 +32,23 @@ function session(overrides: Partial<SessionListItem> = {}): SessionListItem {
 const plain = (text: string | null) => (text ?? "").replace(/\s+/g, " ");
 
 describe("<SessionCard>", () => {
+  it("shows how many are going out of the capacity", () => {
+    render(<SessionCard session={session({ capacity: 6, attendeeCount: 4, seatsLeft: 2 })} now={now} />);
+    expect(screen.getByText("4 of 6 going")).toBeTruthy();
+  });
+
+  it("renders a compact card with the same facts for the home feed", () => {
+    render(<SessionCard session={session()} now={now} variant="compact" />);
+    const card = screen.getByRole("article");
+    expect(plain(within(card).getByRole("heading").textContent)).toBe(
+      "CS 3251 · Intermediate Software Design",
+    );
+    expect(within(card).getByText("Design patterns review")).toBeTruthy();
+    expect(within(card).getByText("2 seats left")).toBeTruthy();
+    expect(within(card).getByText("Priya")).toBeTruthy();
+    expect(card.querySelector("time")?.getAttribute("dateTime")).toBe("2026-10-01T19:00:00.000Z");
+  });
+
   it("shows the course, topic, place, room, campus time and host", () => {
     render(<SessionCard session={session()} now={now} />);
     const card = screen.getByRole("article");

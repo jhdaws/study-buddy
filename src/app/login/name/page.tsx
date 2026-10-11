@@ -20,6 +20,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import AuthScene from "@/components/AuthScene";
 import DisplayNameForm from "@/components/DisplayNameForm";
 import { firstParam, loginPath, safeNext, safeNextPath } from "@/lib/safe-next";
 import { createClient, fetchDisplayName } from "@/lib/supabase/server";
@@ -47,12 +48,16 @@ export default async function DisplayNamePage({
   }
 
   return (
-    <main>
-      <h1 className="text-2xl font-semibold">One more thing</h1>
-      <p className="mt-1 mb-6 text-base text-neutral-600 dark:text-neutral-400">
-        Choose the name other students will see. Your email address is never shown to anyone.
-      </p>
-      <DisplayNameForm next={next} />
-    </main>
+    <AuthScene>
+      <main>
+        <h1 className="text-center text-3xl leading-tight font-extrabold tracking-tight">
+          What should classmates call you?
+        </h1>
+        <p className="mt-2 mb-6 text-center text-base text-white/80">
+          This is the name other students see. Your email address is never shown to anyone.
+        </p>
+        <DisplayNameForm next={next} />
+      </main>
+    </AuthScene>
   );
 }

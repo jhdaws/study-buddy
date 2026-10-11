@@ -1,18 +1,10 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import "@fontsource-variable/manrope";
 import "./globals.css";
 
+import AppShell from "@/components/AppShell";
 import SiteHeader from "@/components/SiteHeader";
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+import TabBar from "@/components/TabBar";
 
 export const metadata: Metadata = {
   // Pages set a plain `title`; the template adds the app name after it.
@@ -25,33 +17,34 @@ export const metadata: Metadata = {
 };
 
 // The app is used one-handed, walking across campus -- see
-// docs/adr/0004-mobile-first.md.
+// docs/adr/0004-mobile-first.md. `viewportFit: cover` lets the tab bar use
+// env(safe-area-inset-bottom) on iPhones.
 export const viewport = {
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0a1a36",
 };
 
 // Typed explicitly rather than with Next's generated `LayoutProps<"/">`, so
 // `npm run typecheck` works on a clean checkout without a build first.
 //
-// The shell (W5, #12): the header on every page, then one centred,
-// single-column container (ADR 0004: a max-width cap, not a desktop grid that
-// collapses). Pages render their own <main> inside it.
+// The shell: <AppShell> wraps every page in the top bar, one centred,
+// single-column container (ADR 0004: a max-width cap, not a desktop grid
+// that collapses) and the phone tab bar -- except sign-in, which is a
+// full-screen scene. Manrope is self-hosted from npm (@fontsource-variable),
+// so builds do not need to reach Google Fonts. Pages render their own <main>.
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="flex min-h-full flex-col">
-        <SiteHeader />
-        <div className="mx-auto w-full max-w-xl flex-1 px-4 pt-6 pb-12">
+    <html lang="en" className="h-full antialiased">
+      <body className="min-h-full bg-sky-100">
+        <AppShell header={<SiteHeader />} tabBar={<TabBar />}>
           {children}
-        </div>
+        </AppShell>
       </body>
     </html>
   );

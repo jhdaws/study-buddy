@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { signIn, verifyCode } from "@/app/login/actions";
 
-import SignInForm from "./SignInForm";
+import SignInForm, { RESEND_AFTER_SECONDS } from "./SignInForm";
 
 // The real actions are a "use server" module that talks to Supabase; they
 // are replaced so the form can be driven in jsdom.
@@ -82,7 +82,7 @@ describe("<SignInForm> email step", () => {
     fireEvent.change(screen.getByLabelText("Vanderbilt email"), {
       target: { value: "Jane@Vanderbilt.edu" },
     });
-    await click(/email me a sign-in code/i);
+    await click(/send code/i);
 
     expect(signInMock).toHaveBeenCalledTimes(1);
     const sent = signInMock.mock.calls[0][1] as FormData;
@@ -96,6 +96,41 @@ describe("<SignInForm> email step", () => {
 
 describe("<SignInForm> code step", () => {
   const sent = { sentTo: "jane@vanderbilt.edu" };
+
+  it("offers a resend only after the countdown, posting the same address to signIn", async () => {
+    vi.useFakeTimers();
+    try {
+      signInMock.mockResolvedValue({ sentTo: "jane@vanderbilt.edu" });
+      render(<SignInForm next="/sessions/new" initialState={sent} />);
+      expect(screen.getByText(/Resend in 1:00/)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: /resend code/i })).toBeNull();
+
+      for (let i = 0; i < RESEND_AFTER_SECONDS; i++) {
+        await act(async () => {
+          vi.advanceTimersByTime(1000);
+        });
+      }
+      vi.useRealTimers();
+      await click(/resend code/i);
+
+      expect(signInMock).toHaveBeenCalledTimes(1);
+      const data = signInMock.mock.calls[0][1] as FormData;
+      expect(data.get("email")).toBe("jane@vanderbilt.edu");
+      expect(data.get("next")).toBe("/sessions/new");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("draws one box per digit, at least six, over a single real input", () => {
+    render(<SignInForm initialState={sent} />);
+    const code = screen.getByLabelText("Sign-in code") as HTMLInputElement;
+    const boxes = () => code.parentElement!.querySelectorAll("[aria-hidden] > span");
+    expect(boxes()).toHaveLength(6);
+    fireEvent.change(code, { target: { value: "12345678" } });
+    expect(boxes()).toHaveLength(8);
+    expect(boxes()[7].textContent).toBe("8");
+  });
 
   it("asks for the code with a numeric, one-time-code input", () => {
     render(<SignInForm next="/sessions/new" initialState={sent} />);
@@ -170,7 +205,7 @@ describe("<SignInForm> code step", () => {
     fireEvent.change(screen.getByLabelText("Vanderbilt email"), {
       target: { value: "other@vanderbilt.edu" },
     });
-    await click(/email me a sign-in code/i);
+    await click(/send code/i);
 
     expect(screen.getByRole("status").textContent).toContain("other@vanderbilt.edu");
     expect(hidden("email")?.value).toBe("other@vanderbilt.edu");

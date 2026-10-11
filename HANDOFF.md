@@ -71,6 +71,64 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-10-11 · Claude Design restyle of everything Sprints 1-3 built
+
+**Branch:** `ui-design-refresh`, from `a-us-01-sign-in` (#33) with `main`
+merged in (`6b3e187`, docs-only conflicts) · **Commits made:** the merge and
+the restyle. Not pushed at the time of writing; no PR yet.
+
+### What changed
+- **Look only, no behaviour change** except two additions to sign-in: a
+  "Resend code" button after a 60s countdown, and a "Sign in to host a
+  session" / "Sign in to see study sessions" note when `/login` has a `next`.
+- Tokens and glass utilities in `globals.css`; shared class strings in
+  `src/components/ui/styles.ts`; inline icons and the logo in
+  `src/components/ui/`. Manrope comes from `@fontsource-variable/manrope`
+  (new dependency) so builds never reach Google Fonts.
+- `AppShell` hides the header and tab bar on `/login*` (a full-screen
+  `AuthScene` there). Done this way, not with route groups, so
+  `src/app/sessions/*` does not move under #32.
+- Home (`src/app/page.tsx`) is now a signed-out pitch, or a signed-in page
+  with a greeting, the open-session count, the soonest session and a feed,
+  all from `listSessions()`.
+
+### Verified versus assumed
+- **Verified:** lint, typecheck, 281 unit tests, `next build`. Every screen
+  screenshotted at 375 and 1280 px against a throwaway fake Supabase (a
+  20-line Node server answering `/auth/v1/user`, `/rest/v1/profiles`,
+  `/auth/v1/otp` and `/auth/v1/verify`, plus a hand-made session cookie).
+  It is not in the repo. No page scrolls sideways at 375 or 768 px (measured).
+  Text colours measured for WCAG AA on the lightest point of dark glass.
+- **Not verified:** anything against real Supabase; a real phone (iOS
+  one-time-code autofill into the six-box field in particular); a screen
+  reader pass (TASK-04).
+
+### Decided in conversation, not yet written down
+- Build only what exists; leave the design's stats, Up next, study requests,
+  map and My sessions out until they have a backend. Moses's call.
+
+### Open questions for the user
+- **ADR 0004 vs the design's desktop dashboard** (sidebar plus card grid).
+  Kept single-column per the ADR; changing it is a team decision.
+- **Hosted Supabase's minimum interval between emails.** `RESEND_AFTER_SECONDS`
+  (60) assumes the default; check Authentication -> Rate Limits and keep them
+  equal.
+- The 3-step host form from the design was not built (one form, restyled).
+
+### Things the next agent should be careful about
+- **Absolutely positioned things inside a horizontal scroller escape it**
+  unless an ancestor inside the scroller is positioned. The home feed's
+  `sr-only` labels made the page 913px wide until `SessionCard` got
+  `relative`. Keep it.
+- In `styles.ts`, size with `h-*` and keep `min-h-11` separately; two
+  `min-h-*` classes on one element fight. Tests check for `min-h-11` and
+  `text-base`.
+- Don't `pkill -f <pattern>` in this environment's shell: the pattern
+  matches the shell's own command line and kills it. Kill by port
+  (`fuser -k 3000/tcp`).
+
+---
+
 ## 2026-10-01 · Finished the stalled Track A session: A1 commit, push, PR
 
 **Branch:** `a-us-01-sign-in` · **Commits made:** the A1 commit (config,
