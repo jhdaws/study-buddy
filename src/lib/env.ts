@@ -46,6 +46,26 @@ export function supabaseEnv(): { url: string; anonKey: string } {
   return { url, anonKey };
 }
 
+/**
+ * Supabase secret key. SERVER ONLY: it bypasses Row Level Security on every
+ * table. Read by src/lib/supabase/admin.ts and nowhere else, which uses it
+ * only to write `locations` (ADR 0008 rule 12).
+ */
+export function supabaseSecretKey(): string {
+  const key = required("SUPABASE_SECRET_KEY", process.env.SUPABASE_SECRET_KEY);
+
+  // The publishable key sits next to it in the dashboard. Pasted here it
+  // would make every location write fail on RLS, far from the cause.
+  if (key.startsWith("sb_publishable_")) {
+    throw new Error(
+      "SUPABASE_SECRET_KEY is set to the publishable key. Use the secret key " +
+        "(Project Settings -> API Keys, \"secret\"; locally, `npm run db:status`).",
+    );
+  }
+
+  return key;
+}
+
 /** Maps JavaScript API key. Ships to the browser; restrict it by HTTP referrer. */
 export function googleMapsBrowserKey(): string {
   return required(

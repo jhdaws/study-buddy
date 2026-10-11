@@ -28,10 +28,11 @@ Sprint 2 table as **structure only**: `profiles`, `departments`, `courses`,
 `locations`, `sessions`, `session_attendees`, and the `session_status` enum.
 The migration's header says which track owns which table.
 
-**Row Level Security is enabled on every table, with no policies** (A2 has
-since added the policies for `profiles`). Nothing
-is readable or writable through the Data API until the owning track adds its
-policies. That is intended — a missing policy fails closed. Do not add broad
+**Row Level Security is enabled on every table, with no policies** — except
+`profiles` (A2) and `locations`, where M3's migration
+(`*_locations_policies.sql`) lets signed-in users read and revokes client write
+grants. Nothing else is readable or writable through the Data API until the
+owning track adds its policies. That is intended — a missing policy fails closed. Do not add broad
 policies to "make it work". `tests/db/rls.test.ts` fails if any table in
 `public` is created without RLS.
 
@@ -42,7 +43,7 @@ The rules each track adds, in its own migration:
 | A2 | Signup triggers (Vanderbilt-only, create the profile row); profile policies |
 | S1 | Session `CHECK`s; `create_session`; session and roster policies |
 | S2 | Normalisation and create-on-use for departments and courses; their policies |
-| M3 | Read policy on `locations`; rows written only by the server |
+| M3 | Read policy on `locations`; rows written only by the server — **written, not yet run** |
 
 Decisions every migration should respect (ADR 0008):
 
