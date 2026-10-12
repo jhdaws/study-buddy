@@ -19,6 +19,7 @@ import {
   signInErrorMessage,
   verifyCodeErrorMessage,
 } from "@/lib/errors";
+import { isDemoEmail } from "@/lib/demo-account";
 import { requestOrigin } from "@/lib/request-origin";
 import { DEFAULT_NEXT_PATH, loginPath, safeNext, safeNextPath } from "@/lib/safe-next";
 import { createClient, getCurrentUser, pathAfterSignIn } from "@/lib/supabase/server";
@@ -58,20 +59,21 @@ export type DisplayNameState = FormState<DisplayNameField>;
 // Form fields: `email`, and an optional hidden `next` (where to go after
 // signing in; dropped unless safeNextPath() accepts it).
 //
-// The link Supabase emails is built by the template in
-// supabase/templates/magic_link.html (A1) from `emailRedirectTo`:
-//   <emailRedirectTo>&token_hash=...&type=email
-// so emailRedirectTo is ALWAYS /auth/confirm?next=... on this deployment's
-// origin -- it must carry a query string for the template's "&" to append to.
-// Supabase uses it only if it matches the redirect allow list (A1, and
-// config.toml locally); otherwise the template falls back to the Site URL.
+// The email carries a one-time code only (A1's template,
+// supabase/templates/magic_link.html; the link was dropped on 2026-10-12 at
+// the user's request). `emailRedirectTo` is still passed so that an email
+// built from an older template, or Supabase's default one, still lands on
+// /auth/confirm on this origin rather than somewhere that cannot sign in.
+//
+// The demo address (src/lib/demo-account.ts) gets no email at all: it goes
+// straight to the code step, and verifyCode() handles it.
 //
 // Same reply whether or not the address already has an account:
 // signInWithOtp() signs up a new address and signs in a known one, and both
 // end in { sentTo }.
 // ---------------------------------------------------------------------------
 
-/** Send a magic sign-in link to a Vanderbilt address (US-01). */
+/** Email a one-time sign-in code to a Vanderbilt address (US-01). */
 export async function signIn(
   _prev: SignInState,
   formData: FormData,
@@ -81,6 +83,10 @@ export async function signIn(
     return invalidFormState(parsed.error, formData);
   }
   const { email } = parsed.data;
+
+  if (isDemoEmail(email)) {
+    return { sentTo: email };
+  }
 
   const origin = requestOrigin(await headers());
   if (!origin) {
@@ -103,16 +109,16 @@ export async function signIn(
 }
 
 // ---------------------------------------------------------------------------
-// verifyCode -- A3 (#16), added at the user's request alongside the link.
+// verifyCode -- A3 (#16).
 //
-// The sign-in email carries a one-time code as well as the link (A1's
-// template), at the user's request: Vanderbilt mail goes through Microsoft
-// Outlook, whose Safe Links scanning can open links before the student does,
-// and a code typed on a phone works even when the email was opened on a
-// laptop. CAVEAT: link and code are the same token -- whichever is used
-// first works and the other then fails -- so a scanner that opens the link
-// spends the code too. Whether Vanderbilt's scanning does that is untested;
-// supabase/README.md ("Hosted auth settings") has the fix if it does.
+// The sign-in email carries a one-time code and, since 2026-10-12, nothing
+// else: Vanderbilt mail goes through Microsoft Outlook, whose Safe Links
+// scanning can open a link before the student does and spend the token, and
+// a code typed on a phone works even when the email was opened on a laptop.
+//
+// The demo address signs in with signInWithPassword(), the typed code being
+// the demo user's password (src/lib/demo-account.ts). A wrong one comes back
+// as invalid_credentials, which errors.ts maps to the usual wrong-code text.
 //
 // Form fields: `email` and `next` (hidden, carried over from the sign-in
 // step) and `code`. The email is re-validated -- the hidden field is as
@@ -131,7 +137,9 @@ export async function verifyCode(
   const { email, code } = parsed.data;
 
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
+  const { data, error } = isDemoEmail(email)
+    ? await supabase.auth.signInWithPassword({ email, password: code })
+    : await supabase.auth.verifyOtp({ email, token: code, type: "email" });
   if (error || !data.user) {
     return { formError: verifyCodeErrorMessage(error), values: formValues(formData) };
   }

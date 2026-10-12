@@ -71,6 +71,34 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-10-12 · Sign-in email is code-only; demo account njpm@vanderbilt.edu
+
+### What changed
+
+On branch `ui-calm-pass`. The sign-in email template now carries only the
+code (`{{ .Token }}`); the link is gone (Outlook link scanning spent the
+shared token). `/auth/confirm` and `emailRedirectTo` stay for old emails.
+New demo account: `njpm@vanderbilt.edu` sends no email and signs in with
+code `123456`, which is that user's password in Supabase Auth
+(`src/lib/demo-account.ts`). Docs: `supabase/README.md` sections 2 and 6.
+
+### Uncommitted at end of session
+
+Nothing; committed and pushed on `ui-calm-pass` (no PR open yet).
+
+### Open questions for the user
+
+The hosted dashboard still needs: the template pasted into both "Magic
+link" and "Confirm signup", and the demo user created (Add user, password
+`123456`, Auto Confirm). Neither has been confirmed done.
+
+### Things the next agent should be careful about
+
+Supabase has no "codes instead of links" toggle; the template decides. If
+production emails arrive with a link and no code, the dashboard template was
+never replaced. The demo account only works where the user exists, and is
+public by design.
+
 ## 2026-10-11 (late) · Calm UI pass; sign-in blocked by the email rate limit
 
 **Branch:** `ui-calm-pass`, from `main` at `e94cf8e` · **Commits made:** one.

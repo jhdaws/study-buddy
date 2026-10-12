@@ -27,6 +27,7 @@ vi.mock("next/navigation", () => ({
 
 const auth = vi.hoisted(() => ({
   signInWithOtp: vi.fn(),
+  signInWithPassword: vi.fn(),
   verifyOtp: vi.fn(),
   signOut: vi.fn(),
 }));
@@ -133,6 +134,12 @@ describe("signIn", () => {
     expect(state.formError).not.toMatch(/rate limit exceeded/);
     expect(state.values?.email).toBe("jane@vanderbilt.edu");
   });
+
+  it("sends no email for the demo address and goes straight to the code step", async () => {
+    const state = await signIn({}, form({ email: " NJPM@vanderbilt.edu " }));
+    expect(state).toEqual({ sentTo: "njpm@vanderbilt.edu" });
+    expect(auth.signInWithOtp).not.toHaveBeenCalled();
+  });
 });
 
 describe("verifyCode", () => {
@@ -185,6 +192,29 @@ describe("verifyCode", () => {
     expect(state.formError).toMatch(/didn't work/);
     expect(state.formError).not.toMatch(/Token/);
     expect(state.values?.code).toBe("123456");
+  });
+
+  it("signs the demo address in with its code as the password", async () => {
+    auth.signInWithPassword.mockResolvedValue({ data: { user: { id: "demo" } }, error: null });
+    const path = await redirectOf(
+      verifyCode({}, form({ email: "njpm@vanderbilt.edu", code: "123456", next: "/sessions/new" })),
+    );
+    expect(auth.signInWithPassword).toHaveBeenCalledWith({
+      email: "njpm@vanderbilt.edu",
+      password: "123456",
+    });
+    expect(auth.verifyOtp).not.toHaveBeenCalled();
+    expect(path).toBe("/sessions/new");
+  });
+
+  it("treats a wrong demo code like any wrong code", async () => {
+    auth.signInWithPassword.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { code: "invalid_credentials", status: 400, message: "Invalid login credentials" },
+    });
+    const state = await verifyCode({}, form({ email: "njpm@vanderbilt.edu", code: "000000" }));
+    expect(state.formError).toMatch(/didn't work/);
+    expect(state.formError).not.toMatch(/Invalid login/);
   });
 });
 

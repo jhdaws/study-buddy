@@ -246,7 +246,7 @@ function CodeStep({
         We sent a sign-in code to{" "}
         <strong className="block font-bold text-white [overflow-wrap:anywhere]">{email}</strong>
         <span className="mt-1 block text-sm text-white/72">
-          Enter the code below, or open the link in the same email.
+          Enter the code from that email below.
         </span>
       </p>
 
@@ -347,7 +347,7 @@ function CodeStep({
         </button>
       </div>
       <p className="mt-2 border-t border-white/10 pt-4 text-center text-sm text-white/72">
-        Codes and links work once, for an hour.
+        Codes work once, for an hour.
       </p>
     </section>
   );

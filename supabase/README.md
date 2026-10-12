@@ -80,8 +80,9 @@ in Mailpit at http://127.0.0.1:54324.
 
 ### 1. Authentication → URL Configuration
 
-- **Site URL:** `https://study-buddy-jdaws.vercel.app` — **no trailing
-  slash**: the email template appends `/auth/confirm` to it.
+- **Site URL:** `https://study-buddy-jdaws.vercel.app` — no trailing slash.
+  The email no longer contains a link, but Supabase still checks
+  `emailRedirectTo` against this and the list below.
 - **Redirect URLs** — add:
   - `https://study-buddy-jdaws.vercel.app/**`
   - `http://localhost:3000/**` and `http://127.0.0.1:3000/**` — for
@@ -116,37 +117,26 @@ one. Same subject and body for both:
 - **Body:** paste the whole of
   [`templates/magic_link.html`](./templates/magic_link.html), unchanged.
 
-What the template does:
+What the template does: it carries **the code (`{{ .Token }}`) and nothing
+else**. Students type it into `/login` (A3's `verifyCode()`); it works on any
+device, whichever one opened the email.
 
-- **The code (`{{ .Token }}`) comes first.** Students type it into
-  `/login` (A3's `verifyCode()`). It works on any device, whichever one
-  opened the email.
-- **The link is second:** `{{ .RedirectTo }}&token_hash=…&type=email`.
-  `RedirectTo` is what `signIn()` asked for — always
-  `<origin>/auth/confirm?next=…`, so it already has a `?` and the template
-  appends with `&`. That one template works for production, previews and
-  localhost, because the link goes back to whichever site sent it. If
-  Supabase rejected the redirect and substituted the Site URL, the
-  `{{ if eq .RedirectTo .SiteURL }}` branch builds
-  `<Site URL>/auth/confirm?token_hash=…` instead, which signs the student
-  in on production rather than producing a broken link.
-- **Why not the default template:** its `{{ .ConfirmationURL }}` goes
-  through Supabase's own `/verify` endpoint, which hands back either a
-  session in the URL fragment (a server cannot read it) or a PKCE `?code=`
-  that only the browser that asked for the email can exchange. `/auth/confirm`
-  takes `token_hash` instead (Supabase's server-side auth docs), which works
-  from any browser.
+**Codes, not magic links.** Supabase has no "send codes" switch:
+`signInWithOtp()` always sends the *Magic link* (or *Confirm signup*)
+template, and the template alone decides whether the student gets a link,
+a code, or both. Supabase's default template contains only a link
+(`{{ .ConfirmationURL }}`), so **until this template is pasted into the
+dashboard, production emails have no code in them.** Ours contains only
+`{{ .Token }}`. The link was dropped on 2026-10-12: Vanderbilt mail goes
+through Microsoft Outlook, whose link scanning can open a link before the
+student does and spend the one-time token (Supabase's email-template docs
+warn about this), and the link and the code are the same token, so a
+scanned link also broke the code. With no link in the email there is
+nothing to scan.
 
-**Mail scanners — a known risk, unresolved.** Supabase's email-template docs
-warn that scanners such as Microsoft Defender may open links in an email
-before the recipient does, which spends a one-time token. Vanderbilt mail
-goes through Microsoft Outlook. The code was added so a student has another
-way in — but **the code and the link are the same token**: if a scanner
-opens the link, the code stops working too. Whether Vanderbilt's scanning
-actually prefetches has not been tested. If it does, the fix is to make the
-link harmless to open: `/auth/confirm` shows a "Finish signing in" button
-and only a POST spends the token (Supabase's suggested option 2), or the
-email carries the code only. See `HANDOFF.md`.
+`/auth/confirm` still exists and `signIn()` still passes `emailRedirectTo`,
+so an email built from an old or default template lands somewhere that
+works, but nothing in the current email points there.
 
 ### 3. Authentication → Sign In / Providers → Email
 
@@ -184,3 +174,27 @@ never in this repository.
 Production is behind Vercel's login (Deployment Protection — W1). Until that
 is turned off for production, a student following an emailed link hits
 Vercel's sign-in page, not `/auth/confirm`.
+
+### 6. Demo account (`njpm@vanderbilt.edu`, code `123456`)
+
+A fixed account for graders and classmates without a Vanderbilt inbox, and
+for demos that should not spend the two-emails-an-hour allowance. Entering
+`njpm@vanderbilt.edu` on `/login` sends **no email**; the code step accepts
+`123456`. How: `src/lib/demo-account.ts`. The code is the demo user's
+**password** in Supabase Auth, so the account has to exist in each project
+that should accept it:
+
+- **Hosted:** Authentication → Users → Add user → Create new user. Email
+  `njpm@vanderbilt.edu`, password `123456`, **Auto Confirm User** ticked.
+  If the dashboard refuses the password as too short or weak, check
+  Authentication → Sign In / Providers → Email → minimum password length
+  (default 6) and leaked-password protection (Pro plans only).
+- **Local:** the same in Studio (http://127.0.0.1:54323), or
+  `curl -X POST http://127.0.0.1:54321/auth/v1/admin/users -H "apikey: $SECRET" -H "Authorization: Bearer $SECRET" -H "Content-Type: application/json" -d '{"email":"njpm@vanderbilt.edu","password":"123456","email_confirm":true}'`
+  with the secret key from `npx supabase status`.
+
+A2's signup trigger accepts the address (it is `@vanderbilt.edu`) and makes
+its profile; the first sign-in then asks for a display name as usual. Where
+the account does not exist, the demo address just gets "That code didn't
+work". The address and code are public: never give this account anything
+worth protecting, and delete the user to switch the demo off.
