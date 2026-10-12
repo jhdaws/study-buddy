@@ -71,6 +71,197 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-10-11 (later) · Second UI pass: closer to the PDF, better sessions page
+
+**Branch:** `ui-design-refresh` (pushed) · **Commits made:** one, on top of
+the restyle. No PR yet: it waits on #33 merging.
+
+### What changed
+- **Desktop (lg+):** a sticky glass sidebar (`SiteSidebar`, `SidebarNav`)
+  replaces the top bar; the home page uses a grid (ring, soonest session, Up
+  next; then the feed; then the host nudge). Phones unchanged in structure.
+- **Phone home** follows spec p19: hero with the soonest session large, Up
+  next with a date tile, the swipe feed, a "Campus right now" ring (seats
+  taken across open sessions -- real numbers, not the spec's personal stats).
+- **Account sheet** (`AccountSheet`, spec p15): the avatar opens a sheet with
+  sign-out. Portalled to `<body>` (see "careful" below).
+- **/sessions:** search, chips (All / Happening now / Today / This week, plus
+  Has seats), day headings, a live count, a no-match state. Pure rules in
+  `src/lib/session-filters.ts`. `SessionBrowser` is now a Client Component.
+- **Host form:** capacity stepper (nudges the uncontrolled input, so the
+  post-action reset still works) and a live `SessionPreview` card, sticky
+  beside the form on desktop. Neither adds a field to what is submitted.
+- ADR 0004 has a dated, **proposed** note about the desktop layout;
+  `docs/test-cases.md` marks US-06 🚧 for the client-side search.
+
+### Verified versus assumed
+- **Verified:** lint, typecheck, 300 unit tests, `next build`; screenshots
+  of every screen as real 375x812 frames and at 1440 px, against the same
+  throwaway fake Supabase as the entry below. No sideways scroll at 375.
+- **Not verified:** real Supabase, real phones, a screen-reader pass.
+
+### Open questions for the user
+- The team still has to accept the desktop layout (ADR 0004 note).
+- Signing in lands on `/sessions` (`safeNext`'s default, from #33). With a
+  home dashboard, `/` may be the better landing page; not changed here.
+
+### Things the next agent should be careful about
+- **`backdrop-filter` makes an element the containing block for
+  `position: fixed` descendants.** Anything fixed inside the top bar (which
+  blurs) is pinned to the bar. That is why `AccountSheet` uses a portal.
+- **Never call a function exported from a `"use client"` file in a Server
+  Component** -- it compiles, passes unit tests, and throws at render. Shared
+  helpers live in `src/lib/format.ts` (`formatInitial` moved there for this).
+- **SVG gradient ids must be unique per document**; the logo renders twice
+  (top bar and sidebar, one hidden), so its tile is a CSS gradient now.
+- Times formatted on both server and client differ in invisible spacing
+  (ICU); `SessionCard`'s `<time>` has `suppressHydrationWarning` for that.
+- Phone screenshots: capture 375x812 viewport frames, not `fullPage` -- a
+  full-page phone capture is an unreadable strip, and fixed bars land
+  mid-page.
+
+---
+
+## 2026-10-11 · Claude Design restyle of everything Sprints 1-3 built
+
+**Branch:** `ui-design-refresh`, from `a-us-01-sign-in` (#33) with `main`
+merged in (`6b3e187`, docs-only conflicts) · **Commits made:** the merge and
+the restyle. Not pushed at the time of writing; no PR yet.
+
+### What changed
+- **Look only, no behaviour change** except two additions to sign-in: a
+  "Resend code" button after a 60s countdown, and a "Sign in to host a
+  session" / "Sign in to see study sessions" note when `/login` has a `next`.
+- Tokens and glass utilities in `globals.css`; shared class strings in
+  `src/components/ui/styles.ts`; inline icons and the logo in
+  `src/components/ui/`. Manrope comes from `@fontsource-variable/manrope`
+  (new dependency) so builds never reach Google Fonts.
+- `AppShell` hides the header and tab bar on `/login*` (a full-screen
+  `AuthScene` there). Done this way, not with route groups, so
+  `src/app/sessions/*` does not move under #32.
+- Home (`src/app/page.tsx`) is now a signed-out pitch, or a signed-in page
+  with a greeting, the open-session count, the soonest session and a feed,
+  all from `listSessions()`.
+
+### Verified versus assumed
+- **Verified:** lint, typecheck, 281 unit tests, `next build`. Every screen
+  screenshotted at 375 and 1280 px against a throwaway fake Supabase (a
+  20-line Node server answering `/auth/v1/user`, `/rest/v1/profiles`,
+  `/auth/v1/otp` and `/auth/v1/verify`, plus a hand-made session cookie).
+  It is not in the repo. No page scrolls sideways at 375 or 768 px (measured).
+  Text colours measured for WCAG AA on the lightest point of dark glass.
+- **Not verified:** anything against real Supabase; a real phone (iOS
+  one-time-code autofill into the six-box field in particular); a screen
+  reader pass (TASK-04).
+
+### Decided in conversation, not yet written down
+- Build only what exists; leave the design's stats, Up next, study requests,
+  map and My sessions out until they have a backend. Moses's call.
+
+### Open questions for the user
+- **ADR 0004 vs the design's desktop dashboard** (sidebar plus card grid).
+  Kept single-column per the ADR; changing it is a team decision.
+- **Hosted Supabase's minimum interval between emails.** `RESEND_AFTER_SECONDS`
+  (60) assumes the default; check Authentication -> Rate Limits and keep them
+  equal.
+- The 3-step host form from the design was not built (one form, restyled).
+
+### Things the next agent should be careful about
+- **Absolutely positioned things inside a horizontal scroller escape it**
+  unless an ancestor inside the scroller is positioned. The home feed's
+  `sr-only` labels made the page 913px wide until `SessionCard` got
+  `relative`. Keep it.
+- In `styles.ts`, size with `h-*` and keep `min-h-11` separately; two
+  `min-h-*` classes on one element fight. Tests check for `min-h-11` and
+  `text-base`.
+- Don't `pkill -f <pattern>` in this environment's shell: the pattern
+  matches the shell's own command line and kills it. Kill by port
+  (`fuser -k 3000/tcp`).
+
+---
+
+## 2026-10-01 · Finished the stalled Track A session: A1 commit, push, PR
+
+**Branch:** `a-us-01-sign-in` · **Commits made:** the A1 commit (config,
+template, README, tickets, usage log, CLAUDE.md, both HANDOFF entries)
+
+### What changed
+- Nothing new in code. The entry below was written before its session
+  stalled: at that point A1 was **uncommitted**, the branch was **not pushed**
+  and **no PR existed**, despite what it says. This session committed A1,
+  pushed, and opened the PR. The rebase it warns about had finished cleanly
+  (reflog checked).
+
+### Verified versus assumed
+- **Verified (this session, PowerShell):** lint, typecheck, `npm test`
+  (227 passed), build.
+- Everything listed as not verified in the entry below still is.
+
+### Open questions for the user
+- **Hosted Supabase auth settings still not applied.** Pushing them with
+  `supabase config push` was blocked by the agent's permission checks. A
+  scratch copy of `config.toml` with production URLs exists in the session
+  scratchpad. It must also set `[auth.email] enable_confirmations = true`
+  before any push: the repo's local value is `false`, and `config push` sends
+  every declared property. Answer **n** to non-auth sections. The dashboard
+  route in `supabase/README.md` avoids all of that.
+- **Vercel Deployment Protection:** Moses's Vercel login only sees team
+  `moses-bandas-projects`; the study-buddy project is on jhdaws's account.
+  jhdaws has to change it, or add Moses to that team.
+- Email delivery (org members vs custom SMTP) is still undecided.
+
+---
+
+## 2026-10-01 · Track A sign-in (A1 repo half, A2, A3, A4); M3 in PR #31
+
+**Branch:** `a-us-01-sign-in` (from `main` at 2a6ee7e) · **Commits made:** one
+per ticket — A2, A3, A4, A1 — PR opened this session. Separately, M3 is on
+`m3-us-02-resolve-place`, PR #31 (its own HANDOFF entry is on that branch).
+
+### What changed
+- **A2:** `20260930210000_profile_rules.sql` — Vanderbilt-only trigger on
+  `auth.users` (insert and email change), profile created on signup,
+  `display_name` CHECK mirroring `displayNameSchema`, RLS (read for signed-in
+  users, update own `display_name` only). Trigger functions live in a
+  `private` schema so generated types do not change.
+- **A3:** `/login` with an email step and a **6-digit code** step
+  (`verifyCode()`), `/auth/confirm` for the link, real `signIn()` and
+  `signOut()`; `safe-next.ts` and `request-origin.ts` as pure, tested helpers.
+- **A4:** `/login/name` step, `saveDisplayName()`, proxy redirects signed-out
+  page requests on `/sessions*` to `/login?next=`, real `requireUser()`.
+- **A1 (repo half):** `config.toml` templates, `supabase/templates/magic_link.html`,
+  and "Hosted auth settings (A1)" in `supabase/README.md`.
+
+### Decided in conversation, not yet written down
+- **Sign-in by code as well as link** — the user's call: Vanderbilt mail runs
+  through Outlook, whose link scanning can spend a one-time link. ADR 0003
+  says magic link; it may want a dated note. Note the code and the link are
+  the same token, so a scanner that opens the link still kills the code —
+  untested whether Vanderbilt's scanning does that.
+
+### Verified versus assumed
+- **Verified:** lint, typecheck, unit tests and build (see the PR).
+- **Not verified:** the migration and `tests/db/profiles.test.ts` have never
+  run (Docker down here; CI's `db` job is their first run). No real email has
+  been sent: the hosted settings in `supabase/README.md` are **not applied**.
+
+### Open questions for the user
+- Apply the hosted settings (Site URL, redirect URLs, both email templates).
+- Email delivery: the built-in sender reaches only Supabase organization
+  members, 2 emails an hour. The "done when" needs both testers in the org,
+  or custom SMTP.
+- Vercel Deployment Protection still blocks production, so emailed links to
+  production hit Vercel's login.
+
+### Things the next agent should be careful about
+- The subagent that wrote this stalled mid-`git rebase` (an editor command
+  failed on a reword). The rebase had finished; check `git status` and the
+  reflog before assuming anything is half-applied.
+- `npm test` fails in Git Bash ("Vitest failed to find the runner"); run it
+  from PowerShell.
+
+---
+
 ## 2026-09-30 · M3 resolvePlace() written, then a review pass fixed
 
 **Branch:** `m3-us-02-resolve-place` · **Commits made:** none — everything

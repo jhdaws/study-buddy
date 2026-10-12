@@ -376,3 +376,38 @@ describe("<CreateSessionForm> course typeahead", () => {
     expect(screen.queryByRole("listbox")).toBeNull();
   });
 });
+
+describe("<CreateSessionForm> capacity stepper and preview", () => {
+  it("steps capacity up from the minimum and never below it", () => {
+    render(<CreateSessionForm departments={departments} />);
+    const capacity = field("How many people, including you?");
+    expect(capacity.value).toBe("");
+
+    fireEvent.click(screen.getByRole("button", { name: "One more person" }));
+    expect(capacity.value).toBe("2");
+    fireEvent.click(screen.getByRole("button", { name: "One more person" }));
+    expect(capacity.value).toBe("3");
+    for (let i = 0; i < 4; i++) fireEvent.click(screen.getByRole("button", { name: "One fewer person" }));
+    expect(capacity.value).toBe("2");
+    // The stepper adds nothing to what is submitted.
+    expect(submitted().get("capacity")).toBe("2");
+  });
+
+  it("previews the card classmates will see as the host fills the form", () => {
+    const { container } = render(<CreateSessionForm departments={departments} />);
+    const preview = () => container.querySelector("figure")!;
+    expect(preview().getAttribute("aria-hidden")).toBe("true");
+    expect(preview().textContent).toContain("What you're studying");
+
+    change(field("Department"), "CS");
+    change(field("What are you studying?"), "Design patterns review");
+    fireEvent.input(field("What are you studying?"));
+    fireEvent.click(screen.getByRole("button", { name: "One more person" }));
+    fireEvent.click(screen.getByRole("button", { name: "One more person" }));
+
+    expect(preview().textContent).toContain("Design patterns review");
+    expect(preview().textContent).toContain("CS");
+    expect(preview().textContent).toContain("1 of 3 going");
+    expect(preview().textContent).toContain("You");
+  });
+});

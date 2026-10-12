@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  campusDayOffset,
+  formatDateTile,
+  formatInitial,
+  formatStartTime,
   formatCampusDay,
   formatCourseCode,
   formatSeatsLeft,
@@ -110,5 +114,33 @@ describe("small formatters", () => {
 
   it("formats a course code, letter suffix included", () => {
     expect(formatCourseCode({ departmentCode: "CHEM", number: "1601L" })).toBe("CHEM 1601L");
+  });
+});
+
+describe("campus-day helpers", () => {
+  // Thursday 1 Oct 2026, 10 PM in Nashville = 03:00 UTC on Friday.
+  const lateThursday = new Date("2026-10-02T03:00:00Z");
+
+  it("counts days in campus time, not UTC", () => {
+    expect(campusDayOffset(new Date("2026-10-02T04:30:00Z"), lateThursday)).toBe(0); // 11:30 PM Thu
+    expect(campusDayOffset(new Date("2026-10-02T05:30:00Z"), lateThursday)).toBe(1); // 12:30 AM Fri
+    expect(campusDayOffset(new Date("2026-09-30T20:00:00Z"), lateThursday)).toBe(-1);
+  });
+
+  it("names the date tile's parts in campus time", () => {
+    expect(formatDateTile(lateThursday)).toEqual({ weekday: "Thursday", day: "1", month: "October" });
+  });
+
+  it("formats a start time alone", () => {
+    expect(formatStartTime("2026-10-01T22:45:00.000Z").replace(/\s/g, " ")).toBe("5:45 PM");
+  });
+});
+
+describe("formatInitial", () => {
+  it("takes the display name's first letter, or ? without one", () => {
+    expect(formatInitial("moses")).toBe("M");
+    expect(formatInitial("  priya")).toBe("P");
+    expect(formatInitial("")).toBe("?");
+    expect(formatInitial(null)).toBe("?");
   });
 });

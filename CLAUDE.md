@@ -12,13 +12,14 @@ failed. The template and the rules for writing an entry are in that file.
 
 Sprint 2 is in progress (`docs/tickets.md`). The database has a schema
 skeleton (RLS on), a seed of starter departments and courses, and generated
-TypeScript types; the hosted project has the same. The only policy so far is
-M3's: signed-in users may read `locations`, and client write grants on it are
-revoked — that migration **has not yet been run against any database** (see
-`HANDOFF.md`). Every other table still has **no policies**.
+TypeScript types; the hosted project has the same. Policies so far: A2's on
+`profiles`, and M3's on `locations` (signed-in users may read it; client write
+grants revoked). Every other table still has **no policies**.
 The screens — header, session list, create-session form — are built, but on
-**stubs returning fixture data**: nothing is saved or read, and nobody can
-sign in yet. Every stub, its owner, and what its real body must do is in
+**stubs returning fixture data**: nothing is saved or read. Sign-in (Track A:
+an emailed code or link, Vanderbilt only, a display-name step, route
+protection) is written, but waits on the hosted auth settings in
+`supabase/README.md`. Every stub, its owner, and what its real body must do is in
 `docs/contracts.md`. Routes and components for later sprints are still
 comment-only stubs.
 
