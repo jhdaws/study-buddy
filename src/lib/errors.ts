@@ -10,9 +10,11 @@
 //   - A2/A3 (#15, #16): sign-in errors from Supabase Auth (sending a link or
 //     code, and checking a code), and the profile rules from
 //     supabase/migrations/*_profile_rules.sql.
+//   - S1-S3 (#18-#20): what create_session and get_or_create_course raise,
+//     and the CHECKs on sessions, departments and courses
+//     (*_s1_session_rules.sql, *_s2_course_normalization.sql,
+//     *_session_text_limits.sql).
 // Still to come:
-//   - S3 (#20): create_session's errors (S1, #18). Add its constraint names
-//     to CONSTRAINT_MESSAGES and any custom SQLSTATEs to SQLSTATE_MESSAGES.
 //   - Later: the join routine's (session full, cancelled, ended, not signed in).
 
 /** For anything we have not mapped. Says nothing about the cause. */
@@ -43,6 +45,30 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   // A2: the signup trigger. Reaches us only through a direct database call;
   // through Supabase Auth it arrives as an auth error (signInErrorMessage).
   auth_users_vanderbilt_email: "Use your @vanderbilt.edu email address.",
+  // S1, S3: the session rules. Mirror createSessionSchema.
+  sessions_ends_after_starts: "The session has to end after it starts.",
+  sessions_capacity_min: "Capacity must be at least 2 — you count as one.",
+  sessions_topic_length: "Keep the topic to 1 to 120 characters.",
+  sessions_location_label_length: "Keep the location name to 1 to 100 characters.",
+  sessions_room_length: "Keep the room to 50 characters or fewer.",
+  // S2: departments and courses are stored normalised.
+  departments_code_normalised: "That department code isn't valid.",
+  departments_code_length: "Department codes are at most 10 letters or digits.",
+  courses_number_normalised: "Enter a 4-digit course number, like 3251 or 2100W.",
+};
+
+/**
+ * Messages our own database functions raise by name -- `raise exception
+ * 'starts_in_past'` in S1's create_session and S2's get_or_create_course.
+ * Matched on the whole message, so a word inside Postgres's own text never
+ * matches by accident.
+ */
+const RAISED_MESSAGES: Record<string, string> = {
+  not_signed_in: "You've been signed out. Sign in again and try.",
+  display_name_required: "Add a display name before hosting a session.",
+  starts_in_past: "That start time has already passed.",
+  department_required: "Choose or add a department.",
+  invalid_course_number: "Enter a 4-digit course number, like 3251 or 2100W.",
 };
 
 /** SQLSTATE codes with one meaning wherever they come from. */
@@ -54,6 +80,10 @@ const SQLSTATE_MESSAGES: Record<string, string> = {
 /** A message for a database error, safe to show a student. */
 export function databaseErrorMessage(error: DatabaseErrorLike | null | undefined): string {
   if (!error) return GENERIC_ERROR_MESSAGE;
+
+  if (error.message && Object.hasOwn(RAISED_MESSAGES, error.message)) {
+    return RAISED_MESSAGES[error.message];
+  }
 
   const text = `${error.message ?? ""} ${error.details ?? ""}`;
   for (const [constraint, message] of Object.entries(CONSTRAINT_MESSAGES)) {

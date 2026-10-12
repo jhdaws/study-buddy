@@ -18,8 +18,9 @@
 
 import { redirect } from "next/navigation";
 
+import { databaseErrorMessage, type DatabaseErrorLike } from "@/lib/errors";
 import { PlaceError, resolvePlace } from "@/lib/places";
-import { requireUser } from "@/lib/supabase/server";
+import { createClient, requireUser } from "@/lib/supabase/server";
 import {
   createSessionSchema,
   formValues,
@@ -36,34 +37,14 @@ import {
  */
 export type CreateSessionState = FormState<CreateSessionField>;
 
-// ===========================================================================
-// STUB (W4, #11) -- replaced by S3 (#20). Keep the signature.
-//
-// Validates for real and checks the place against the fixtures, then
-// redirects to /sessions WITHOUT SAVING ANYTHING: the new session will not be
-// in the list. That is expected until S3.
-//
-// The real body must, in this order:
-//   1. requireUser() -- redirects signed-out and nameless users (A4, #17).
-//   2. createSessionSchema().safeParse(Object.fromEntries(formData)) -- call
-//      the factory per request so "now" is the request's. On failure return
-//      invalidFormState(...).
-//   3. resolvePlace(placeId) (M3, #24) -> locationId. A PlaceError becomes a
-//      field error on `placeId`; anything else is unexpected -- let it throw.
-//   4. Create-on-use: S2's (#19) function turns departmentCode + courseNumber
-//      into a course id, creating the department or course if new.
-//   5. Call S1's `create_session` database function, which inserts the
-//      session and the host as an attendee in one transaction and rechecks
-//      the rules (start not in the past, end after start, capacity >= 2,
-//      display name set). host_id comes from the session cookie, never from
-//      the form.
-//   6. Map any database error through src/lib/errors.ts into `formError` (or
-//      a field error). Never return raw Postgres text.
-//   7. redirect("/sessions") -- OUTSIDE any try/catch: redirect() works by
-//      throwing.
-// ===========================================================================
-
-/** Create a study session from the create-session form (US-02). */
+/**
+ * Create a study session from the create-session form (US-02).
+ *
+ * `requireUser()` (A4) redirects anyone signed out or without a display
+ * name; both RPCs below check `auth.uid()` again for themselves. Until M2's
+ * real picker lands, the stub's fixture places resolve to location ids that
+ * are not rows, so create_session fails its foreign key (M5, #36).
+ */
 export async function createSession(
   _prev: CreateSessionState,
   formData: FormData,
@@ -75,8 +56,9 @@ export async function createSession(
     return invalidFormState(parsed.error, formData);
   }
 
+  let locationId: string;
   try {
-    await resolvePlace(parsed.data.placeId);
+    ({ locationId } = await resolvePlace(parsed.data.placeId));
   } catch (error) {
     if (error instanceof PlaceError) {
       return {
@@ -87,5 +69,54 @@ export async function createSession(
     throw error;
   }
 
+  const supabase = await createClient();
+
+  // Create-on-use (S2, #19): turns departmentCode + courseNumber into a
+  // course id, creating the department and/or course if neither exists yet.
+  const { data: courseId, error: courseError } = await supabase.rpc(
+    "get_or_create_course",
+    {
+      p_department_code: parsed.data.departmentCode,
+      p_course_number: parsed.data.courseNumber,
+    },
+  );
+  if (courseError) {
+    return databaseFailure("get_or_create_course", courseError, formData);
+  }
+
+  // S1's create_session: inserts the session and the host as an attendee in
+  // one transaction, and rechecks the rules the form already applied (start
+  // not in the past, end after start, capacity >= 2, display name set).
+  // host_id comes from the session cookie inside the function -- never from
+  // the form.
+  const { error: sessionError } = await supabase.rpc("create_session", {
+    course_id: courseId,
+    location_id: locationId,
+    location_label: parsed.data.locationLabel,
+    // The generated types mark every function argument non-null; the
+    // function itself turns a blank room back into null.
+    room: parsed.data.room ?? "",
+    topic: parsed.data.topic,
+    starts_at: parsed.data.startsAt.toISOString(),
+    ends_at: parsed.data.endsAt.toISOString(),
+    capacity: parsed.data.capacity,
+  });
+  if (sessionError) {
+    return databaseFailure("create_session", sessionError, formData);
+  }
+
   redirect("/sessions");
+}
+
+/**
+ * The student sees our own message; the server log keeps Postgres's code
+ * and text, so a generic "Something went wrong" can still be traced.
+ */
+function databaseFailure(
+  rpc: string,
+  error: DatabaseErrorLike,
+  formData: FormData,
+): CreateSessionState {
+  console.error(`createSession: ${rpc} failed`, { code: error.code, message: error.message });
+  return { formError: databaseErrorMessage(error), values: formValues(formData) };
 }

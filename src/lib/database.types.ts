@@ -167,7 +167,36 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            [_ in never]: never
+            "create_session":
+{ Args: { "capacity": number,"course_id": string,"ends_at": string,"location_id": string,"location_label": string,"room": string,"starts_at": string,"topic": string }; Returns: {
+              "capacity": number,
+"course_id": string,
+"created_at": string,
+"ends_at": string,
+"host_id": string | null,
+"id": string,
+"location_id": string,
+"location_label": string,
+"room": string | null,
+"starts_at": string,
+"status": Database["public"]['Enums']["session_status"],
+"topic": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "sessions"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"get_or_create_course":
+{ Args: { "p_course_number": string,"p_department_code": string }; Returns: string
+                           },
+"normalize_course_number":
+{ Args: { "raw": string }; Returns: string
+                           },
+"normalize_department_code":
+{ Args: { "raw": string }; Returns: string
+                           }
           }
           Enums: {
             "session_status": "open"|"cancelled"

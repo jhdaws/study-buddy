@@ -61,6 +61,70 @@ describe("databaseErrorMessage", () => {
   });
 });
 
+// What create_session and get_or_create_course can return (S1-S3). Shapes
+// copied from what supabase.rpc() hands back: a raised exception arrives with
+// its text in `message`; a CHECK violation names the constraint there.
+describe("databaseErrorMessage: creating a session (S1-S3)", () => {
+  it.each([
+    ["not_signed_in", "You've been signed out. Sign in again and try."],
+    ["display_name_required", "Add a display name before hosting a session."],
+    ["starts_in_past", "That start time has already passed."],
+    ["department_required", "Choose or add a department."],
+    ["invalid_course_number", "Enter a 4-digit course number, like 3251 or 2100W."],
+  ])("maps the raised message %j", (message, expected) => {
+    expect(databaseErrorMessage({ message, code: "P0001" })).toBe(expected);
+  });
+
+  it.each([
+    ["sessions_ends_after_starts", "The session has to end after it starts."],
+    ["sessions_capacity_min", "Capacity must be at least 2 — you count as one."],
+    ["sessions_topic_length", "Keep the topic to 1 to 120 characters."],
+    ["sessions_location_label_length", "Keep the location name to 1 to 100 characters."],
+    ["sessions_room_length", "Keep the room to 50 characters or fewer."],
+    ["departments_code_normalised", "That department code isn't valid."],
+    ["departments_code_length", "Department codes are at most 10 letters or digits."],
+    ["courses_number_normalised", "Enter a 4-digit course number, like 3251 or 2100W."],
+  ])("maps a check_violation naming %j", (constraint, expected) => {
+    expect(
+      databaseErrorMessage({
+        code: "23514",
+        message: `new row for relation "sessions" violates check constraint "${constraint}"`,
+      }),
+    ).toBe(expected);
+  });
+
+  it("only matches a raised name as the whole message", () => {
+    expect(databaseErrorMessage({ message: "starts_in_past and more", code: "P0001" })).toBe(
+      GENERIC_ERROR_MESSAGE,
+    );
+    // Not an inherited property of the lookup table either.
+    expect(databaseErrorMessage({ message: "constructor", code: "P0001" })).toBe(
+      GENERIC_ERROR_MESSAGE,
+    );
+  });
+
+  it("falls back for a foreign-key failure or an unknown constraint", () => {
+    expect(
+      databaseErrorMessage({
+        code: "23503",
+        message: 'insert or update on table "sessions" violates foreign key constraint "sessions_location_id_fkey"',
+      }),
+    ).toBe(GENERIC_ERROR_MESSAGE);
+    expect(
+      databaseErrorMessage({ code: "23514", message: 'violates check constraint "some_future_constraint"' }),
+    ).toBe(GENERIC_ERROR_MESSAGE);
+  });
+
+  it("never surfaces raw Postgres text", () => {
+    const message = databaseErrorMessage({
+      code: "42883",
+      message: "function public.create_session(uuid) does not exist",
+    });
+    expect(message).not.toMatch(RAW_TEXT);
+    expect(message).not.toContain("public.");
+  });
+});
+
 describe("signInErrorMessage", () => {
   it("maps both rate limits to the same message", () => {
     expect(

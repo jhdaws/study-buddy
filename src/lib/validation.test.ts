@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import {
+  DEPARTMENT_CODE_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
   MIN_CAPACITY,
   OTP_CODE_MAX_LENGTH,
@@ -10,6 +11,8 @@ import {
   createSessionSchema,
   displayNameSchema,
   invalidFormState,
+  normalizeCourseNumber,
+  normalizeDepartmentCode,
   signInSchema,
   verifyCodeSchema,
 } from "./validation";
@@ -172,7 +175,79 @@ describe("displayNameSchema (US-01, ADR 0008 rule 1)", () => {
 
 // ---------------------------------------------------------------------------
 
+describe("normalizeDepartmentCode / normalizeCourseNumber (S2, US-02; data/README.md)", () => {
+  it.each([
+    ["cs", "CS"],
+    [" CS ", "CS"],
+    ["C.S.", "CS"],
+    ["c-s", "CS"],
+  ])("normalizeDepartmentCode(%j) -> %j", (raw, expected) => {
+    expect(normalizeDepartmentCode(raw)).toBe(expected);
+  });
+
+  it.each([
+    ["3251", "3251"],
+    [" 3251 ", "3251"],
+    ["cs-3251", "CS3251"],
+    ["3251w", "3251W"],
+    ["2100W", "2100W"],
+  ])("normalizeCourseNumber(%j) -> %j", (raw, expected) => {
+    expect(normalizeCourseNumber(raw)).toBe(expected);
+  });
+});
+
 describe("createSessionSchema (US-02)", () => {
+  describe("department and course normalisation (S2)", () => {
+    it("normalises department code the same way as the database", () => {
+      const result = createSessionSchema(NOW).safeParse(
+        validSession({ departmentCode: " cs " }),
+      );
+      expect(result.success && result.data.departmentCode).toBe("CS");
+    });
+
+    it("normalises course number, uppercasing a letter suffix", () => {
+      const result = createSessionSchema(NOW).safeParse(
+        validSession({ courseNumber: "3251w" }),
+      );
+      expect(result.success && result.data.courseNumber).toBe("3251W");
+    });
+
+    it("rejects a course number that is not four digits plus an optional letter", () => {
+      for (const courseNumber of ["325", "32511", "CS3251", "3251WW"]) {
+        expect(
+          fieldErrors(createSessionSchema(NOW).safeParse(validSession({ courseNumber })))
+            .courseNumber,
+        ).toEqual(["Enter a 4-digit course number, like 3251 or 2100W."]);
+      }
+    });
+
+    it("rejects a department code that normalises to nothing", () => {
+      expect(
+        fieldErrors(createSessionSchema(NOW).safeParse(validSession({ departmentCode: "--" })))
+          .departmentCode,
+      ).toEqual(["Choose or add a department."]);
+    });
+
+    it(`accepts a department code of ${DEPARTMENT_CODE_MAX_LENGTH} after normalising, and refuses one longer`, () => {
+      // The longest real code, INDS-NYC, normalises to 7 (data/README.md).
+      const real = createSessionSchema(NOW).safeParse(validSession({ departmentCode: "INDS-NYC" }));
+      expect(real.success && real.data.departmentCode).toBe("INDSNYC");
+      expect(
+        createSessionSchema(NOW).safeParse(
+          validSession({ departmentCode: "A".repeat(DEPARTMENT_CODE_MAX_LENGTH) }),
+        ).success,
+      ).toBe(true);
+      expect(
+        fieldErrors(
+          createSessionSchema(NOW).safeParse(
+            validSession({ departmentCode: "A".repeat(DEPARTMENT_CODE_MAX_LENGTH + 1) }),
+          ),
+        ).departmentCode,
+      ).toEqual([`Department codes are at most ${DEPARTMENT_CODE_MAX_LENGTH} letters or digits.`]);
+    });
+  });
+
+
   it("accepts a valid session and converts it for the database", () => {
     const result = createSessionSchema(NOW).safeParse(
       validSession({ topic: "  Design patterns review  " }),

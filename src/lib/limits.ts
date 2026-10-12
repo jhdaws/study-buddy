@@ -25,12 +25,20 @@ export const OTP_CODE_MAX_LENGTH = 10;
 /** A2/A4: mirror as a CHECK on profiles.display_name (1..50 after trimming). */
 export const DISPLAY_NAME_MAX_LENGTH = 50;
 
-// Length caps keep a pasted essay out of the database. They are the
-// validation layer's sanity limits, not product rules; S1 may mirror them as
-// CHECKs.
+// Length caps keep a pasted essay out of the database. They are sanity
+// limits, not product rules, mirrored as CHECKs on `sessions` in
+// *_session_text_limits.sql so a direct API call cannot skip them.
 export const TOPIC_MAX_LENGTH = 120;
 export const LOCATION_LABEL_MAX_LENGTH = 100;
 export const ROOM_MAX_LENGTH = 50;
+
+/**
+ * S2: a department code after normalisation (letters and digits only). The
+ * longest real one is 7 (`INDS-NYC` -> `INDSNYC`, data/README.md); 10 leaves
+ * room without letting a pasted sentence become a department. Mirrored as
+ * `departments_code_length` in *_session_text_limits.sql.
+ */
+export const DEPARTMENT_CODE_MAX_LENGTH = 10;
 
 /** The host counts as one (ADR 0008 rule 2). S1: `CHECK (capacity >= 2)`. */
 export const MIN_CAPACITY = 2;
