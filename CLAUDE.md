@@ -69,7 +69,9 @@ matches the migrations.
 ## Testing
 
 Unit tests sit next to the code as `*.test.ts`. Pure logic — validation, error
-mapping, seat maths — is unit tested with `npm test`.
+mapping, seat maths — is unit tested with `npm test`. What to test next, at
+which level, and the coverage targets are in [`TEST_PLAN.md`](./TEST_PLAN.md);
+`npm run test:coverage` measures branch coverage over all of `src/`.
 
 Anything needing real Postgres behaviour — constraints, RLS, locks — goes in
 `tests/db/` and runs with `npm run test:db` against the local database
