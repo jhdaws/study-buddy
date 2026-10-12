@@ -23,8 +23,7 @@ import { redirect } from "next/navigation";
 
 import AuthScene from "@/components/AuthScene";
 import SignInForm from "@/components/SignInForm";
-import Icon from "@/components/ui/Icon";
-import { FORM_ERROR } from "@/components/ui/styles";
+import { FORM_ERROR_ON_DARK } from "@/components/ui/styles";
 import { firstParam, LINK_ERROR, safeNext, safeNextPath } from "@/lib/safe-next";
 import { getCurrentUser } from "@/lib/supabase/server";
 
@@ -59,14 +58,13 @@ export default async function LoginPage({
     <AuthScene>
       <main>
         {linkFailed ? (
-          <p role="alert" className={`${FORM_ERROR} mb-5`}>
+          <p role="alert" className={`${FORM_ERROR_ON_DARK} mb-5`}>
             That sign-in link has expired or was already used. Enter your email to get a new
             code.
           </p>
         ) : (
           reason && (
-            <p className="mb-5 flex items-center gap-2 rounded-inner border border-blue-300/30 bg-blue-500/15 px-4 py-3 text-sm font-medium text-white">
-              <Icon name="calendar" className="size-5 shrink-0 text-blue-200" />
+            <p className="mb-5 rounded-xl border border-white/20 bg-white/[0.06] px-4 py-3 text-center text-sm font-medium text-white">
               {reason}
             </p>
           )

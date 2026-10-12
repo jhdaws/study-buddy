@@ -88,8 +88,8 @@ export default function AuthScene({ children }: { children: React.ReactNode }) {
         </svg>
       </div>
 
-      <div className="mt-[7.5rem] w-full max-w-[420px] md:mt-36">
-        <div className="glass-dark rounded-hero px-5 pt-6 pb-6 text-white shadow-[0_40px_80px_-30px_rgba(0,0,0,0.8),0_-20px_60px_-30px_rgba(246,193,119,0.35)] sm:px-7">
+      <div className="mt-[7.5rem] w-full max-w-[400px] md:mt-36">
+        <div className="rounded-2xl border border-white/10 bg-navy-900/90 px-5 pt-6 pb-6 text-white shadow-[0_40px_80px_-30px_rgba(0,0,0,0.8)] backdrop-blur-md sm:px-7">
           <div className="mb-5 flex justify-center">
             <Logo tone="light" />
           </div>

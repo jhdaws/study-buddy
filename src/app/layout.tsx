@@ -41,7 +41,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="min-h-full bg-sky-100">
+      <body className="min-h-full bg-paper">
         <AppShell header={<SiteHeader />} sidebar={<SiteSidebar />} tabBar={<TabBar />}>
           {children}
         </AppShell>

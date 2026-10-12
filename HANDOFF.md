@@ -71,6 +71,53 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-10-11 (late) · Calm UI pass; sign-in blocked by the email rate limit
+
+**Branch:** `ui-calm-pass`, from `main` at `e94cf8e` · **Commits made:** one.
+
+### What changed
+- **Look only.** Moses found the glass/gradient UI oversized and "generated".
+  Now: white surfaces on `paper`, one type scale (13/15/17/22/28), sentence
+  case, no all-caps labels, no gradients outside the sign-in scene. New
+  tokens in `globals.css`; `ui/styles.ts` has a light set and an `_ON_DARK`
+  set (sign-in only).
+- **Sessions are timetable rows** (`SessionCard`): start time in a left rail,
+  course on one truncated line, topic, place, host, seats on the right, and
+  an "Add to calendar" link to US-19's `.ics` route -- this answers the open
+  question in the US-19 entry below (the link lives on the row).
+- Home is rebuilt on the same rows: greeting, status line, "Next up", the
+  next few under day headings. The ring, tiles and desktop grid are gone.
+- Jack's `AccountSheet` focus fixes (#44) kept; only its classes changed.
+
+### Verified versus assumed
+- **Verified:** lint, typecheck, 364 unit tests, `next build`; screenshots at
+  375 and 1440 px against the throwaway fake Supabase.
+- **Not verified:** real data, real phones.
+
+### Sign-in on production (tried tonight)
+- Production (`study-buddy-jdaws.vercel.app`) serves the new sign-in page.
+- The first email arrived **without a code**: the hosted project still uses
+  Supabase's default template. Its link cannot work either: `/auth/confirm`
+  only accepts `token_hash`. Fix: A1 step 2 in `supabase/README.md`.
+- Later sends failed with "Too many sign-in emails have gone out recently":
+  the built-in sender's hourly cap. Fix for good: custom SMTP (A5).
+- One earlier attempt showed an empty email step with no error after a 200
+  POST; not reproduced -- the next attempt showed the rate-limit error
+  correctly. Watch for it once SMTP is set up.
+
+### Open questions for the user
+- Apply the A1 hosted settings (template, URLs, OTP length) and set up SMTP.
+- The Supabase connector was never connected, so the hosted migrations are
+  unchecked.
+
+### Things the next agent should be careful about
+- `hidden md:inline-flex` on an element that also gets `inline-flex` from a
+  shared class string does not hide it: both are display utilities and the
+  later one in the stylesheet wins. Wrap the element in a `hidden md:block`
+  div instead (done on the home and sessions pages).
+
+---
+
 ## 2026-10-11 · Rebuilt Track A by mistake, then shipped US-19 instead
 
 **Branch:** `us-19-calendar-download` · **Commits made:** one on this branch.

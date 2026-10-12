@@ -62,7 +62,7 @@ import LocationPicker, { type PickedPlace } from "@/components/LocationPicker";
 import SessionPreview, { EMPTY_PREVIEW, type PreviewValues } from "@/components/SessionPreview";
 import Icon from "@/components/ui/Icon";
 import {
-  BUTTON_PRIMARY_LIGHT,
+  BUTTON_PRIMARY,
   FIELD,
   FIELD_ERROR,
   HINT,
@@ -85,27 +85,17 @@ import type { CreateSessionField } from "@/lib/validation";
 /** The department <select>'s value for "Add a department". Never submitted. */
 export const ADD_DEPARTMENT = "__add__";
 
-// Each fieldset is a dark glass section (Claude Design spec, pages 6-7). The
-// legend floats so it sits inside the card rather than on its border.
-const SECTION = "glass-dark min-w-0 rounded-card p-5 text-white sm:p-6";
-const LEGEND =
-  "float-left mb-5 flex w-full items-center gap-3 text-xl font-extrabold tracking-tight";
+// Each fieldset is a white section with a plain heading. The legend floats
+// so it sits inside the section rather than on its border.
+const SECTION = "min-w-0 rounded-2xl border border-line bg-white p-5 sm:p-6";
+const LEGEND = "float-left mb-4 w-full text-[17px] font-bold text-ink";
 const GROUP = "clear-both flex flex-col gap-5";
-const DATE_INPUT = `${INPUT} [color-scheme:dark]`;
-/** A problem on the sky surface below the sections. */
+const DATE_INPUT = INPUT;
+/** A problem shown beside the submit button. */
 const PAGE_ALERT =
-  "rounded-inner border border-danger-on-light/25 bg-white/75 px-4 py-3 text-base font-semibold text-danger-on-light";
-
-function StepBadge({ n }: { n: number }) {
-  return (
-    <span
-      aria-hidden
-      className="grid size-8 shrink-0 place-items-center rounded-full bg-white/[0.12] text-sm font-extrabold text-blue-200"
-    >
-      {n}
-    </span>
-  );
-}
+  "rounded-xl border border-danger-on-light/30 bg-danger-on-light/5 px-4 py-3 text-[15px] font-medium text-danger-on-light";
+const STEP_BUTTON =
+  "grid size-12 shrink-0 place-items-center rounded-xl border border-field bg-white text-ink hover:bg-paper";
 
 export type CreateSessionFormProps = {
   /** From listDepartments(), ordered by code. */
@@ -245,13 +235,12 @@ export default function CreateSessionForm({
       noValidate
       onInput={refreshPreview}
       onChange={refreshPreview}
-      className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start"
+      className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px] lg:items-start"
     >
       <div className="flex min-w-0 flex-col gap-5">
       {/* ------------------------------------------------------------ Course */}
       <fieldset className={SECTION}>
         <legend className={LEGEND}>
-          <StepBadge n={1} />
           Course
         </legend>
         <div className={GROUP}>
@@ -348,7 +337,6 @@ export default function CreateSessionForm({
       {/* ------------------------------------------------------------- Where */}
       <fieldset className={SECTION}>
         <legend className={LEGEND}>
-          <StepBadge n={2} />
           Where
         </legend>
         <div className={GROUP}>
@@ -394,7 +382,7 @@ export default function CreateSessionForm({
 
           <div className={FIELD}>
             <label htmlFor={ids("room").input} className={LABEL}>
-              Room <span className="font-normal text-white/72">(optional)</span>
+              Room <span className="font-normal text-ink-2">(optional)</span>
             </label>
             <input
               id={ids("room").input}
@@ -414,7 +402,6 @@ export default function CreateSessionForm({
       {/* -------------------------------------------------------------- When */}
       <fieldset className={SECTION}>
         <legend className={LEGEND}>
-          <StepBadge n={3} />
           When
         </legend>
         <div className={GROUP}>
@@ -470,7 +457,7 @@ export default function CreateSessionForm({
                 type="button"
                 onClick={() => stepCapacity(-1)}
                 aria-label="One fewer person"
-                className="grid size-14 shrink-0 place-items-center rounded-full border border-white/20 bg-white/[0.08] text-white hover:bg-white/[0.14]"
+                className={STEP_BUTTON}
               >
                 <Icon name="minus" className="size-5" />
               </button>
@@ -486,13 +473,13 @@ export default function CreateSessionForm({
                 step={1}
                 placeholder={String(MIN_CAPACITY)}
                 {...a11y("capacity", true)}
-                className={`${INPUT} text-center text-lg font-extrabold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
+                className={`${INPUT} text-center font-bold [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
               />
               <button
                 type="button"
                 onClick={() => stepCapacity(1)}
                 aria-label="One more person"
-                className="grid size-14 shrink-0 place-items-center rounded-full border border-white/20 bg-white/[0.08] text-white hover:bg-white/[0.14]"
+                className={STEP_BUTTON}
               >
                 <Icon name="plus" className="size-5" />
               </button>
@@ -522,7 +509,7 @@ export default function CreateSessionForm({
         <button
           type="submit"
           disabled={pending}
-          className={`${BUTTON_PRIMARY_LIGHT} h-14 w-full disabled:cursor-wait`}
+          className={`${BUTTON_PRIMARY} h-12 w-full disabled:cursor-wait`}
         >
           {pending ? "Creating session…" : "Create session"}
         </button>

@@ -45,12 +45,12 @@ import {
 } from "@/app/login/actions";
 import Icon from "@/components/ui/Icon";
 import {
-  BUTTON_PRIMARY,
+  BUTTON_ON_DARK,
   FIELD,
-  FIELD_ERROR,
-  FORM_ERROR,
-  INPUT,
-  LABEL,
+  FIELD_ERROR_ON_DARK,
+  FORM_ERROR_ON_DARK,
+  INPUT_ON_DARK,
+  LABEL_ON_DARK,
   LINK_ON_DARK,
 } from "@/components/ui/styles";
 import { OTP_CODE_MAX_LENGTH, OTP_CODE_MIN_LENGTH } from "@/lib/limits";
@@ -131,7 +131,7 @@ function EmailStep({
 
   return (
     <section aria-labelledby={ids.heading}>
-      <h1 id={ids.heading} className="text-center text-3xl font-extrabold tracking-tight">
+      <h1 id={ids.heading} className="text-center text-[26px] leading-tight font-bold tracking-tight">
         Sign in
       </h1>
       <p className="mt-2 mb-6 text-center text-base text-white/80">
@@ -140,12 +140,12 @@ function EmailStep({
       <form action={formAction} noValidate className="flex flex-col gap-4">
         {next && <input type="hidden" name="next" value={next} />}
         {state.formError && (
-          <p role="alert" className={FORM_ERROR}>
+          <p role="alert" className={FORM_ERROR_ON_DARK}>
             {state.formError}
           </p>
         )}
         <div className={FIELD}>
-          <label htmlFor={ids.email} className={LABEL}>
+          <label htmlFor={ids.email} className={LABEL_ON_DARK}>
             Vanderbilt email
           </label>
           <div className="relative">
@@ -163,7 +163,7 @@ function EmailStep({
               defaultValue={state.values?.email ?? state.sentTo ?? ""}
               aria-invalid={error ? true : undefined}
               aria-describedby={[ids.hint, error && ids.error].filter(Boolean).join(" ")}
-              className={`${INPUT} pr-12 read-only:opacity-60`}
+              className={`${INPUT_ON_DARK} pr-12 read-only:opacity-60`}
             />
             <Icon
               name="mail"
@@ -171,12 +171,12 @@ function EmailStep({
             />
           </div>
           {error && (
-            <p id={ids.error} role="alert" className={FIELD_ERROR}>
+            <p id={ids.error} role="alert" className={FIELD_ERROR_ON_DARK}>
               {error}
             </p>
           )}
         </div>
-        <button type="submit" disabled={pending} className={`${BUTTON_PRIMARY} mt-1 w-full`}>
+        <button type="submit" disabled={pending} className={`${BUTTON_ON_DARK} mt-1 w-full`}>
           {pending && <Spinner />}
           {pending ? "Sending…" : "Send code"}
         </button>
@@ -238,7 +238,7 @@ function CodeStep({
 
   return (
     <section aria-labelledby={ids.heading}>
-      <h1 id={ids.heading} className="text-center text-3xl font-extrabold tracking-tight">
+      <h1 id={ids.heading} className="text-center text-[26px] leading-tight font-bold tracking-tight">
         Check your inbox
       </h1>
       {/* role="status" so a screen reader announces the change of step. */}
@@ -273,7 +273,7 @@ function CodeStep({
                   <span
                     key={i}
                     className={
-                      "grid aspect-[4/5] max-h-16 place-items-center rounded-inner border text-2xl font-extrabold transition-colors " +
+                      "grid aspect-[4/5] max-h-14 place-items-center rounded-xl border text-[22px] font-bold tabular-nums transition-colors " +
                       (invalid
                         ? "border-danger-on-dark/80 bg-danger/10"
                         : active
@@ -308,20 +308,20 @@ function CodeStep({
             />
           </div>
           {error && (
-            <p id={ids.error} role="alert" className={`${FIELD_ERROR} mt-1`}>
+            <p id={ids.error} role="alert" className={`${FIELD_ERROR_ON_DARK} mt-1`}>
               {error}
             </p>
           )}
         </div>
         {formError && (
-          <p role="alert" className={FORM_ERROR}>
+          <p role="alert" className={FORM_ERROR_ON_DARK}>
             {formError}
           </p>
         )}
         <button
           type="submit"
           disabled={pending}
-          className={`${BUTTON_PRIMARY} w-full`}
+          className={`${BUTTON_ON_DARK} w-full`}
         >
           {pending && <Spinner />}
           {pending ? "Checking…" : "Sign in"}
@@ -346,8 +346,7 @@ function CodeStep({
           Use a different email
         </button>
       </div>
-      <p className="mt-2 flex items-center justify-center gap-2 border-t border-white/10 pt-4 text-sm text-white/72">
-        <Icon name="link" className="size-4" />
+      <p className="mt-2 border-t border-white/10 pt-4 text-center text-sm text-white/72">
         Codes and links work once, for an hour.
       </p>
     </section>

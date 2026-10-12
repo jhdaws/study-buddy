@@ -118,7 +118,7 @@ export default function LocationPicker({
       className={SELECT}
     >
       <option value="">Choose a location</option>
-      <optgroup label="Fixture places (stub until M2)" className="bg-navy-800 text-white">
+      <optgroup label="Fixture places (stub until M2)">
         {FIXTURE_PLACES.map((place) => (
           <option key={place.placeId} value={place.placeId}>
             {place.label}

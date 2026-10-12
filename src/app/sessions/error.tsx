@@ -18,8 +18,7 @@
 import Link from "next/link";
 import { useEffect } from "react";
 
-import Icon from "@/components/ui/Icon";
-import { BUTTON_PRIMARY, LINK_ON_DARK } from "@/components/ui/styles";
+import { BUTTON_PRIMARY, BUTTON_SECONDARY } from "@/components/ui/styles";
 
 export default function SessionsError({
   error,
@@ -33,24 +32,19 @@ export default function SessionsError({
   }, [error]);
 
   return (
-    <main className="glass-dark flex flex-col items-center rounded-card px-5 py-10 text-center text-white">
-      <span
-        aria-hidden
-        className="grid size-14 place-items-center rounded-full border border-danger-on-dark/40 bg-danger/20 text-danger-on-dark"
-      >
-        <Icon name="alert" className="size-7" />
-      </span>
-      <h1 className="mt-4 text-2xl font-extrabold">Couldn&apos;t load this page</h1>
-      <p role="alert" className="mt-2 text-base text-white/80">
+    <main className="rounded-2xl border border-line bg-white px-5 py-10 text-center">
+      <h1 className="text-[22px] font-bold text-ink">This page couldn&apos;t load</h1>
+      <p role="alert" className="mt-1 text-[15px] text-ink-2">
         Check your connection and try again.
       </p>
-      <button type="button" onClick={() => retry()} className={`${BUTTON_PRIMARY} mt-6`}>
-        <Icon name="refresh" />
-        Try again
-      </button>
-      <Link href="/" className={`${LINK_ON_DARK} mt-2`}>
-        Go to the home page
-      </Link>
+      <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
+        <button type="button" onClick={() => retry()} className={BUTTON_PRIMARY}>
+          Try again
+        </button>
+        <Link href="/" className={BUTTON_SECONDARY}>
+          Go to the home page
+        </Link>
+      </div>
     </main>
   );
 }

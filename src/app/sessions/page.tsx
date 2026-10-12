@@ -20,8 +20,7 @@ import { connection } from "next/server";
 import Link from "next/link";
 
 import SessionBrowser from "@/components/SessionBrowser";
-import Icon from "@/components/ui/Icon";
-import { BUTTON_PRIMARY_LIGHT } from "@/components/ui/styles";
+import { BUTTON_PRIMARY, PAGE_LEAD, PAGE_TITLE } from "@/components/ui/styles";
 import { listSessions } from "@/lib/sessions";
 
 export const metadata: Metadata = {
@@ -39,18 +38,17 @@ export default async function SessionsPage() {
   const now = new Date();
 
   return (
-    <main className="min-w-0 lg:max-w-4xl">
+    <main className="min-w-0">
       <div className="mb-5 flex items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-navy-900">Study sessions</h1>
-          <p className="mt-1 text-base text-navy-muted">
+          <h1 className={PAGE_TITLE}>Study sessions</h1>
+          <p className={PAGE_LEAD}>
             Open sessions on campus, soonest first. Times are campus time.
           </p>
         </div>
         {/* Desktop only: phones have the tab bar's Host button. */}
         <div className="hidden shrink-0 md:block">
-          <Link href="/sessions/new" className={BUTTON_PRIMARY_LIGHT}>
-            <Icon name="plus" />
+          <Link href="/sessions/new" className={BUTTON_PRIMARY}>
             Host a session
           </Link>
         </div>
