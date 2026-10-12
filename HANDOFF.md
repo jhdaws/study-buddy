@@ -71,6 +71,75 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-10-11 · Rebuilt Track A by mistake, then shipped US-19 instead
+
+**Branch:** `us-19-calendar-download` · **Commits made:** one on this branch.
+Also `a2-a4-us-01-auth`, pushed as #43 and closed unmerged — see below.
+
+### Read this part first: a whole session was wasted on work that existed
+
+Asked to "add AUTH support per the spec", this session implemented A2, A3 and
+A4 from scratch and opened #43. **Moses had already done all of it in #33, open
+since 1 October, green, and reviewed "needs no changes" on 6 October.** #43 is
+closed; nothing from it merged.
+
+Nothing in the repo was wrong — the signals were there and went unread.
+`docs/tickets.md` leaves A1–A4 unticked, which reads as "not started", but the
+A5 ticket right below them says "after A1, **#33**", and PR #39 is titled "Add
+next tickets after the **#31–#33** review". Both were read during the session.
+Neither was followed up.
+
+**Before implementing any ticket, run `gh pr list --state all` and
+`git branch -r`, and read the titles.** The board's checkboxes track what has
+*merged*, not what has been *built*. Four tracks are in flight at once in this
+repo, so unticked and unclaimed are not the same thing.
+
+Worth knowing: #33 is better than what this session wrote. It enforces the
+Vanderbilt rule on `before update of email` as well as on insert — #43 only
+had insert, so an account could have changed domain after signup.
+
+### What changed
+- `src/lib/ics.ts` — new. One session as an RFC 5545 file: TEXT escaping,
+  75-octet line folding measured in UTF-8, UTC date-times. Pure and
+  client-safe, like `format.ts`, so it is testable without a request.
+- `src/lib/ics.test.ts` — new, 32 tests.
+- `src/app/sessions/[id]/calendar.ics/route.ts` — new. GET, serves the file as
+  `text/calendar` with a download filename.
+- `docs/backlog.md` — US-19 ⬜ → 🚧, with the reason.
+- `docs/ai-usage-log.md` — entry for this session.
+
+### Uncommitted at end of session
+- Nothing.
+
+### Decided in conversation, not yet written down
+- **US-19 ships without a UI link, on purpose.** #42 rewrites every component
+  including `SessionCard.tsx`, so a link added now is a guaranteed conflict for
+  someone else to resolve. The link belongs in #42's work or just after it.
+- US-19 was chosen by elimination: W7 and W8 need secrets or are blocked, M5
+  needs a decision, and everything else in `src/` collides with #42.
+
+### Open questions for the user
+- Who adds the "Add to calendar" link once #42 lands, and does it go on the
+  session card, the detail page, or both?
+
+### Things the next agent should be careful about
+- **Do not use `RouteContext<'/path'>` in a Route Handler.** It is a global
+  from `.next/types`, which does not exist when CI runs `npm run typecheck` on
+  a fresh checkout — `build` generates it, and build runs *after* typecheck.
+  Type `params` inline as `{ params: Promise<{ id: string }> }`.
+- **A stale `.next` survives a branch switch and breaks typecheck with a real
+  looking error.** After switching branches, `tsc` failed on
+  `.next/dev/types/validator.ts` referencing `src/app/login/name/page.js`, a
+  file from the *other* branch. `rm -rf .next` fixes it; it is not a code
+  fault.
+- `.ics` output was parsed with `ical.js` and is spec-valid, but **no real
+  calendar app has imported it.** Google, Apple and Outlook each accept things
+  the spec forbids and reject things it allows.
+- `requireUser()` on the new endpoint is still the W4 stub, so it admits
+  everyone. It starts redirecting the moment #33 merges, with no change here.
+
+---
+
 ## 2026-09-30 · M3 resolvePlace() written, then a review pass fixed
 
 **Branch:** `m3-us-02-resolve-place` · **Commits made:** none — everything
