@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { fixtureSessionList } from "@/lib/fixtures";
@@ -32,6 +32,23 @@ function session(overrides: Partial<SessionListItem> = {}): SessionListItem {
 const plain = (text: string | null) => (text ?? "").replace(/\s+/g, " ");
 
 describe("<SessionCard>", () => {
+  it("shows how many are going out of the capacity", () => {
+    render(<SessionCard session={session({ capacity: 6, attendeeCount: 4, seatsLeft: 2 })} now={now} />);
+    expect(screen.getByText("4 of 6 going")).toBeTruthy();
+  });
+
+  it("renders a compact card with the same facts for the home feed", () => {
+    render(<SessionCard session={session()} now={now} variant="compact" />);
+    const card = screen.getByRole("article");
+    expect(plain(within(card).getByRole("heading").textContent)).toBe(
+      "CS 3251 · Intermediate Software Design",
+    );
+    expect(within(card).getByText("Design patterns review")).toBeTruthy();
+    expect(within(card).getByText("2 seats left")).toBeTruthy();
+    expect(within(card).getByText("Priya")).toBeTruthy();
+    expect(card.querySelector("time")?.getAttribute("dateTime")).toBe("2026-10-01T19:00:00.000Z");
+  });
+
   it("shows the course, topic, place, room, campus time and host", () => {
     render(<SessionCard session={session()} now={now} />);
     const card = screen.getByRole("article");
@@ -125,5 +142,58 @@ describe("<SessionBrowser>", () => {
     expect(screen.getByRole("heading", { name: "No study sessions yet" })).toBeTruthy();
     const link = screen.getByRole("link", { name: "Host the first session" });
     expect(link.getAttribute("href")).toBe("/sessions/new");
+  });
+});
+
+describe("<SessionBrowser> search and filters", () => {
+  const sessions = [
+    session({ id: "a" }),
+    session({
+      id: "b",
+      course: { departmentCode: "MATH", number: "2410", title: "Methods of Linear Algebra" },
+      topic: "Exam 2 practice problems",
+      capacity: 3,
+      attendeeCount: 3,
+      seatsLeft: 0,
+    }),
+    session({ id: "c", startsAt: "2026-10-02T19:00:00.000Z", endsAt: "2026-10-02T21:00:00.000Z" }),
+  ];
+  const headings = () => screen.getAllByRole("article").map((a) => plain(within(a).getByRole("heading").textContent));
+
+  it("groups cards under campus-day headings", () => {
+    render(<SessionBrowser sessions={sessions} now={now} />);
+    expect(screen.getByRole("heading", { name: /^Today/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /^Tomorrow/ })).toBeTruthy();
+    expect(screen.getByText("3 open sessions")).toBeTruthy();
+  });
+
+  it("narrows the list as the student types, and says how many match", () => {
+    render(<SessionBrowser sessions={sessions} now={now} />);
+    fireEvent.change(screen.getByLabelText("Search sessions"), { target: { value: "linear" } });
+    expect(headings()).toEqual(["MATH 2410 · Methods of Linear Algebra"]);
+    expect(screen.getByText(/Showing 1 of 3 sessions/)).toBeTruthy();
+  });
+
+  it("filters with chips, marks the pressed one, and clears", () => {
+    render(<SessionBrowser sessions={sessions} now={now} />);
+    const today = screen.getByRole("button", { name: "Today" });
+    fireEvent.click(today);
+    expect(today.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getAllByRole("article")).toHaveLength(2);
+
+    fireEvent.click(screen.getByRole("button", { name: "Has seats" }));
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Clear filters" })[0]);
+    expect(screen.getAllByRole("article")).toHaveLength(3);
+  });
+
+  it("offers to clear or host when nothing matches", () => {
+    render(<SessionBrowser sessions={sessions} now={now} />);
+    fireEvent.change(screen.getByLabelText("Search sessions"), { target: { value: "ECON 3012" } });
+    expect(screen.queryByRole("article")).toBeNull();
+    expect(screen.getByRole("heading", { name: /Nothing for .ECON 3012. yet/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Host a session" }).getAttribute("href")).toBe("/sessions/new");
   });
 });

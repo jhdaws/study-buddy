@@ -18,6 +18,9 @@
 import Link from "next/link";
 import { useEffect } from "react";
 
+import Icon from "@/components/ui/Icon";
+import { BUTTON_PRIMARY, LINK_ON_DARK } from "@/components/ui/styles";
+
 export default function SessionsError({
   error,
   retry,
@@ -30,26 +33,24 @@ export default function SessionsError({
   }, [error]);
 
   return (
-    <main>
-      <h1 className="text-2xl font-semibold">Something went wrong</h1>
-      <p role="alert" className="mt-2 text-base text-neutral-600 dark:text-neutral-400">
-        We couldn&apos;t load this page. Check your connection and try again.
+    <main className="glass-dark flex flex-col items-center rounded-card px-5 py-10 text-center text-white">
+      <span
+        aria-hidden
+        className="grid size-14 place-items-center rounded-full border border-danger-on-dark/40 bg-danger/20 text-danger-on-dark"
+      >
+        <Icon name="alert" className="size-7" />
+      </span>
+      <h1 className="mt-4 text-2xl font-extrabold">Couldn&apos;t load this page</h1>
+      <p role="alert" className="mt-2 text-base text-white/80">
+        Check your connection and try again.
       </p>
-      <div className="mt-5 flex flex-col gap-3">
-        <button
-          type="button"
-          onClick={() => retry()}
-          className="min-h-11 rounded-md bg-neutral-900 px-5 text-base font-medium text-white hover:bg-neutral-700 dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
-        >
-          Try again
-        </button>
-        <Link
-          href="/"
-          className="inline-flex min-h-11 items-center justify-center rounded-md border border-neutral-300 px-5 text-base font-medium dark:border-neutral-700"
-        >
-          Go to the home page
-        </Link>
-      </div>
+      <button type="button" onClick={() => retry()} className={`${BUTTON_PRIMARY} mt-6`}>
+        <Icon name="refresh" />
+        Try again
+      </button>
+      <Link href="/" className={`${LINK_ON_DARK} mt-2`}>
+        Go to the home page
+      </Link>
     </main>
   );
 }

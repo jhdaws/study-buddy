@@ -103,3 +103,36 @@ export function formatSessionCount(count: number): string {
   if (count <= 0) return "No sessions yet";
   return count === 1 ? "1 session" : `${count} sessions`;
 }
+
+/**
+ * Whole campus-time days from `now`'s day to `date`'s: 0 today, 1 tomorrow,
+ * -1 yesterday. DST-safe (see campusDay). For grouping and day filters.
+ */
+export function campusDayOffset(date: Date, now: Date): number {
+  return campusDay(date) - campusDay(now);
+}
+
+const tileFormat = new Intl.DateTimeFormat(LOCALE, {
+  timeZone: CAMPUS_TIME_ZONE,
+  weekday: "long",
+  month: "long",
+  day: "numeric",
+});
+
+/** The parts of the home page's date tile, in campus time: Tuesday / 13 / October. */
+export function formatDateTile(date: Date): { weekday: string; day: string; month: string } {
+  const parts = tileFormat.formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((p) => p.type === type)?.value ?? "";
+  return { weekday: part("weekday"), day: part("day"), month: part("month") };
+}
+
+/** `5:45 PM` -- a session's start alone, in campus time. */
+export function formatStartTime(startsAt: string): string {
+  return timeFormat.format(new Date(startsAt));
+}
+
+/** An avatar's letter: the display name's first character, or `?` without one. */
+export function formatInitial(displayName: string | null | undefined): string {
+  return displayName?.trim().charAt(0).toUpperCase() || "?";
+}

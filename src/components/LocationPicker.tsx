@@ -43,6 +43,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import { SELECT } from "@/components/ui/styles";
 import { FIXTURE_PLACES } from "@/lib/fixtures";
 
 /** What the picker reports when the host picks a place. */
@@ -114,10 +115,10 @@ export default function LocationPicker({
         setPlaceId(place?.placeId ?? "");
         onSelect?.(place ? { placeId: place.placeId, label: place.label } : null);
       }}
-      className="min-h-11 w-full rounded border px-3 text-base"
+      className={SELECT}
     >
       <option value="">Choose a location</option>
-      <optgroup label="Fixture places (stub until M2)">
+      <optgroup label="Fixture places (stub until M2)" className="bg-navy-800 text-white">
         {FIXTURE_PLACES.map((place) => (
           <option key={place.placeId} value={place.placeId}>
             {place.label}
