@@ -24,6 +24,7 @@ import { z } from "zod";
 
 import { ALLOWED_EMAIL_DOMAIN } from "@/lib/env";
 import {
+  DEPARTMENT_CODE_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
   LOCATION_LABEL_MAX_LENGTH,
   MAX_CAPACITY,
@@ -38,6 +39,7 @@ import {
 // The limits are part of this module's contract (docs/contracts.md); they
 // live in limits.ts so Client Components can have them without zod.
 export {
+  DEPARTMENT_CODE_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
   LOCATION_LABEL_MAX_LENGTH,
   MAX_CAPACITY,
@@ -241,7 +243,10 @@ export function normalizeDepartmentCode(raw: string): string {
   return raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
 
-/** `cs-3251`, ` 3251 `, `3251w` -> `3251`, `3251`, `3251W`. */
+/**
+ * ` 3251 `, `3251w`, `2100-W` -> `3251`, `3251W`, `2100W`. A department
+ * prefix is kept (`cs-3251` -> `CS3251`), so it fails the format check below.
+ */
 export function normalizeCourseNumber(raw: string): string {
   return raw.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 }
@@ -273,6 +278,9 @@ export function createSessionSchema(now: Date = new Date()) {
         .transform(normalizeDepartmentCode)
         .refine((value) => value.length > 0, {
           error: "Choose or add a department.",
+        })
+        .refine((value) => value.length <= DEPARTMENT_CODE_MAX_LENGTH, {
+          error: `Department codes are at most ${DEPARTMENT_CODE_MAX_LENGTH} letters or digits.`,
         }),
       courseNumber: z
         .string({ error: "Enter a course number." })

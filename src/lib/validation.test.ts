@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import {
+  DEPARTMENT_CODE_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
   MIN_CAPACITY,
   OTP_CODE_MAX_LENGTH,
@@ -225,6 +226,24 @@ describe("createSessionSchema (US-02)", () => {
         fieldErrors(createSessionSchema(NOW).safeParse(validSession({ departmentCode: "--" })))
           .departmentCode,
       ).toEqual(["Choose or add a department."]);
+    });
+
+    it(`accepts a department code of ${DEPARTMENT_CODE_MAX_LENGTH} after normalising, and refuses one longer`, () => {
+      // The longest real code, INDS-NYC, normalises to 7 (data/README.md).
+      const real = createSessionSchema(NOW).safeParse(validSession({ departmentCode: "INDS-NYC" }));
+      expect(real.success && real.data.departmentCode).toBe("INDSNYC");
+      expect(
+        createSessionSchema(NOW).safeParse(
+          validSession({ departmentCode: "A".repeat(DEPARTMENT_CODE_MAX_LENGTH) }),
+        ).success,
+      ).toBe(true);
+      expect(
+        fieldErrors(
+          createSessionSchema(NOW).safeParse(
+            validSession({ departmentCode: "A".repeat(DEPARTMENT_CODE_MAX_LENGTH + 1) }),
+          ),
+        ).departmentCode,
+      ).toEqual([`Department codes are at most ${DEPARTMENT_CODE_MAX_LENGTH} letters or digits.`]);
     });
   });
 

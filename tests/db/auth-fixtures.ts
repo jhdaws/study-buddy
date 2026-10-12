@@ -37,10 +37,14 @@ export async function createUser(
   `);
   const id = rows[0].id;
 
-  await db.query(`insert into public.profiles (id, display_name) values ($1, $2)`, [
-    id,
-    options.displayName ?? null,
-  ]);
+  // A2's signup trigger (*_profile_rules.sql) has already created the
+  // profile row, so set the name on it rather than inserting a second one.
+  // The upsert also covers a database without that trigger.
+  await db.query(
+    `insert into public.profiles (id, display_name) values ($1, $2)
+     on conflict (id) do update set display_name = excluded.display_name`,
+    [id, options.displayName ?? null],
+  );
 
   return id;
 }
