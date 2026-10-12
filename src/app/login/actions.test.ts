@@ -16,6 +16,9 @@ class Redirect extends Error {
     super(`redirect to ${path}`);
   }
 }
+const cache = vi.hoisted(() => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: cache.revalidatePath }));
+
 vi.mock("next/navigation", () => ({
   redirect: (path: string) => {
     throw new Redirect(path);
@@ -200,6 +203,12 @@ describe("saveDisplayName", () => {
     expect(path).toBe("/sessions/new");
   });
 
+  it("re-renders the layout, so the header shows the new name without a reload", async () => {
+    server.select.mockResolvedValue({ data: [{ id: "u1" }], error: null });
+    await redirectOf(saveDisplayName({}, form({ displayName: "Priya" })));
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/", "layout");
+  });
+
   it("never redirects off-site", async () => {
     server.select.mockResolvedValue({ data: [{ id: "u1" }], error: null });
     const path = await redirectOf(
@@ -241,6 +250,7 @@ describe("saveDisplayName", () => {
     server.select.mockResolvedValue({ data: [], error: null });
     const state = await saveDisplayName({}, form({ displayName: "Priya" }));
     expect(state.formError).toMatch(/couldn't find your profile/);
+    expect(cache.revalidatePath).not.toHaveBeenCalled();
   });
 });
 

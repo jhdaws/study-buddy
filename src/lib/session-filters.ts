@@ -29,7 +29,10 @@ export type SessionFilters = {
 
 export const NO_FILTERS: SessionFilters = { query: "", when: "all", hasSeats: false };
 
-/** Lower-case, accents and punctuation dropped, spaces collapsed: "C.S. 3251" -> "cs 3251". */
+/**
+ * Lower-case, accents dropped, punctuation turned into spaces: "C.S. 3251" ->
+ * "c s 3251". Matching is by substring, so "c" and "s" still find "cs".
+ */
 function normalise(text: string): string {
   return text
     .normalize("NFD")
