@@ -9,14 +9,19 @@
  * If listSessions() throws, ./error.tsx shows a retry screen rather than a
  * blank page.
  *
- * Filters (US-06 course, US-12 campus zone) and the map (M4) come later; see
- * the comment in SessionBrowser.tsx.
+ * Search and filter chips run in the browser over this list
+ * (SessionBrowser, src/lib/session-filters.ts). A server-side course filter
+ * (US-06) and the map (M4) come later; see the comment in SessionBrowser.tsx.
  */
 
 import type { Metadata } from "next";
 import { connection } from "next/server";
 
+import Link from "next/link";
+
 import SessionBrowser from "@/components/SessionBrowser";
+import Icon from "@/components/ui/Icon";
+import { BUTTON_PRIMARY_LIGHT } from "@/components/ui/styles";
 import { listSessions } from "@/lib/sessions";
 
 export const metadata: Metadata = {
@@ -34,11 +39,22 @@ export default async function SessionsPage() {
   const now = new Date();
 
   return (
-    <main>
-      <h1 className="text-2xl font-semibold">Study sessions</h1>
-      <p className="mt-1 mb-4 text-base text-neutral-600 dark:text-neutral-400">
-        Open sessions on campus, soonest first. Times are campus time.
-      </p>
+    <main className="min-w-0 lg:max-w-4xl">
+      <div className="mb-5 flex items-end justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-navy-900">Study sessions</h1>
+          <p className="mt-1 text-base text-navy-muted">
+            Open sessions on campus, soonest first. Times are campus time.
+          </p>
+        </div>
+        {/* Desktop only: phones have the tab bar's Host button. */}
+        <div className="hidden shrink-0 md:block">
+          <Link href="/sessions/new" className={BUTTON_PRIMARY_LIGHT}>
+            <Icon name="plus" />
+            Host a session
+          </Link>
+        </div>
+      </div>
       <SessionBrowser sessions={sessions} now={now} />
     </main>
   );

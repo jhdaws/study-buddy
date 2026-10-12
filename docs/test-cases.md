@@ -9,7 +9,9 @@ mapping stays honest as the code changes.
 
 Status: ⬜ not yet written · 🚧 partially covered · ✅ automated and passing
 
-**Everything is ⬜ except US-02b and US-16, which are 🚧.** An earlier
+**Everything is ⬜ except US-01, US-01b, US-02b, US-16 and US-21, which are
+🚧.** None of the sign-in rows has run against Supabase: the A3 tests mock it,
+and US-01b's database test has not yet run on a Supabase database. An earlier
 scaffold had 15 passing unit tests; it was stripped back so the schema can be
 designed first. The tests in the repo today cover environment configuration,
 the form validation rules, the W4 fixtures and the location picker's props,
@@ -23,8 +25,9 @@ acceptance criterion is verified end to end.**
 
 | ID | Status | Given | When | Then | Verified by |
 | --- | --- | --- | --- | --- | --- |
-| US-01 | ⬜ | An unregistered student is on the sign-in screen | They submit a valid `@vanderbilt.edu` address | A one-time sign-in link is emailed; non-Vanderbilt addresses are rejected with a specific message | Unit test + a database-level domain check |
-| US-01b | ⬜ | An attacker calls the auth API directly with a non-Vanderbilt address | The request bypasses our sign-in form | The database trigger rejects it | DB integration test — TASK-03 |
+| US-01 | 🚧 | An unregistered student is on the sign-in screen | They submit a valid `@vanderbilt.edu` address | A one-time sign-in link is emailed; non-Vanderbilt addresses are rejected with a specific message | Unit test + a database-level domain check. **So far (A3, mocked Supabase):** `src/app/login/actions.test.ts` — `signIn` refuses other domains before calling Supabase, sends with `emailRedirectTo` back to `/auth/confirm` on the same origin, maps errors; `verifyCode` signs in with the emailed code; `src/app/auth/confirm/route.test.ts` — the link's token is verified and the redirect never leaves the site; `src/components/SignInForm.test.tsx` — the form, its errors and the code step. A4: `src/lib/supabase/server.test.ts` (`requireUser`, the name step), `src/lib/supabase/proxy.test.ts` (signed-out visitors leave `/sessions*` with `?next=`, cookies kept), `DisplayNameForm.test.tsx` and `saveDisplayName` in `actions.test.ts`. **Not yet:** an email actually sent and clicked — nothing here has run against Supabase Auth, and the hosted settings (A1) are not done. The database half is US-01b |
+| US-01b | 🚧 | An attacker calls the auth API directly with a non-Vanderbilt address | The request bypasses our sign-in form | The database trigger rejects it | `tests/db/profiles.test.ts`, "signup is Vanderbilt-only" — a direct insert into `auth.users` stands in for the auth API; also covers look-alike domains and changing the address later (A2). **Written, not yet run on Supabase's database** (no Docker when written; run only against PGlite with an imitation `auth` schema). Not tested: the trigger through the real Supabase Auth API |
+| US-21 | 🚧 | A student is signed in on a shared computer | They tap Sign out | Their session ends on that device and the header offers "Sign in" again | `src/app/login/actions.test.ts` — `signOut` ends this device's session (`scope: "local"`) and redirects home; `SiteHeader.test.tsx` — the sign-out form. **Not yet:** run against Supabase |
 | US-02 | ⬜ | A signed-in student is on Create Session | They submit course, topic, a place (from Google Places — there is no building list, ADR 0008), room, time range, capacity | The session is saved, the host is added to the roster, and a pin appears on the map | Unit test + integration test. **So far:** the form exists (W5) and submits to the `createSession` stub, which validates and redirects but **saves nothing** — S3. M3's server-side place check (radius, excluded types) is unit tested in its pure parts — `src/lib/geo.test.ts`, `src/lib/place-policy.test.ts` — but has **never called Google** (no key yet), and `tests/db/locations.test.ts` (clients read locations, never write them) is written but **has not run** |
 | US-02b | 🚧 | A signed-in student is on Create Session | They submit an end time before the start, or a time in the past | Submission is blocked with a field-level error | Unit test: `src/lib/validation.test.ts`, the "US-02b" block — the rule and its field-level messages. Component test: `src/components/CreateSessionForm.test.tsx` — the form shows a `startsAt`/`endsAt` error beside its input (`role="alert"`, `aria-describedby`) and keeps what was typed (W5). **Not yet:** the database refusing them (S1) |
 | US-03 | ⬜ | Three upcoming sessions and one ended session exist | A signed-in student opens the map | Three pins appear, the ended one does not; tapping a pin shows course, time, and seats left | Manual on staging — Sprint 3. **So far (list half, not the map):** `SessionBrowser.test.tsx` renders course, time and seats left per card; the ended/cancelled filter is only the fixture stub's (`fixtures.test.ts`) until S4 |
@@ -35,7 +38,7 @@ acceptance criterion is verified end to end.**
 | **US-07b** | ⬜ | A session has exactly one seat left | **Two students attempt to join at the same moment** | Exactly one succeeds; the other is told the session is full; the roster never exceeds capacity | **DB concurrency test — see below** |
 | US-08 | ⬜ | A student has joined a session | They tap Leave | They disappear from the roster and the seat is released | E2E — Sprint 3 |
 | US-09 | ⬜ | A host owns an open session | They cancel it | Attendees see a cancellation notice and new joins are rejected | E2E — Sprint 4 |
-| US-06 / US-12 | ⬜ | Several sessions exist across courses and campus zones *(zone data no longer exists — US-12 needs rethinking, ADR 0008)* | A student applies a course or zone filter | Only matching sessions remain; clearing the filter restores all | Component test — Sprint 3 |
+| US-06 / US-12 | 🚧 | Several sessions exist across courses and campus zones *(zone data no longer exists — US-12 needs rethinking, ADR 0008)* | A student applies a course or zone filter | Only matching sessions remain; clearing the filter restores all | Component test — Sprint 3. **So far (US-06, client side only):** `src/lib/session-filters.test.ts` and `SessionBrowser.test.tsx` — search by course code (any spelling), title, topic or place, plus Today / This week / Has seats chips, over the sessions already loaded. **Not yet:** filtering in `listSessions()` (sessions not loaded), and US-12 has no zone data |
 | US-16 | 🚧 | No sessions exist for a student's course | They open the session list | The empty state invites them to start one or post a request | Component test: `src/components/SessionBrowser.test.tsx` — an empty list shows an invitation linking to `/sessions/new`. **Not yet:** "for a student's course" needs the course filter (US-06); "post a request" needs study requests (later sprint) |
 | US-23 | ⬜ | A student is deciding whether to walk across campus | They open a session | They see who is already attending before joining | E2E |
 | US-11b | ⬜ | A signed-in student queries another student's profile row | They request the `email` column | The request is denied; name, major, and year are returned | Column-level access control — needs a DB test |
@@ -109,8 +112,10 @@ minutes in the past, each with a message on the right field, and reports
 both at once. Each of those tests was checked to fail when its rule was
 broken. The other half — the form rendering those errors (W5) and
 `create_session` rejecting the same input (S1) — does not exist yet. The
-same file tests the sign-in domain rule, but US-01 also needs the link sent
-and the database trigger, so it stays ⬜. `src/lib/fixtures.test.ts` and
+same file tests the sign-in domain rule and, since A3, the emailed-code rule.
+US-01 is 🚧, not ✅: A3's tests (actions, confirm route, form) run against a
+mocked Supabase, so no email has been sent or link followed, and the
+database trigger (US-01b) has not run on Supabase's database. `src/lib/fixtures.test.ts` and
 `src/components/LocationPicker.test.tsx` check that the stubs' fixtures are
 consistent and that the picker keeps its props contract — scaffolding, not
 behaviour a student sees.

@@ -4,9 +4,9 @@
 // in @/lib/supabase/server, so RLS applies as the signed-in user. `import
 // "server-only"` makes importing this from a Client Component a build error
 // rather than a confusing runtime one. (Next.js resolves "server-only" itself
-// -- the npm package is optional and not installed -- which also means Vitest
-// cannot import this file. The stub logic lives in fixtures.ts, where it is
-// tested.)
+// -- the npm package is optional and not installed; vitest.config.mts maps it
+// to an empty module so tests can import this file. The stub logic lives in
+// fixtures.ts, where it is tested.)
 //
 // Client code that needs these TYPES may `import type` them: type imports are
 // erased before bundling. Client code that needs the DATA gets it one of two

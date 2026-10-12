@@ -1,17 +1,27 @@
 /**
- * One study session in the list (US-03). Built by W5 (#12).
+ * One study session (US-03). Built by W5 (#12), restyled to the Claude
+ * Design spec (page 8, "Session cards"): a dark glass card with the course,
+ * a seats pill, the topic, a When / Where / Host panel and a seats bar.
+ *
+ * Two variants: "full" for the /sessions list, "compact" for the home
+ * page's horizontal feed.
  *
  * Renders a SessionListItem (src/lib/sessions.ts) as is -- every derived value
  * (seats left, host name) arrives already derived, and this only formats it.
  * No hooks, so it renders as a Server Component today and still works if
  * SessionBrowser becomes a Client Component for M4's map toggle. Times are
  * formatted in campus time explicitly (src/lib/format.ts), so either side
- * prints the same thing.
+ * prints the same words (the spacing characters can differ; see `when`).
+ *
+ * The spec's avatar stack needs attendee names, which SessionListItem does
+ * not carry (and showing who is going is US-23, a later sprint). The seats
+ * bar shows the same thing honestly: how many are going, out of how many.
  *
  * Not a link yet: the detail page (/sessions/[id]) is a later sprint. When it
  * lands, wrap the course heading in a <Link href={`/sessions/${session.id}`}>.
  */
 
+import Icon from "@/components/ui/Icon";
 import type { SessionListItem } from "@/lib/sessions";
 import {
   formatCourseCode,
@@ -24,62 +34,188 @@ export type SessionCardProps = {
   session: SessionListItem;
   /** The request's "now", for "Today"/"Tomorrow" and "Happening now". */
   now: Date;
+  variant?: "full" | "compact";
+  /** The course heading's level: h3 when the list groups cards under day headings. */
+  headingLevel?: "h2" | "h3";
 };
 
-export default function SessionCard({ session, now }: SessionCardProps) {
+export function SeatsPill({ seatsLeft }: { seatsLeft: number }) {
+  const full = seatsLeft <= 0;
+  const last = seatsLeft === 1;
+  return (
+    <p
+      className={
+        "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-sm font-bold " +
+        (full
+          ? "border-white/15 bg-navy-950 text-white"
+          : last
+            ? "border-amber/40 bg-amber/15 text-amber"
+            : "border-success/40 bg-success/15 text-success-on-dark")
+      }
+    >
+      <Icon name="seat" className="size-4" />
+      {formatSeatsLeft(seatsLeft)}
+    </p>
+  );
+}
+
+export function LivePill() {
+  return (
+    <p className="inline-flex items-center gap-1.5 rounded-full bg-blue-600 px-3 py-1 text-sm font-bold text-white">
+      <span aria-hidden className="relative flex size-2">
+        <span className="absolute inline-flex size-full rounded-full bg-white opacity-75 motion-safe:animate-ping" />
+        <span className="relative inline-flex size-2 rounded-full bg-white" />
+      </span>
+      Happening now
+    </p>
+  );
+}
+
+function SeatsBar({ taken, capacity, full }: { taken: number; capacity: number; full: boolean }) {
+  // One segment per seat up to 12; beyond that a single proportional bar.
+  const segments = capacity <= 12;
+  return (
+    <div className="flex items-center gap-3">
+      {segments ? (
+        <div aria-hidden className="flex flex-1 gap-1">
+          {Array.from({ length: capacity }, (_, i) => (
+            <span
+              key={i}
+              className={
+                "h-1.5 flex-1 rounded-full " +
+                (i < taken ? (full ? "bg-white/45" : "bg-blue-300") : "border border-success/60 bg-success/10")
+              }
+            />
+          ))}
+        </div>
+      ) : (
+        <div aria-hidden className="h-1.5 flex-1 overflow-hidden rounded-full bg-success/15">
+          <div
+            className={full ? "h-full bg-white/45" : "h-full bg-blue-300"}
+            style={{ width: `${Math.min(100, (taken / capacity) * 100)}%` }}
+          />
+        </div>
+      )}
+      <p className="shrink-0 text-sm font-semibold text-white/80">
+        {taken} of {capacity} going
+      </p>
+    </div>
+  );
+}
+
+export default function SessionCard({
+  session,
+  now,
+  variant = "full",
+  headingLevel = "h2",
+}: SessionCardProps) {
+  const Heading = headingLevel;
   const full = session.seatsLeft === 0;
+  const live = isInProgress(session.startsAt, session.endsAt, now);
   const headingId = `session-${session.id}`;
+  const host = session.hostDisplayName ?? "Deleted user";
+  const where = (
+    <>
+      {session.locationLabel}
+      {session.room && <> · {session.room}</>}
+    </>
+  );
+  // suppressHydrationWarning: Node's ICU and the browser's put different
+  // invisible spaces around the dash and before AM/PM (see format.test.ts).
+  // The words are identical; only this element's text may differ.
+  const when = (
+    <time dateTime={session.startsAt} suppressHydrationWarning>
+      {formatSessionTime(session.startsAt, session.endsAt, now)}
+    </time>
+  );
+
+  const heading = (
+    // scroll-mt clears the sticky top bar when the home page's "View" links
+    // jump to /sessions#session-<id>.
+    <Heading id={headingId} className="scroll-mt-24 text-base leading-snug">
+      <span className="font-extrabold">{formatCourseCode(session.course)}</span>
+      {session.course.title && (
+        <span className="font-medium text-white/72"> · {session.course.title}</span>
+      )}
+    </Heading>
+  );
+
+  if (variant === "compact") {
+    return (
+      <article
+        aria-labelledby={headingId}
+        data-full={full || undefined}
+        className={`glass-dark relative flex h-full flex-col gap-3 rounded-card p-4 text-white ${full ? "opacity-80" : ""}`}
+      >
+        <div className="flex items-center justify-between gap-2">
+          {live ? <LivePill /> : <span />}
+          <SeatsPill seatsLeft={session.seatsLeft} />
+        </div>
+        <div>
+          {heading}
+          <p className="mt-1 text-lg leading-snug font-extrabold">{session.topic}</p>
+        </div>
+        <dl className="flex flex-col gap-1.5 text-sm text-white/80">
+          <div className="flex items-center gap-2">
+            <dt>
+              <Icon name="clock" className="size-4" />
+              <span className="sr-only">When</span>
+            </dt>
+            <dd>{when}</dd>
+          </div>
+          <div className="flex items-center gap-2">
+            <dt>
+              <Icon name="pin" className="size-4" />
+              <span className="sr-only">Where</span>
+            </dt>
+            <dd className="truncate">{where}</dd>
+          </div>
+        </dl>
+        <p className="mt-auto border-t border-white/10 pt-3 text-sm text-white/72">
+          Host <span className="font-bold text-white">{host}</span>
+        </p>
+      </article>
+    );
+  }
 
   return (
     <article
       aria-labelledby={headingId}
       data-full={full || undefined}
-      className={
-        full
-          ? "rounded-lg border border-neutral-200 bg-neutral-100 p-4 text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400"
-          : "rounded-lg border border-neutral-300 bg-white p-4 dark:border-neutral-700 dark:bg-neutral-950"
-      }
+      className={`glass-dark relative rounded-card p-4 text-white sm:p-5 ${full ? "opacity-80 saturate-50" : ""}`}
     >
       <div className="flex items-start justify-between gap-3">
-        <h2 id={headingId} className="text-base leading-snug">
-          <span className="font-semibold">{formatCourseCode(session.course)}</span>
-          {session.course.title && (
-            <span className="text-neutral-600 dark:text-neutral-400">
-              {" "}· {session.course.title}
-            </span>
+        <div className="min-w-0">
+          {live && (
+            <div className="mb-2">
+              <LivePill />
+            </div>
           )}
-        </h2>
-        <p
-          className={
-            full
-              ? "shrink-0 rounded-full bg-neutral-700 px-2.5 py-0.5 text-sm font-semibold text-white dark:bg-neutral-300 dark:text-neutral-900"
-              : "shrink-0 rounded-full bg-emerald-100 px-2.5 py-0.5 text-sm font-medium text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200"
-          }
-        >
-          {formatSeatsLeft(session.seatsLeft)}
-        </p>
+          {heading}
+        </div>
+        <SeatsPill seatsLeft={session.seatsLeft} />
       </div>
 
-      <p className="mt-1 text-base">{session.topic}</p>
+      <p className="mt-2 text-xl leading-snug font-extrabold tracking-tight">{session.topic}</p>
 
-      <dl className="mt-3 grid grid-cols-[4.5rem_1fr] gap-x-2 gap-y-1 text-sm">
-        <dt className="text-neutral-500 dark:text-neutral-400">When</dt>
-        <dd>
-          {isInProgress(session.startsAt, session.endsAt, now) && (
-            <span className="font-medium">Happening now · </span>
-          )}
-          <time dateTime={session.startsAt}>
-            {formatSessionTime(session.startsAt, session.endsAt, now)}
-          </time>
-        </dd>
-        <dt className="text-neutral-500 dark:text-neutral-400">Where</dt>
-        <dd>
-          {session.locationLabel}
-          {session.room && <> · {session.room}</>}
-        </dd>
-        <dt className="text-neutral-500 dark:text-neutral-400">Host</dt>
-        <dd>{session.hostDisplayName ?? "Deleted user"}</dd>
+      <dl className="mt-4 grid gap-3 rounded-inner border border-white/10 bg-white/[0.06] p-3.5 text-sm sm:grid-cols-[1fr_1.4fr_auto] sm:gap-4">
+        <div>
+          <dt className="text-xs font-bold tracking-wide text-white/72 uppercase">When</dt>
+          <dd className="mt-0.5 font-semibold">{when}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-bold tracking-wide text-white/72 uppercase">Where</dt>
+          <dd className="mt-0.5 font-semibold">{where}</dd>
+        </div>
+        <div>
+          <dt className="text-xs font-bold tracking-wide text-white/72 uppercase">Host</dt>
+          <dd className="mt-0.5 font-semibold">{host}</dd>
+        </div>
       </dl>
+
+      <div className="mt-4">
+        <SeatsBar taken={session.attendeeCount} capacity={session.capacity} full={full} />
+      </div>
     </article>
   );
 }

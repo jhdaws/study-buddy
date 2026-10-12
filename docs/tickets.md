@@ -92,6 +92,7 @@ flowchart LR
 - [x] **Before M1 creates any keys:** secret scanning and push protection on
 - [x] `main` ruleset: PR with one approval required, `verify` check required, no force push, no deletion
 - [ ] Add the `db` check to the ruleset's required checks
+- [ ] Require branches to be up to date before merging (ruleset → required status checks). #31–#33 were each green alone; merged together, 21 `db` tests failed (2026-10-06 review)
 - [ ] "Automatically delete head branches" on (Settings → General)
 - [ ] Dependabot config for npm and GitHub Actions
 
@@ -135,6 +136,26 @@ flowchart LR
 - [ ] `docs/test-cases.md` updated with what is genuinely verified
 - [ ] Fixtures no longer used by the app kept only where tests need them
 
+#### W7 · Deploy migrations from CI
+**S · TASK-03 · now — before #31–#33's migrations need to reach the hosted project**
+
+The hosted database changes only when someone runs `supabase db push` by hand, while Vercel deploys `main` on every merge. Once #31–#33 merge, production would run code calling `create_session` before the hosted database has it.
+- [ ] A job on push to `main`: `supabase link`, then `supabase db push` to the hosted project, with `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` in a GitHub `production` environment
+- [ ] Runs only after `verify` and `db` pass for that commit
+- [ ] No `--include-seed`: reseeding the hosted project stays a deliberate, manual step
+- [ ] Every migration must work with the app version already deployed: Vercel deploys at the same time, and nothing orders the two. Additive changes are fine (functions, policies, CHECKs that existing rows pass); renames and drops take two steps
+- [ ] First run: compare the hosted project's `supabase migration list` with `supabase/migrations/`
+- [ ] Documented in `supabase/README.md`
+
+#### W8 · End-to-end smoke test in CI
+**M · Sprint 3 · after S4, M5**
+
+One browser test of the Sprint 2 "done when", so the main path is checked on every PR rather than by hand at demo time. Not before S4 and M5: until then it could only click through fixtures.
+- [ ] Playwright, one test: two `@vanderbilt.edu` users sign in with the code read from Mailpit's API; one names themselves and creates a session; the other sees it in the list with the right seat count
+- [ ] Runs in CI against the full local stack (`supabase start`) with the app built and started (`next build && next start`), at 375px (ADR 0004)
+- [ ] A Playwright trace uploaded as a workflow artifact on failure
+- [ ] Added to the ruleset's required checks once it has run a week without flaking
+
 ---
 
 ## Track A · Auth
@@ -142,32 +163,60 @@ flowchart LR
 #### A1 · Hosted auth settings
 **S · US-01 · start now**
 - [ ] Supabase Auth Site URL = production URL; redirect URLs cover localhost and Vercel previews
-- [ ] Magic-link email template points at `/auth/confirm` with `token_hash`
-- [ ] Same settings in `supabase/config.toml` for local (local emails appear in Mailpit at http://127.0.0.1:54324)
-- [ ] Free-plan email rate limit checked — fine for four testers, matters for a demo
+- [ ] Magic-link email template points at `/auth/confirm` with `token_hash` — written (`supabase/templates/magic_link.html`, a 6-digit code plus the link); **not yet pasted into the hosted dashboard** — steps in [`supabase/README.md`](../supabase/README.md#hosted-auth-settings-a1)
+- [x] Same settings in `supabase/config.toml` for local (local emails appear in Mailpit at http://127.0.0.1:54324) — never run locally (Docker down)
+- [x] Free-plan email rate limit checked — **2 emails an hour for the whole project, delivered only to Supabase organization members** (Supabase docs, 2026-09-30). The "done when" needs both people in the organization, or custom SMTP
 
 #### A2 · Profile rules
-**M · US-01, US-25 · after W2**
-- [ ] Trigger rejecting non-`@vanderbilt.edu` signups
+**M · US-01, US-25 · after W2 · 🚧 written, not yet run on a real Supabase database**
+
+`supabase/migrations/20260930210000_profile_rules.sql` and
+`tests/db/profiles.test.ts` exist, but Docker was not available when they
+were written: the migration has **not** been applied with `supabase db reset`
+and `npm run test:db` has **not** run. They were run against PGlite (Postgres
+17 in WASM) with a hand-made imitation of Supabase's `auth` schema and roles —
+all pass, and nine deliberate breakages of the migration each fail a test —
+which shows the SQL is valid and the tests can fail, not that it works on
+Supabase. Tick the boxes once `npm run test:db` passes locally or in CI.
+- [ ] Trigger rejecting non-`@vanderbilt.edu` signups — also on an email change
 - [ ] Trigger creating a `profiles` row on signup
 - [ ] `display_name` CHECK matching `displayNameSchema`: 1–50 characters after trimming (`DISPLAY_NAME_MAX_LENGTH` in `src/lib/limits.ts`)
 - [ ] RLS: signed-in users read display names; users update only their own
-- [ ] **Don't copy email into `profiles`.** It already lives in `auth.users`,
-      which clients cannot read — that satisfies US-25 without column grants
+- [x] **Don't copy email into `profiles`.** It already lives in `auth.users`,
+      which clients cannot read — that satisfies US-25 without column grants.
+      (A column grant *is* used, but for a different reason: so a user can
+      update only `display_name`, not `id` or `created_at`.)
 - [ ] Database tests: US-01b (direct non-Vanderbilt signup rejected); a user cannot update someone else's profile
 
 #### A3 · Magic-link sign-in
-**M · US-01, US-21 · start now**
-- [ ] `signIn()` validates with `signInSchema` and sends the link
-- [ ] `/login` page with "check your inbox" state and `role="alert"` errors
-- [ ] `/auth/confirm` exchanges the token and redirects **only to same-origin paths**
-- [ ] `signOut()` (US-21)
+**M · US-01, US-21 · start now · 🚧 written and unit-tested against a mocked Supabase; never run against Supabase Auth**
+
+Scope added by the user: the email carries a **one-time code as well as the
+link**, and `/login` takes the code (`verifyCode()`). Reason: Vanderbilt mail
+goes through Outlook, whose Safe Links scanning can open links before the
+student does; the code also works across devices. **Caveat found while
+building it:** link and code are one token, so a scanner that opens the link
+spends the code as well — see `supabase/README.md`, "Hosted auth settings".
+ADR 0003 still says "magic link" — not edited.
+- [ ] `signIn()` validates with `signInSchema` and sends the link — written; no email has actually been sent
+- [x] `/login` page with "check your inbox" state and `role="alert"` errors — component-tested (`SignInForm.test.tsx`), plus the code step
+- [ ] `/auth/confirm` exchanges the token and redirects **only to same-origin paths** — the redirect rule is unit-tested (`safe-next.test.ts`, `route.test.ts`); the token exchange has not run against Supabase
+- [ ] Code sign-in: `verifyCode()` — written and unit-tested; not run against Supabase
+- [ ] `signOut()` (US-21) — written and unit-tested; not run against Supabase
 
 #### A4 · Display name and route protection
-**M · US-01 · after W2, A3**
-- [ ] First sign-in without a display name goes to a name step before anything else; `saveDisplayName()`
-- [ ] Proxy redirects signed-out users away from `/sessions*`, keeping `?next=`
-- [ ] `requireUser()` implemented — S3 calls it
+**M · US-01 · after W2, A3 · 🚧 written and unit-tested against a mocked Supabase; never run against Supabase**
+- [ ] First sign-in without a display name goes to a name step (`/login/name`) before anything else; `saveDisplayName()` — written and unit-tested; the update has not run against A2's policies. A nameless student who skips the step can still *browse* `/sessions` (the proxy only checks sign-in); every page or action that calls `requireUser()` — `/sessions/new`, `createSession` — sends them back to it, which is what ADR 0008 rule 1 requires
+- [x] Proxy redirects signed-out users away from `/sessions*`, keeping `?next=` — unit-tested (`proxy.test.ts`), including that the redirect keeps refreshed cookies; Supabase mocked
+- [ ] `requireUser()` implemented — S3 calls it — written and unit-tested (`server.test.ts`), Supabase mocked
+
+#### A5 · Demo email delivery
+**S · US-01 · after A1, #33**
+
+Per #33, Supabase's built-in sender reaches only members of the Supabase organization, about 2 emails an hour — not enough for the demo.
+- [ ] Every tester can receive a sign-in email: custom SMTP (Authentication → SMTP), or every tester in the Supabase organization
+- [ ] Rate limit enough for the demo: four testers, a few retries each
+- [ ] A real sign-in email to an `@vanderbilt.edu` address: does Outlook's link scanning spend the token before the student does (the code then fails too)? If so, the fix in `supabase/README.md`, "Mail scanners" (#33)
 
 ---
 
@@ -240,6 +289,22 @@ flowchart LR
 #### M4 · Map view (stretch)
 **M · US-03 · only once M1–M3 are done**
 - [ ] List / map toggle on `/sessions`; one marker per session, distinct when full; loads client-side only
+
+#### M5 · A location sessions can use before M2
+**S · US-02 · decide now; build after #31, #32**
+
+Once #31 and #32 merge, the stub picker's fixture place ids resolve to `20000000-…` location ids that are not rows, so `create_session` fails its foreign key and the student sees "Something went wrong saving that" (checked 2026-10-06 with #31–#33 merged locally). Until M1 and M2 land, nothing can be created anywhere — which blocks W6's demo and W8.
+- [ ] Decide: wait for M1 and M2, or put the three fixture locations into local and CI databases only — never the hosted project
+- [ ] If seeding: check how `supabase db push --include-seed` picks seed files, so they cannot reach the hosted project; production keeps refusing fixture ids once the server key is set (#31 already does)
+- [ ] W6 can create a session locally
+
+#### M6 · Refresh stored coordinates
+**S · Sprint 3 · after M1, M3**
+
+#31 reports Google's terms allow caching a place's coordinates for 30 days at most — not yet checked on Google's own page. `locations.validated_at` exists for this.
+- [ ] Check the rule on Google's page; record it in ADR 0008
+- [ ] A scheduled job (Vercel Cron or `pg_cron`) re-validating locations older than the limit. Not a delete: `sessions.location_id` restricts deletes
+- [ ] Decide what happens to a place Google no longer returns
 
 ---
 

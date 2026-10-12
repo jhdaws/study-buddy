@@ -7,9 +7,10 @@
 // the secret key bypasses RLS on every table. This is the one module allowed
 // to use it, and only to write `locations`.
 //
-// Next.js resolves "server-only" itself, so it is not a dependency; Vitest
-// cannot import this file. So every rule lives in pure, unit-tested modules
-// without the import -- the distance check in src/lib/geo.ts; the id check,
+// Next.js resolves "server-only" itself, so it is not a dependency;
+// vitest.config.mts maps it to an empty module so tests can import this file
+// (with fetch and the admin client mocked). Even so, every rule lives in
+// pure, unit-tested modules without the import -- the distance check in src/lib/geo.ts; the id check,
 // response parsing, excluded types and error mapping in
 // src/lib/place-policy.ts -- and this file only does the I/O around them.
 

@@ -155,6 +155,9 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
+# A1 (#14): the local app. The hosted project's Site URL is production -- set in the dashboard, see
+# supabase/README.md, "Hosted auth settings (A1)". No trailing slash: the email template appends
+# "/auth/confirm" to it.
 site_url = "http://localhost:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
@@ -228,6 +231,8 @@ secure_password_change = false
 # Controls the minimum amount of time that must pass before sending another signup confirmation or password reset email.
 max_frequency = "1s"
 # Number of characters used in the email OTP.
+# A3's form accepts 6 to 10 digits (OTP_CODE_MIN/MAX_LENGTH in src/lib/limits.ts), the whole range
+# Supabase allows, so changing this does not break sign-in.
 otp_length = 6
 # Number of seconds before the email OTP expires (defaults to 1 hour).
 otp_expiry = 3600
@@ -241,6 +246,19 @@ otp_expiry = 3600
 # pass = "env(SENDGRID_API_KEY)"
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
+
+# A1 (#14): the sign-in email -- a one-time code, plus a link to /auth/confirm with token_hash.
+# signInWithOtp() sends "magic_link" to an existing user and "confirmation" to a new one, so
+# both use the same template. The hosted project needs the same HTML pasted into its dashboard
+# (supabase/README.md, "Hosted auth settings (A1)"); this file is the source for both.
+# Local emails land in Mailpit: http://127.0.0.1:54324
+[auth.email.template.magic_link]
+subject = "Your Study Buddy sign-in code"
+content_path = "./supabase/templates/magic_link.html"
+
+[auth.email.template.confirmation]
+subject = "Your Study Buddy sign-in code"
+content_path = "./supabase/templates/magic_link.html"
 
 # Uncomment to customize email template
 # [auth.email.template.invite]
