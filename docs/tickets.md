@@ -148,7 +148,7 @@ The hosted database changes only when someone runs `supabase db push` by hand, w
 - [ ] Documented in `supabase/README.md`
 
 #### W8 · End-to-end smoke test in CI
-**M · Sprint 3 · after S4, M5 · Nate**
+**M · Sprint 4 (moved 2026-10-12, to make room for S5 and S6) · after S4, M5 · Nate**
 
 One browser test of the Sprint 2 "done when", so the main path is checked on every PR rather than by hand at demo time. Not before S4 and M5: until then it could only click through fixtures.
 - [ ] Playwright, one test: two `@vanderbilt.edu` users sign in with the code read from Mailpit's API; one names themselves and creates a session; the other sees it in the list with the right seat count
@@ -261,12 +261,36 @@ Per #33, Supabase's built-in sender reaches only members of the Supabase organiz
 - [ ] `listDepartments()`; `searchCourses()` ordered by how many sessions used each course
 - [ ] `hostDisplayName` on each item needs A2's profiles read policy — until A2 lands, return null (shown as "Deleted user") or coordinate with A2
 
+#### S5 · Join and leave with a seat limit
+**L · US-04, US-07, US-08 · Sprint 3 · Tapan**
+
+The other half of the core loop: a student can host and browse, but not yet join. Design in `architecture.md` §3: join and leave go through database functions holding a row lock, never a plain `INSERT` from app code.
+- [ ] `join_session(session_id)`: SECURITY DEFINER, locks the session row (`for update`); refuses when full, cancelled, ended, already joined, signed out, or without a display name, each with a short raised message; inserts into `session_attendees`
+- [ ] `leave_session(session_id)`: removes the caller; the host cannot leave (they cancel, US-09, later)
+- [ ] No client INSERT or DELETE on `session_attendees`; `anon` gets no EXECUTE on either function
+- [ ] `joinSession()` and `leaveSession()` server actions, errors mapped in `databaseErrorMessage()`
+- [ ] Database tests for every refusal, and **US-07b**: two concurrent joins for the last seat, exactly one succeeds. Then delete `tests/db/harness.test.ts` (CLAUDE.md)
+- [ ] Seats left in the list reflect joins and leaves
+
+#### S6 · Session page with roster
+**M · US-04, US-23 · Sprint 3 · after S4 · Nate**
+
+`src/app/sessions/[id]/page.tsx` and `src/components/SessionRoster.tsx` are comment-only stubs; their TODOs are the spec.
+- [ ] `/sessions/[id]`: the session in campus time, seats left; a 404 when it does not exist or is not visible
+- [ ] `<SessionRoster>`: attendees by display name (US-23, never email — US-25), live seat count, host marked
+- [ ] Join and Leave wired to S5's actions; disabled at capacity with the reason; "You're hosting" for the host
+- [ ] A notice when the host has cancelled
+- [ ] The home page's and cards' "View" links point here
+
 ---
 
 ## Track M · Google Maps
 
 #### M1 · Google Cloud and keys
-**M · TASK-06 · after W1's push protection · Jack**
+**M · TASK-06 · after W1's push protection · Jack · needed by about Oct 14**
+
+M2 and the map (M4) wait on these keys, and Sprint 3 ends Oct 20. If billing cannot be set up by then, M4 moves to Sprint 4 so Moses is not blocked.
+
 - [ ] Billing account attached; owner agreed by the team
 - [ ] Maps JavaScript API and **Places API (New)** enabled — the legacy Places API lacks `locationRestriction` and `includedPrimaryTypes`
 - [ ] Browser key restricted by **HTTP referrer** (production, previews, localhost) and by API
@@ -309,7 +333,7 @@ Once #31 and #32 merge, the stub picker's fixture place ids resolve to `20000000
 - [ ] W6 can create a session locally
 
 #### M6 · Refresh stored coordinates
-**S · Sprint 3 · after M1, M3 · Moses**
+**S · Sprint 4 (moved 2026-10-12, to make room for S5 and S6) · after M1, M3 · Moses**
 
 #31 reports Google's terms allow caching a place's coordinates for 30 days at most — not yet checked on Google's own page. `locations.validated_at` exists for this.
 - [ ] Check the rule on Google's page; record it in ADR 0008
