@@ -10,6 +10,7 @@
 // authoritative check is A2's (#15) signup trigger in the database, so that
 // calling the Supabase auth API directly cannot bypass it (US-01b).
 
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -155,7 +156,11 @@ export async function verifyCode(
 //      A2's CHECK repeats the schema's rule; its error is mapped by
 //      databaseErrorMessage(). No row updated (no profile, or A2's policy
 //      missing) is an error too, not a silent success.
-//   4. redirect() to the safe `next`, else /sessions -- outside any try.
+//   4. revalidatePath("/", "layout"): the header (avatar, account sheet) is
+//      in the root layout, which a redirect from a Server Function does not
+//      re-render on its own. Without this it keeps the "no name yet" render
+//      until a full reload.
+//   5. redirect() to the safe `next`, else /sessions -- outside any try.
 // ---------------------------------------------------------------------------
 
 /** Shown when the update matched no row: there is no profile to name. */
@@ -190,6 +195,7 @@ export async function saveDisplayName(
     return { formError: NO_PROFILE_MESSAGE, values: formValues(formData) };
   }
 
+  revalidatePath("/", "layout");
   redirect(safeNext(formData.get("next")));
 }
 
