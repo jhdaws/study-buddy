@@ -1,24 +1,68 @@
-// Maps database error codes onto messages a student should actually see.
+// Maps database and auth errors onto messages a student should actually see.
 //
-// First real use: S3, mapping the errors create_session and
-// get_or_create_course can raise (supabase/migrations/20261001031738 and
-// ...031739). Each function either raises a short, stable message -- matched
-// below by exact text -- or lets a CHECK constraint fail, which Postgres
-// reports as a check_violation (23514) naming the constraint in its message
-// -- matched by pulling that name out. Later: the join routine's errors
-// (session full, cancelled, ended, not signed in), in a later sprint.
+// Never surface raw Postgres or Supabase Auth text to a user: it leaks schema
+// names and reads like a crash. Add a mapping here instead.
 //
-// Kept a pure function so the failure paths -- awkward to reproduce against a
-// live database -- are cheap to unit test. Never surface raw Postgres text to
-// a user.
+// Pure functions on purpose: the failure paths that are awkward to reproduce
+// against a live database are cheap to unit test (errors.test.ts).
+//
+// Mappings so far:
+//   - A2/A3 (#15, #16): sign-in errors from Supabase Auth (sending a link or
+//     code, and checking a code), and the profile rules from
+//     supabase/migrations/*_profile_rules.sql.
+//   - S1-S3 (#18-#20): what create_session and get_or_create_course raise,
+//     and the CHECKs on sessions, departments and courses
+//     (*_s1_session_rules.sql, *_s2_course_normalization.sql,
+//     *_session_text_limits.sql).
+// Still to come:
+//   - Later: the join routine's (session full, cancelled, ended, not signed in).
 
-/** The shape of a Supabase/PostgREST error -- only the fields this reads. */
-export type DatabaseError = {
-  message?: string | null;
+/** For anything we have not mapped. Says nothing about the cause. */
+export const GENERIC_ERROR_MESSAGE =
+  "Something went wrong on our side. Try again in a moment.";
+
+// ---------------------------------------------------------------------------
+// Database errors -- PostgREST's error object: SQLSTATE in `code`, Postgres's
+// text in `message` and `details`.
+// ---------------------------------------------------------------------------
+
+/** The fields we read from a PostgREST / Postgres error. */
+export type DatabaseErrorLike = {
   code?: string | null;
+  message?: string | null;
+  details?: string | null;
 };
 
-/** Exact messages raised by `raise exception '<message>'` in a migration. */
+/**
+ * Named constraints, by name. Postgres puts the name in the message ("...
+ * violates check constraint \"profiles_display_name_check\""); PostgREST
+ * passes it on. Matched by name, so the wording of the message never matters.
+ */
+const CONSTRAINT_MESSAGES: Record<string, string> = {
+  // A2: 1-50 characters, trimmed (mirrors displayNameSchema).
+  profiles_display_name_check:
+    "Display names must be 1 to 50 characters, without spaces at either end.",
+  // A2: the signup trigger. Reaches us only through a direct database call;
+  // through Supabase Auth it arrives as an auth error (signInErrorMessage).
+  auth_users_vanderbilt_email: "Use your @vanderbilt.edu email address.",
+  // S1, S3: the session rules. Mirror createSessionSchema.
+  sessions_ends_after_starts: "The session has to end after it starts.",
+  sessions_capacity_min: "Capacity must be at least 2 — you count as one.",
+  sessions_topic_length: "Keep the topic to 1 to 120 characters.",
+  sessions_location_label_length: "Keep the location name to 1 to 100 characters.",
+  sessions_room_length: "Keep the room to 50 characters or fewer.",
+  // S2: departments and courses are stored normalised.
+  departments_code_normalised: "That department code isn't valid.",
+  departments_code_length: "Department codes are at most 10 letters or digits.",
+  courses_number_normalised: "Enter a 4-digit course number, like 3251 or 2100W.",
+};
+
+/**
+ * Messages our own database functions raise by name -- `raise exception
+ * 'starts_in_past'` in S1's create_session and S2's get_or_create_course.
+ * Matched on the whole message, so a word inside Postgres's own text never
+ * matches by accident.
+ */
 const RAISED_MESSAGES: Record<string, string> = {
   not_signed_in: "You've been signed out. Sign in again and try.",
   display_name_required: "Add a display name before hosting a session.",
@@ -27,29 +71,119 @@ const RAISED_MESSAGES: Record<string, string> = {
   invalid_course_number: "Enter a 4-digit course number, like 3251 or 2100W.",
 };
 
-/** CHECK constraints a violation can name, from the same migrations. */
-const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
-  sessions_ends_after_starts: "The session has to end after it starts.",
-  sessions_capacity_min: "Capacity must be at least 2 — you count as one.",
-  departments_code_normalised: "That department code isn't valid.",
-  courses_number_normalised: "Enter a 4-digit course number, like 3251 or 2100W.",
+/** SQLSTATE codes with one meaning wherever they come from. */
+const SQLSTATE_MESSAGES: Record<string, string> = {
+  // insufficient_privilege: a grant or RLS policy refused the write.
+  "42501": "You don't have permission to do that.",
 };
 
-/** check_violation. */
-const PG_CHECK_VIOLATION = "23514";
+/** A message for a database error, safe to show a student. */
+export function databaseErrorMessage(error: DatabaseErrorLike | null | undefined): string {
+  if (!error) return GENERIC_ERROR_MESSAGE;
 
-/** A message a student should see for any error a session-creation RPC call returns. */
-export function mapDatabaseError(error: DatabaseError): string {
-  const message = error.message ?? "";
-
-  const raised = RAISED_MESSAGES[message];
-  if (raised) return raised;
-
-  if (error.code === PG_CHECK_VIOLATION) {
-    const constraint = /violates check constraint "([^"]+)"/.exec(message)?.[1];
-    const mapped = constraint && CHECK_CONSTRAINT_MESSAGES[constraint];
-    if (mapped) return mapped;
+  if (error.message && Object.hasOwn(RAISED_MESSAGES, error.message)) {
+    return RAISED_MESSAGES[error.message];
   }
 
-  return "Something went wrong saving that. Try again.";
+  const text = `${error.message ?? ""} ${error.details ?? ""}`;
+  for (const [constraint, message] of Object.entries(CONSTRAINT_MESSAGES)) {
+    if (text.includes(`"${constraint}"`)) return message;
+  }
+
+  if (error.code && error.code in SQLSTATE_MESSAGES) {
+    return SQLSTATE_MESSAGES[error.code];
+  }
+  return GENERIC_ERROR_MESSAGE;
+}
+
+// ---------------------------------------------------------------------------
+// Supabase Auth errors -- AuthError: a string `code` (ErrorCode in
+// @supabase/auth-js), an HTTP `status`, and English `message`.
+// ---------------------------------------------------------------------------
+
+/** The fields we read from a Supabase AuthError. */
+export type AuthErrorLike = {
+  code?: string | null;
+  status?: number | null;
+  message?: string | null;
+};
+
+export const SIGN_IN_RATE_LIMITED_MESSAGE =
+  "Too many sign-in emails have gone out recently. Wait a minute, then try again.";
+
+const SIGN_IN_MESSAGES: Record<string, string> = {
+  // The per-address 60-second throttle and the project's hourly email cap
+  // (two an hour on Supabase's built-in email service) both arrive as this.
+  over_email_send_rate_limit: SIGN_IN_RATE_LIMITED_MESSAGE,
+  over_request_rate_limit: SIGN_IN_RATE_LIMITED_MESSAGE,
+  // Supabase's built-in email service delivers only to the project team's
+  // own addresses until custom SMTP is set up (supabase/README.md, A1).
+  email_address_not_authorized:
+    "We can't send sign-in emails to that address yet. Ask the Study Buddy team to add it.",
+  email_address_invalid: "Enter a valid Vanderbilt email address.",
+  validation_failed: "Enter a valid Vanderbilt email address.",
+  signup_disabled: "Sign-in is switched off right now. Try again later.",
+  otp_disabled: "Sign-in is switched off right now. Try again later.",
+  email_provider_disabled: "Sign-in is switched off right now. Try again later.",
+};
+
+/**
+ * Supabase Auth's reply when a trigger on auth.users raised -- including A2's
+ * Vanderbilt-only check. It does not say which trigger or why.
+ */
+const DATABASE_ERROR_SAVING_USER = "Database error saving new user";
+
+/**
+ * A message for an error from signInWithOtp(), safe to show a student.
+ *
+ * Never says whether the address already has an account: signInWithOtp
+ * creates one if needed, so no error here depends on that.
+ */
+export function signInErrorMessage(error: AuthErrorLike | null | undefined): string {
+  if (!error) return GENERIC_ERROR_MESSAGE;
+
+  if (error.code && error.code in SIGN_IN_MESSAGES) {
+    return SIGN_IN_MESSAGES[error.code];
+  }
+  if (error.message?.includes(DATABASE_ERROR_SAVING_USER)) {
+    // Our own form refuses other domains before calling Supabase, so this is
+    // either a direct API call or a broken trigger. Either way, the domain
+    // rule is the only thing worth telling a student.
+    return "We couldn't create an account for that address. Use your @vanderbilt.edu email.";
+  }
+  if (error.status === 429) return SIGN_IN_RATE_LIMITED_MESSAGE;
+  return GENERIC_ERROR_MESSAGE;
+}
+
+// ---------------------------------------------------------------------------
+// verifyOtp() with the code from the email -- A3's verifyCode().
+// ---------------------------------------------------------------------------
+
+export const CODE_REJECTED_MESSAGE =
+  "That code didn't work. Check it against the latest email — codes expire after an hour — or ask for a new one.";
+
+export const CODE_RATE_LIMITED_MESSAGE =
+  "Too many tries. Wait a few minutes, then try again.";
+
+const VERIFY_CODE_MESSAGES: Record<string, string> = {
+  // Supabase Auth gives the same 403 for a wrong code and an expired one
+  // ("Token has expired or is invalid"), so the message covers both.
+  otp_expired: CODE_REJECTED_MESSAGE,
+  validation_failed: CODE_REJECTED_MESSAGE,
+  // Verifications are rate limited per IP (30 per 5 minutes by default),
+  // which is also what makes guessing a code impractical.
+  over_request_rate_limit: CODE_RATE_LIMITED_MESSAGE,
+  otp_disabled: "Sign-in is switched off right now. Try again later.",
+};
+
+/** A message for an error from verifyOtp({ email, token }), safe to show. */
+export function verifyCodeErrorMessage(error: AuthErrorLike | null | undefined): string {
+  if (!error) return GENERIC_ERROR_MESSAGE;
+  if (error.code && error.code in VERIFY_CODE_MESSAGES) {
+    return VERIFY_CODE_MESSAGES[error.code];
+  }
+  if (error.status === 429) return CODE_RATE_LIMITED_MESSAGE;
+  // A 403 without a code we know is still a refused token.
+  if (error.status === 403) return CODE_REJECTED_MESSAGE;
+  return GENERIC_ERROR_MESSAGE;
 }

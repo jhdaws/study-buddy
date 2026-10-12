@@ -173,6 +173,14 @@ null, so an orphaned session cannot be edited — which is correct.
 restricts them. "No client writes" means
 "no write policy", not "no grant".
 
+*Note, 2026-09-30 (M3, pending team confirmation):* `locations` goes further.
+Its migration also **revokes** `insert, update, delete, truncate` from `anon`
+and `authenticated`, so a permissive policy added by mistake still cannot open
+writes, and `TRUNCATE` (which RLS does not govern) is closed. A client write
+there now fails with `42501 permission denied`, not RLS's zero rows. Other
+tracks may follow or not; a migration that relies on the default grants should
+check the table first.
+
 **Watch: views bypass RLS** unless created `with (security_invoker = true)`.
 A plain view for seats left would expose every session and roster to any
 client. The RLS guard test does not check views.

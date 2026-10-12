@@ -18,7 +18,7 @@
 
 import { redirect } from "next/navigation";
 
-import { mapDatabaseError } from "@/lib/errors";
+import { databaseErrorMessage, type DatabaseErrorLike } from "@/lib/errors";
 import { PlaceError, resolvePlace } from "@/lib/places";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import {
@@ -40,11 +40,10 @@ export type CreateSessionState = FormState<CreateSessionField>;
 /**
  * Create a study session from the create-session form (US-02).
  *
- * `requireUser()` is still W4's stub (A4, #17 replaces it): until real
- * sign-in lands, it returns FIXTURE_USER without establishing a genuine
- * Supabase session, so `auth.uid()` is null inside the RPC calls below and
- * both fail with "not_signed_in". That is expected -- this function is real,
- * but exercising it end to end needs Track A too.
+ * `requireUser()` (A4) redirects anyone signed out or without a display
+ * name; both RPCs below check `auth.uid()` again for themselves. Until M2's
+ * real picker lands, the stub's fixture places resolve to location ids that
+ * are not rows, so create_session fails its foreign key (M5, #36).
  */
 export async function createSession(
   _prev: CreateSessionState,
@@ -82,10 +81,7 @@ export async function createSession(
     },
   );
   if (courseError) {
-    return {
-      formError: mapDatabaseError(courseError),
-      values: formValues(formData),
-    };
+    return databaseFailure("get_or_create_course", courseError, formData);
   }
 
   // S1's create_session: inserts the session and the host as an attendee in
@@ -97,18 +93,30 @@ export async function createSession(
     course_id: courseId,
     location_id: locationId,
     location_label: parsed.data.locationLabel,
-    room: parsed.data.room,
+    // The generated types mark every function argument non-null; the
+    // function itself turns a blank room back into null.
+    room: parsed.data.room ?? "",
     topic: parsed.data.topic,
     starts_at: parsed.data.startsAt.toISOString(),
     ends_at: parsed.data.endsAt.toISOString(),
     capacity: parsed.data.capacity,
   });
   if (sessionError) {
-    return {
-      formError: mapDatabaseError(sessionError),
-      values: formValues(formData),
-    };
+    return databaseFailure("create_session", sessionError, formData);
   }
 
   redirect("/sessions");
+}
+
+/**
+ * The student sees our own message; the server log keeps Postgres's code
+ * and text, so a generic "Something went wrong" can still be traced.
+ */
+function databaseFailure(
+  rpc: string,
+  error: DatabaseErrorLike,
+  formData: FormData,
+): CreateSessionState {
+  console.error(`createSession: ${rpc} failed`, { code: error.code, message: error.message });
+  return { formError: databaseErrorMessage(error), values: formValues(formData) };
 }
