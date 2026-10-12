@@ -3,8 +3,9 @@ import type { NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/proxy";
 
 /**
- * Runs before every matched request: refreshes the Supabase session cookie.
- * Route protection is added in @/lib/supabase/proxy once sign-in lands.
+ * Runs before every matched request: refreshes the Supabase session cookie
+ * and, since A4 (#17), turns signed-out visitors away from private routes.
+ * Both live in @/lib/supabase/proxy.
  */
 export async function proxy(request: NextRequest) {
   return updateSession(request);

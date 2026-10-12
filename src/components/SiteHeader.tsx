@@ -4,10 +4,9 @@
  *
  * Sign-in state comes from getCurrentUser() (src/lib/supabase/server.ts) --
  * NOT requireUser(), which redirects signed-out visitors and would loop on
- * /login once A4 (#17) lands. Until A3 (#16) makes sign-in real nobody has a
- * session, so the header always shows "Sign in", even on /sessions/new, which
- * runs as the fixture user through the requireUser() stub. That mismatch is
- * expected and ends with A3/A4.
+ * /login and /login/name. Since A3 (#16) and A4 (#17) this reflects a real
+ * session: "Sign in" while signed out, "Sign out" once a magic link has been
+ * used.
  *
  * The lookup sits in its own component inside <Suspense>, per the Next 16
  * authentication guide ("Auth and streaming"): the rest of the page does not

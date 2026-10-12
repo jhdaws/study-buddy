@@ -1,0 +1,29 @@
+<!--
+  Signup confirmation email (A1 #14, A3 #16).
+
+  WHEN THIS IS USED, and when it is not. GoTrue picks this template over
+  magic_link.html only when email confirmations are ON
+  (`[auth.email] enable_confirmations = true`). Locally that setting is
+  `false`, and a brand-new address gets magic_link.html instead -- checked
+  against Mailpit with an address that had never signed in.
+
+  It is here because the HOSTED project is the one that decides, and turning
+  confirmations on there -- or having them on already -- would start routing
+  first-ever sign-ins through this template. Without this file that is the
+  only broken link in the whole flow, and the hardest to notice, since every
+  account you already made for testing keeps working.
+
+  Same shape as magic_link.html, and the same dependency on signIn() always
+  setting `next` so appending with `&` is safe. The difference is
+  `type=signup`: that is what verifyOtp() needs for a token issued alongside
+  a new account, and passing `magiclink` here would fail to verify.
+-->
+<h2>Welcome to Study Buddy</h2>
+
+<p>
+  <a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=signup"
+    >Finish signing in</a
+  >
+</p>
+
+<p>This link works once and expires in an hour. If you didn't ask to sign in, ignore this email.</p>

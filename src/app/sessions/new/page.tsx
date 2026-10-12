@@ -1,10 +1,10 @@
 /**
  * Create a study session (US-02). Built by W5 (#12).
  *
- *   - `requireUser()` (src/lib/supabase/server.ts) first: once A4 (#17)
- *     lands it redirects signed-out users to /login and nameless ones to the
- *     name step. Until then it returns the fixture user. (createSession calls
- *     it again: the action is a public endpoint and cannot trust this page.)
+ *   - `requireUser()` (src/lib/supabase/server.ts) first: since A4 (#17) it
+ *     redirects signed-out users to /login and nameless ones to the name
+ *     step. (createSession calls it again: the action is a public endpoint
+ *     and cannot trust this page.)
  *   - `listDepartments()` (src/lib/sessions.ts) for the department picker.
  *     Courses are NOT fetched here: the course-number field is a typeahead
  *     that calls fetchCourseSuggestions() as the host types. There is no

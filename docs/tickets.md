@@ -140,34 +140,35 @@ flowchart LR
 ## Track A · Auth
 
 #### A1 · Hosted auth settings
-**S · US-01 · start now**
-- [ ] Supabase Auth Site URL = production URL; redirect URLs cover localhost and Vercel previews
-- [ ] Magic-link email template points at `/auth/confirm` with `token_hash`
-- [ ] Same settings in `supabase/config.toml` for local (local emails appear in Mailpit at http://127.0.0.1:54324)
-- [ ] Free-plan email rate limit checked — fine for four testers, matters for a demo
+**S · US-01 · start now · LOCAL HALF DONE, HOSTED HALF OUTSTANDING**
+- [ ] Supabase Auth Site URL = production URL; redirect URLs cover localhost and Vercel previews — dashboard only, nothing in this repo reaches it
+- [x] Magic-link email template points at `/auth/confirm` with `token_hash` — written as [`supabase/templates/magic_link.html`](../supabase/templates/magic_link.html) **and** [`confirmation.html`](../supabase/templates/confirmation.html): `signInWithOtp` sends the second one for an address that has no account yet, so a first-ever sign-in breaks if only the first exists. **Both still have to be pasted into the hosted project by hand** (Authentication → Email Templates)
+- [x] Same settings in `supabase/config.toml` for local (local emails appear in Mailpit at http://127.0.0.1:54324) — verified end to end against Mailpit
+- [ ] Free-plan email rate limit checked — fine for four testers, matters for a demo. Local `[auth.rate_limit] email_sent = 2` only applies with a real SMTP server configured, so it does not bite against Mailpit
 
 #### A2 · Profile rules
-**M · US-01, US-25 · after W2**
-- [ ] Trigger rejecting non-`@vanderbilt.edu` signups
-- [ ] Trigger creating a `profiles` row on signup
-- [ ] `display_name` CHECK matching `displayNameSchema`: 1–50 characters after trimming (`DISPLAY_NAME_MAX_LENGTH` in `src/lib/limits.ts`)
-- [ ] RLS: signed-in users read display names; users update only their own
-- [ ] **Don't copy email into `profiles`.** It already lives in `auth.users`,
+**M · US-01, US-25 · after W2 · DONE**
+All in one migration: `supabase/migrations/20261001000849_profile_rules.sql`.
+- [x] Trigger rejecting non-`@vanderbilt.edu` signups — `enforce_vanderbilt_email`, `before insert on auth.users`. Takes the domain after the **last** `@`, so it matches `domainOf()` in validation.ts and refuses subdomains the same way
+- [x] Trigger creating a `profiles` row on signup — `create_profile_for_new_user`, `after insert`, `security definer` (the inserting role is GoTrue's `supabase_auth_admin`, which has no rights on `public.profiles`)
+- [x] `display_name` CHECK matching `displayNameSchema`: 1–50 characters after trimming (`DISPLAY_NAME_MAX_LENGTH` in `src/lib/limits.ts`) — null still allowed, which is the state between signup and the name step
+- [x] RLS: signed-in users read display names; users update only their own — `authenticated` only, so a signed-out visitor reads nothing. No INSERT or DELETE policy: rows arrive from the trigger and leave through W2's cascade
+- [x] **Don't copy email into `profiles`.** It already lives in `auth.users`,
       which clients cannot read — that satisfies US-25 without column grants
-- [ ] Database tests: US-01b (direct non-Vanderbilt signup rejected); a user cannot update someone else's profile
+- [x] Database tests: US-01b (direct non-Vanderbilt signup rejected); a user cannot update someone else's profile — `tests/db/profiles.test.ts`, 17 cases, including `with check` refusing a move onto someone else's id
 
 #### A3 · Magic-link sign-in
-**M · US-01, US-21 · start now**
-- [ ] `signIn()` validates with `signInSchema` and sends the link
-- [ ] `/login` page with "check your inbox" state and `role="alert"` errors
-- [ ] `/auth/confirm` exchanges the token and redirects **only to same-origin paths**
-- [ ] `signOut()` (US-21)
+**M · US-01, US-21 · start now · DONE**
+- [x] `signIn()` validates with `signInSchema` and sends the link — `signInWithOtp` with `emailRedirectTo` at `/auth/confirm` on this origin; auth errors mapped in `src/lib/errors.ts`, same reply either way (ADR 0003)
+- [x] `/login` page with "check your inbox" state and `role="alert"` errors — `<SignInForm>`; a signed-in visitor is sent on rather than shown the form
+- [x] `/auth/confirm` exchanges the token and redirects **only to same-origin paths** — `sameOriginPath()` in `src/lib/redirects.ts` refuses absolute URLs, `//host`, backslashes and control characters, each unit tested
+- [x] `signOut()` (US-21)
 
 #### A4 · Display name and route protection
-**M · US-01 · after W2, A3**
-- [ ] First sign-in without a display name goes to a name step before anything else; `saveDisplayName()`
-- [ ] Proxy redirects signed-out users away from `/sessions*`, keeping `?next=`
-- [ ] `requireUser()` implemented — S3 calls it
+**M · US-01 · after W2, A3 · DONE**
+- [x] First sign-in without a display name goes to a name step before anything else; `saveDisplayName()` — the step is `/login/name` (the route docs/contracts.md left to A4); `NAME_STEP_PATH` is the one place that names it
+- [x] Proxy redirects signed-out users away from `/sessions*`, keeping `?next=` — and sends a signed-in user with no display name to the name step. Both redirects copy the refreshed session cookies across, or the redirect itself would sign the user out
+- [x] `requireUser()` implemented — S3 calls it. Wrapped in `cache()`; redirects to `/login` without `?next=` (it cannot see the requested path — the proxy attaches `next` for page requests, which is where it matters)
 
 ---
 

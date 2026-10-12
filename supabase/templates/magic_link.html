@@ -1,0 +1,26 @@
+<!--
+  Magic-link email for an existing account (A1 #14, A3 #16).
+
+  The link must point at OUR /auth/confirm with `token_hash`, not at GoTrue's
+  own /auth/v1/verify endpoint that `{{ .ConfirmationURL }}` produces. Only a
+  route in this app can set the session cookies that @supabase/ssr reads; the
+  GoTrue endpoint hands back a URL fragment, which the server never sees.
+
+  `{{ .RedirectTo }}` is the `emailRedirectTo` that signIn() passed, which is
+  always `<origin>/auth/confirm?next=<path>` -- signIn() ALWAYS sets `next`,
+  precisely so this template can append with `&` and not have to work out
+  whether a `?` is already there. If you make `next` optional there, this
+  link breaks. See confirmUrl() in src/app/login/actions.ts.
+
+  `type=magiclink` is what verifyOtp() needs for a token issued to an account
+  that already exists. A brand-new address gets confirmation.html instead.
+-->
+<h2>Sign in to Study Buddy</h2>
+
+<p>
+  <a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=magiclink"
+    >Sign in to Study Buddy</a
+  >
+</p>
+
+<p>This link works once and expires in an hour. If you didn't ask to sign in, ignore this email.</p>

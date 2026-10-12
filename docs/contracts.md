@@ -31,6 +31,15 @@ detail than the table below. Read it before you start.
 | Location picker | `src/components/LocationPicker.tsx` | `<LocationPicker name? id? defaultValue? onSelect? required? disabled? aria-invalid? aria-describedby? />` | M2 [#23](https://github.com/jhdaws/study-buddy/issues/23) | A `<select>` of the three fixture places | Places Autocomplete (New) with `locationRestriction` (circle of `CAMPUS_RADIUS_METERS` around `CAMPUS_CENTER`), `includedPrimaryTypes` excluding residences, session tokens; submits a place ID, never coordinates; calls `onSelect({ placeId, label })` |
 | Form rules | `src/lib/validation.ts` | `signInSchema`, `displayNameSchema`, `createSessionSchema(now?: Date)` | W4; S2 [#19](https://github.com/jhdaws/study-buddy/issues/19) replaces the two course placeholders | Real, not stubs — unit tested in `validation.test.ts` | S2 swaps the `departmentCode` and `courseNumber` placeholder rules for its normalisers. Every rule here should have a database twin (S1, A2) |
 
+**The "stub" column is history for Track A.** A3
+([#16](https://github.com/jhdaws/study-buddy/issues/16)) and A4
+([#17](https://github.com/jhdaws/study-buddy/issues/17)) have replaced the
+bodies of `requireUser`, `signIn`, `saveDisplayName` and `signOut`, keeping
+every signature. `requireUser()` no longer returns `FIXTURE_USER`: it
+redirects a signed-out caller to `/login` and a nameless one to
+`/login/name`, so anything downstream of it now needs a real session. The
+Track S and Track M rows are still stubs.
+
 `createSession`, `signIn`, `saveDisplayName` and `signOut` live in
 `"use server"` files, so they are Server Functions: a form can use them
 directly, and each is also a public POST endpoint. `sessions.ts` and
@@ -236,11 +245,27 @@ Handler**:
   | ECON 1010 | yesterday | — | no: ended |
   | PHYS 1601 | tomorrow | — | no: cancelled |
 
+## Settled since
+
+- **`src/lib/errors.ts`** — A3 ([#16](https://github.com/jhdaws/study-buddy/issues/16))
+  wrote the auth half: `signInErrorMessage(error: AuthFailure)`,
+  `confirmLinkErrorMessage()`, `saveDisplayNameErrorMessage()`. `AuthFailure`
+  is `{ code?, status?, message? }`, declared rather than imported, so the
+  mapping stays a pure function of plain data and needs no Supabase client to
+  test. **S3 still writes the `create_session` mapping** in the same file.
+- **The display-name route** is **`/login/name`**, A4
+  ([#17](https://github.com/jhdaws/study-buddy/issues/17)). Import
+  `NAME_STEP_PATH` from `src/lib/redirects.ts` rather than writing the path
+  out; the proxy and `requireUser()` both redirect there.
+- **`src/lib/redirects.ts`** — new in A3/A4, and client-safe (no imports).
+  `sameOriginPath(value): string | null` and `safeNextPath(value): string`
+  are the only approved way to turn a `?next=` or a hidden form field into a
+  redirect target: both refuse absolute URLs, `//host`, backslashes and
+  control characters. Also `DEFAULT_SIGNED_IN_PATH`, `LOGIN_PATH`,
+  `NAME_STEP_PATH`, and `isPrivatePath(pathname)`, which is what the proxy
+  gates on — add a route to it and the proxy protects it.
+
 ## Not yet a contract
 
-- **`src/lib/errors.ts`** has no signature yet. S3 writes the first mapping
-  for `create_session`'s errors; A3 and A4 add theirs to the same file.
-- **The display-name route** is A4's to choose (`/login/name`, say). Nothing
-  links to it yet.
 - **Joining, leaving, cancelling, chat** are later sprints. The note about
   atomic joins is in `src/app/sessions/actions.ts`.

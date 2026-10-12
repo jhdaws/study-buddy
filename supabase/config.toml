@@ -242,6 +242,22 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
+# A1 (#14) · the two sign-in emails.
+#
+# Both point at /auth/confirm with `token_hash`, which is the only shape that
+# lets this app set its own session cookies -- see the comment in each file.
+# The hosted project needs the same two templates set by hand in the Supabase
+# dashboard (Authentication -> Email Templates); nothing in this file reaches
+# it. The local ones show up in Mailpit at http://127.0.0.1:54324.
+[auth.email.template.magic_link]
+subject = "Sign in to Study Buddy"
+content_path = "./supabase/templates/magic_link.html"
+
+# Sent instead of magic_link for an address that has no account yet.
+[auth.email.template.confirmation]
+subject = "Welcome to Study Buddy"
+content_path = "./supabase/templates/confirmation.html"
+
 # Uncomment to customize email template
 # [auth.email.template.invite]
 # subject = "You have been invited"
