@@ -108,6 +108,12 @@ unlisted.
 
 ### 2. Authentication → Emails → Templates
 
+**Locked until custom SMTP is set up** (found 2026-10-11). On this plan the
+dashboard shows "Set up custom SMTP to edit templates" and sends Supabase's
+default emails: a link through Supabase's own `/verify` and no code, which
+this app cannot finish signing in with. So step 4's custom SMTP comes first.
+Until then, use the stopgap in step 6.
+
 Set **both "Confirm signup" and "Magic link"** — `signInWithOtp()` sends
 *Confirm signup* to a first-time address and *Magic link* to a returning
 one. Same subject and body for both:
@@ -181,6 +187,24 @@ never in this repository.
 
 ### 5. Not a Supabase setting, but blocks sign-in
 
-Production is behind Vercel's login (Deployment Protection — W1). Until that
-is turned off for production, a student following an emailed link hits
-Vercel's sign-in page, not `/auth/confirm`.
+Production was behind Vercel's login (Deployment Protection — W1). Turned off:
+checked 2026-10-11, `/` and `/login` return 200 to a signed-out visitor.
+
+### 6. Signing in without email — a demo stopgap
+
+Until step 4 is done, nobody can sign in on production by email. For the
+Sprint 2 demo, the project owner can make a one-time sign-in link without
+sending anything:
+
+1. Create `.env.hosted` in the repo root (ignored by git, like every
+   `.env*`) with the **hosted** project's `NEXT_PUBLIC_SUPABASE_URL` and
+   `SUPABASE_SECRET_KEY` (Project Settings → API Keys, the secret key).
+2. `npm run auth:link -- name@vanderbilt.edu`
+3. Send the printed link to that person. It signs them in on any device,
+   once, within the hour; a first-time address gets an account and the
+   name step.
+
+It skips proving the person owns the inbox, which is why only someone with
+the secret key can run it, and why it is a stopgap rather than a feature.
+The Vanderbilt-only rule still holds. `scripts/sign-in-link.mjs` has the
+details.
