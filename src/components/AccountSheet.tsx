@@ -7,8 +7,10 @@
  * under the avatar.
  *
  * A hand-rolled dialog rather than <dialog>: jsdom has no showModal(), and
- * the behaviour needed is small -- focus moves into the sheet on open,
- * Escape and the backdrop close it, focus returns to the avatar. It is
+ * the behaviour needed is small -- focus starts on Cancel, the safe choice
+ * (Enter straight after opening must not sign anyone out), Tab and
+ * Shift+Tab stay inside the sheet as aria-modal promises, Escape and the
+ * backdrop close it, and focus returns to the avatar. It is
  * portalled to <body>: the top bar's backdrop-filter makes it the containing
  * block for `position: fixed` descendants, which pinned the sheet to the bar
  * instead of the screen's bottom edge.
@@ -35,15 +37,17 @@ export default function AccountSheet({
   const [open, setOpen] = useState(false);
   const titleId = useId();
   const avatar = useRef<HTMLButtonElement>(null);
-  const firstAction = useRef<HTMLButtonElement>(null);
+  const sheet = useRef<HTMLDivElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(false);
 
   useEffect(() => {
     if (open) {
-      firstAction.current?.focus();
+      cancel.current?.focus();
       wasOpen.current = true;
       const onKey = (event: KeyboardEvent) => {
         if (event.key === "Escape") setOpen(false);
+        if (event.key === "Tab" && sheet.current) keepFocusInside(sheet.current, event);
       };
       document.addEventListener("keydown", onKey);
       return () => document.removeEventListener("keydown", onKey);
@@ -76,6 +80,7 @@ export default function AccountSheet({
               className="absolute inset-0 bg-navy-950/40 backdrop-blur-[2px] sm:bg-navy-950/10 sm:backdrop-blur-none"
             />
             <div
+              ref={sheet}
               role="dialog"
               aria-modal="true"
               aria-labelledby={titleId}
@@ -106,7 +111,6 @@ export default function AccountSheet({
               </p>
               <form action={signOut} className="mt-5">
                 <button
-                  ref={firstAction}
                   type="submit"
                   className="inline-flex h-12 min-h-11 w-full items-center justify-center gap-2 rounded-full bg-danger px-6 text-base font-bold text-white hover:bg-danger/90"
                 >
@@ -115,6 +119,7 @@ export default function AccountSheet({
                 </button>
               </form>
               <button
+                ref={cancel}
                 type="button"
                 onClick={() => setOpen(false)}
                 className={`${BUTTON_SECONDARY} mt-3 w-full`}
@@ -127,4 +132,25 @@ export default function AccountSheet({
         )}
     </div>
   );
+}
+
+/** Wrap Tab and Shift+Tab around the sheet's own controls. */
+function keepFocusInside(container: HTMLElement, event: KeyboardEvent) {
+  const focusable = Array.from(
+    container.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  );
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  const current = document.activeElement;
+  const outside = !(current instanceof Node) || !container.contains(current);
+  if (event.shiftKey && (current === first || outside)) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && (current === last || outside)) {
+    event.preventDefault();
+    first.focus();
+  }
 }

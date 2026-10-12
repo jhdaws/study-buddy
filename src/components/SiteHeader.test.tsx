@@ -38,7 +38,8 @@ describe("<AccountMenu>", () => {
     expect(sheet.contains(button)).toBe(true);
     expect(button.getAttribute("type")).toBe("submit");
     expect(button.closest("form")).not.toBeNull();
-    expect(document.activeElement).toBe(button);
+    // Focus starts on Cancel: Enter straight after opening must not sign out.
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
     expect(signOut).not.toHaveBeenCalled();
     // US-25: the display name, never an email.
@@ -58,6 +59,18 @@ describe("<AccountMenu>", () => {
     fireEvent.click(avatar);
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("keeps Tab and Shift+Tab inside the sheet", () => {
+    render(<AccountMenu signedIn displayName="Moses" />);
+    fireEvent.click(screen.getByRole("button", { name: "Account" }));
+    const signOutButton = screen.getByRole("button", { name: "Sign out" });
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+
+    fireEvent.keyDown(document, { key: "Tab" });
+    expect(document.activeElement).toBe(signOutButton);
+    fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
+    expect(document.activeElement).toBe(cancel);
   });
 
   it("falls back to a neutral avatar without a display name", () => {
