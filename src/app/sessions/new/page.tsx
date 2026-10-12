@@ -30,9 +30,9 @@ export default async function NewSessionPage() {
   const departments = await listDepartments();
 
   return (
-    <main>
-      <h1 className="text-2xl font-semibold">Host a study session</h1>
-      <p className="mt-1 mb-6 text-base text-neutral-600 dark:text-neutral-400">
+    <main className="min-w-0 lg:max-w-5xl">
+      <h1 className="text-3xl font-extrabold tracking-tight text-navy-900">Host a study session</h1>
+      <p className="mt-1 mb-6 text-base text-navy-muted">
         Say what you&apos;re studying, where and when. Classmates see it in the
         session list.
       </p>

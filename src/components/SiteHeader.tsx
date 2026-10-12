@@ -1,11 +1,12 @@
 /**
- * The app shell's header: app name, main navigation, and sign in / sign out.
- * Built by W5 (#12); rendered by src/app/layout.tsx on every page.
+ * The app shell's top bar: logo, main navigation (wider screens; phones use
+ * <TabBar>), and sign in / sign out. Built by W5 (#12), restyled to the
+ * Claude Design spec (page 4, "Top app bar"). Rendered via <AppShell> on
+ * every page except sign-in.
  *
  * Sign-in state comes from getCurrentUser() (src/lib/supabase/server.ts) --
  * NOT requireUser(), which redirects signed-out visitors and would loop on
- * /login. Since A3 (#16) a student can sign in, so this shows "Sign out" once
- * they have; it needed no change to do so.
+ * /login.
  *
  * The lookup sits in its own component inside <Suspense>, per the Next 16
  * authentication guide ("Auth and streaming"): the rest of the page does not
@@ -20,30 +21,36 @@ import { Suspense } from "react";
 
 import AccountMenu from "@/components/AccountMenu";
 import NavLinks from "@/components/NavLinks";
-import { getCurrentUser } from "@/lib/supabase/server";
+import Logo from "@/components/ui/Logo";
+import { createClient, fetchDisplayName } from "@/lib/supabase/server";
 
 export default function SiteHeader() {
   return (
-    <header className="border-b border-neutral-200 dark:border-neutral-800">
-      <div className="mx-auto flex w-full max-w-xl items-center justify-between gap-2 px-4">
-        <Link
-          href="/"
-          className="inline-flex min-h-11 items-center text-lg font-bold tracking-tight"
-        >
-          Study Buddy
+    <header className="sticky top-0 z-30 border-b border-white/50 bg-sky-50/70 backdrop-blur-xl lg:hidden">
+      <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 py-2">
+        <Link href="/" className="inline-flex min-h-11 items-center rounded-full">
+          <Logo />
         </Link>
-        <Suspense fallback={<span aria-hidden className="min-h-11" />}>
+        <nav aria-label="Main" className="hidden md:block">
+          <NavLinks />
+        </nav>
+        <Suspense fallback={<span aria-hidden className="size-11" />}>
           <Account />
         </Suspense>
       </div>
-      <nav aria-label="Main" className="mx-auto w-full max-w-xl px-1">
-        <NavLinks />
-      </nav>
     </header>
   );
 }
 
 async function Account() {
-  const user = await getCurrentUser();
-  return <AccountMenu signedIn={user !== null} />;
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  // Display only (the avatar's initial): a failed read shows a generic
+  // avatar rather than taking every page down with it.
+  const displayName = user
+    ? await fetchDisplayName(supabase, user.id).catch(() => null)
+    : null;
+  return <AccountMenu signedIn={user !== null} displayName={displayName} />;
 }

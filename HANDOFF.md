@@ -71,6 +71,181 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-10-11 · Rebuilt Track A by mistake, then shipped US-19 instead
+
+**Branch:** `us-19-calendar-download` · **Commits made:** one on this branch.
+Also `a2-a4-us-01-auth`, pushed as #43 and closed unmerged — see below.
+
+### Read this part first: a whole session was wasted on work that existed
+
+Asked to "add AUTH support per the spec", this session implemented A2, A3 and
+A4 from scratch and opened #43. **Moses had already done all of it in #33, open
+since 1 October, green, and reviewed "needs no changes" on 6 October.** #43 is
+closed; nothing from it merged.
+
+Nothing in the repo was wrong — the signals were there and went unread.
+`docs/tickets.md` leaves A1–A4 unticked, which reads as "not started", but the
+A5 ticket right below them says "after A1, **#33**", and PR #39 is titled "Add
+next tickets after the **#31–#33** review". Both were read during the session.
+Neither was followed up.
+
+**Before implementing any ticket, run `gh pr list --state all` and
+`git branch -r`, and read the titles.** The board's checkboxes track what has
+*merged*, not what has been *built*. Four tracks are in flight at once in this
+repo, so unticked and unclaimed are not the same thing.
+
+Worth knowing: #33 is better than what this session wrote. It enforces the
+Vanderbilt rule on `before update of email` as well as on insert — #43 only
+had insert, so an account could have changed domain after signup.
+
+### What changed
+- `src/lib/ics.ts` — new. One session as an RFC 5545 file: TEXT escaping,
+  75-octet line folding measured in UTF-8, UTC date-times. Pure and
+  client-safe, like `format.ts`, so it is testable without a request.
+- `src/lib/ics.test.ts` — new, 32 tests.
+- `src/app/sessions/[id]/calendar.ics/route.ts` — new. GET, serves the file as
+  `text/calendar` with a download filename.
+- `docs/backlog.md` — US-19 ⬜ → 🚧, with the reason.
+- `docs/ai-usage-log.md` — entry for this session.
+
+### Uncommitted at end of session
+- Nothing.
+
+### Decided in conversation, not yet written down
+- **US-19 ships without a UI link, on purpose.** #42 rewrites every component
+  including `SessionCard.tsx`, so a link added now is a guaranteed conflict for
+  someone else to resolve. The link belongs in #42's work or just after it.
+- US-19 was chosen by elimination: W7 and W8 need secrets or are blocked, M5
+  needs a decision, and everything else in `src/` collides with #42.
+
+### Open questions for the user
+- Who adds the "Add to calendar" link once #42 lands, and does it go on the
+  session card, the detail page, or both?
+
+### Things the next agent should be careful about
+- **Do not use `RouteContext<'/path'>` in a Route Handler.** It is a global
+  from `.next/types`, which does not exist when CI runs `npm run typecheck` on
+  a fresh checkout — `build` generates it, and build runs *after* typecheck.
+  Type `params` inline as `{ params: Promise<{ id: string }> }`.
+- **A stale `.next` survives a branch switch and breaks typecheck with a real
+  looking error.** After switching branches, `tsc` failed on
+  `.next/dev/types/validator.ts` referencing `src/app/login/name/page.js`, a
+  file from the *other* branch. `rm -rf .next` fixes it; it is not a code
+  fault.
+- `.ics` output was parsed with `ical.js` and is spec-valid, but **no real
+  calendar app has imported it.** Google, Apple and Outlook each accept things
+  the spec forbids and reject things it allows.
+- `requireUser()` on the new endpoint is still the W4 stub, so it admits
+  everyone. It starts redirecting the moment #33 merges, with no change here.
+## 2026-10-11 (later) · Second UI pass: closer to the PDF, better sessions page
+
+**Branch:** `ui-design-refresh` (pushed) · **Commits made:** one, on top of
+the restyle. No PR yet: it waits on #33 merging.
+
+### What changed
+- **Desktop (lg+):** a sticky glass sidebar (`SiteSidebar`, `SidebarNav`)
+  replaces the top bar; the home page uses a grid (ring, soonest session, Up
+  next; then the feed; then the host nudge). Phones unchanged in structure.
+- **Phone home** follows spec p19: hero with the soonest session large, Up
+  next with a date tile, the swipe feed, a "Campus right now" ring (seats
+  taken across open sessions -- real numbers, not the spec's personal stats).
+- **Account sheet** (`AccountSheet`, spec p15): the avatar opens a sheet with
+  sign-out. Portalled to `<body>` (see "careful" below).
+- **/sessions:** search, chips (All / Happening now / Today / This week, plus
+  Has seats), day headings, a live count, a no-match state. Pure rules in
+  `src/lib/session-filters.ts`. `SessionBrowser` is now a Client Component.
+- **Host form:** capacity stepper (nudges the uncontrolled input, so the
+  post-action reset still works) and a live `SessionPreview` card, sticky
+  beside the form on desktop. Neither adds a field to what is submitted.
+- ADR 0004 has a dated, **proposed** note about the desktop layout;
+  `docs/test-cases.md` marks US-06 🚧 for the client-side search.
+
+### Verified versus assumed
+- **Verified:** lint, typecheck, 300 unit tests, `next build`; screenshots
+  of every screen as real 375x812 frames and at 1440 px, against the same
+  throwaway fake Supabase as the entry below. No sideways scroll at 375.
+- **Not verified:** real Supabase, real phones, a screen-reader pass.
+
+### Open questions for the user
+- The team still has to accept the desktop layout (ADR 0004 note).
+- Signing in lands on `/sessions` (`safeNext`'s default, from #33). With a
+  home dashboard, `/` may be the better landing page; not changed here.
+
+### Things the next agent should be careful about
+- **`backdrop-filter` makes an element the containing block for
+  `position: fixed` descendants.** Anything fixed inside the top bar (which
+  blurs) is pinned to the bar. That is why `AccountSheet` uses a portal.
+- **Never call a function exported from a `"use client"` file in a Server
+  Component** -- it compiles, passes unit tests, and throws at render. Shared
+  helpers live in `src/lib/format.ts` (`formatInitial` moved there for this).
+- **SVG gradient ids must be unique per document**; the logo renders twice
+  (top bar and sidebar, one hidden), so its tile is a CSS gradient now.
+- Times formatted on both server and client differ in invisible spacing
+  (ICU); `SessionCard`'s `<time>` has `suppressHydrationWarning` for that.
+- Phone screenshots: capture 375x812 viewport frames, not `fullPage` -- a
+  full-page phone capture is an unreadable strip, and fixed bars land
+  mid-page.
+
+---
+
+## 2026-10-11 · Claude Design restyle of everything Sprints 1-3 built
+
+**Branch:** `ui-design-refresh`, from `a-us-01-sign-in` (#33) with `main`
+merged in (`6b3e187`, docs-only conflicts) · **Commits made:** the merge and
+the restyle. Not pushed at the time of writing; no PR yet.
+
+### What changed
+- **Look only, no behaviour change** except two additions to sign-in: a
+  "Resend code" button after a 60s countdown, and a "Sign in to host a
+  session" / "Sign in to see study sessions" note when `/login` has a `next`.
+- Tokens and glass utilities in `globals.css`; shared class strings in
+  `src/components/ui/styles.ts`; inline icons and the logo in
+  `src/components/ui/`. Manrope comes from `@fontsource-variable/manrope`
+  (new dependency) so builds never reach Google Fonts.
+- `AppShell` hides the header and tab bar on `/login*` (a full-screen
+  `AuthScene` there). Done this way, not with route groups, so
+  `src/app/sessions/*` does not move under #32.
+- Home (`src/app/page.tsx`) is now a signed-out pitch, or a signed-in page
+  with a greeting, the open-session count, the soonest session and a feed,
+  all from `listSessions()`.
+
+### Verified versus assumed
+- **Verified:** lint, typecheck, 281 unit tests, `next build`. Every screen
+  screenshotted at 375 and 1280 px against a throwaway fake Supabase (a
+  20-line Node server answering `/auth/v1/user`, `/rest/v1/profiles`,
+  `/auth/v1/otp` and `/auth/v1/verify`, plus a hand-made session cookie).
+  It is not in the repo. No page scrolls sideways at 375 or 768 px (measured).
+  Text colours measured for WCAG AA on the lightest point of dark glass.
+- **Not verified:** anything against real Supabase; a real phone (iOS
+  one-time-code autofill into the six-box field in particular); a screen
+  reader pass (TASK-04).
+
+### Decided in conversation, not yet written down
+- Build only what exists; leave the design's stats, Up next, study requests,
+  map and My sessions out until they have a backend. Moses's call.
+
+### Open questions for the user
+- **ADR 0004 vs the design's desktop dashboard** (sidebar plus card grid).
+  Kept single-column per the ADR; changing it is a team decision.
+- **Hosted Supabase's minimum interval between emails.** `RESEND_AFTER_SECONDS`
+  (60) assumes the default; check Authentication -> Rate Limits and keep them
+  equal.
+- The 3-step host form from the design was not built (one form, restyled).
+
+### Things the next agent should be careful about
+- **Absolutely positioned things inside a horizontal scroller escape it**
+  unless an ancestor inside the scroller is positioned. The home feed's
+  `sr-only` labels made the page 913px wide until `SessionCard` got
+  `relative`. Keep it.
+- In `styles.ts`, size with `h-*` and keep `min-h-11` separately; two
+  `min-h-*` classes on one element fight. Tests check for `min-h-11` and
+  `text-base`.
+- Don't `pkill -f <pattern>` in this environment's shell: the pattern
+  matches the shell's own command line and kills it. Kill by port
+  (`fuser -k 3000/tcp`).
+
+---
+
 ## 2026-10-01 · Finished the stalled Track A session: A1 commit, push, PR
 
 **Branch:** `a-us-01-sign-in` · **Commits made:** the A1 commit (config,
