@@ -71,6 +71,69 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-09-30 · M3 resolvePlace() written, then a review pass fixed
+
+**Branch:** `m3-us-02-resolve-place` · **Commits made:** none — everything
+below is uncommitted, by the user's instruction
+
+### What changed
+- `src/lib/places.ts` — real `resolvePlace()`: Place Details (New) with the
+  server key, radius and type check, `locations` upsert via the secret key.
+  Fixture ids still resolve (see its comment). After review: in a production
+  build a real lookup needs `getCurrentUser()` to find a user, because
+  `requireUser()` is still a stub — so production cannot use the real path
+  until A4.
+- `src/lib/place-policy.ts` (+ test) — pure rules. After review: a place must
+  carry `establishment` or `point_of_interest` (allowlist), plus codes /
+  routes / intersections / street numbers / `geocode` added to the denylist;
+  a 400 is `unknown_place` only when Google's body says `INVALID_ARGUMENT`
+  (an unreadable 400 is now `lookup_failed`); the snake_case test renamed —
+  it checks format, not spelling.
+- `src/lib/geo.ts` (+ test), `src/lib/supabase/admin.ts`, `env.ts`
+  (`supabaseSecretKey()`), `.env.example`.
+- `supabase/migrations/20260930120000_locations_policies.sql` — read policy
+  for `authenticated`; revokes client write grants. `tests/db/locations.test.ts`.
+- Docs: `contracts.md`, `tickets.md`, `test-cases.md`, `ai-usage-log.md` (row
+  updated for the review fixes), `CLAUDE.md` and `supabase/README.md` (no
+  longer say "no policies" without the `locations` exception), ADR 0008
+  (dated note under "Watch: grants" about the revoke).
+
+### Uncommitted at end of session
+- All of the above. Lint, typecheck, unit tests (141) and build pass. **Not
+  ready for a PR until the db steps below have run.**
+
+### Decided in conversation, not yet written down
+- Nothing beyond the dated, "pending team confirmation" note in ADR 0008.
+
+### Open questions for the user
+- **`premise`** is excluded. If M2 finds campus buildings Google types only as
+  `premise`, loosening it is a team call.
+- **Revoking write grants** on `locations` on top of RLS — keep, and should
+  other tracks do the same? (ADR 0008 note says pending.)
+- **Signed-out reads of `locations`**: none today; an anon policy only if S1
+  lists sessions to signed-out visitors.
+- **ADR 0008 rules 14–15**: Google's terms (read 2026-09-30) allow caching
+  coordinates for at most 30 days and names not at all. `locations` keeps
+  coordinates indefinitely with `validated_at`; nothing re-validates or
+  expires them yet. Needs a team decision and probably a ticket.
+- **Rate limiting** of real lookups per user does not exist; Google's quota
+  cap (M1) is the only backstop.
+
+### Things the next agent should be careful about
+- **Never run:** the migration, `tests/db/locations.test.ts` (Docker was
+  down), and any real Google call (no key until M1). Before the PR:
+  `npm run db:start`, `npm run test:db`, and `npm run db:types` — the types
+  were *not* regenerated, on the reasoning that policies and grants do not
+  change them; let CI's check confirm.
+- **`npm test` fails in Git Bash** with "Vitest failed to find the runner" on
+  every suite, including untouched ones — the `c:/` vs `C:/` drive-letter
+  case. Run it from PowerShell (or a shell whose cwd is `C:/...`); it passes.
+- The production signed-in gate in `resolvePlace()` means a deployment with
+  both keys still cannot create real-place sessions until A4 ships sign-in.
+  That is intended; do not "fix" it by removing the check.
+
+---
+
 ## 2026-09-29 · Form in Nashville time; docs audited after W2–W5
 
 **Branch:** `docs-audit-campus-time` (from `main` after #29) · **Commits made:**

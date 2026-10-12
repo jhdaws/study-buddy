@@ -14,7 +14,8 @@ scaffold had 15 passing unit tests; it was stripped back so the schema can be
 designed first. The tests in the repo today cover environment configuration,
 the form validation rules, the W4 fixtures and the location picker's props,
 the W5 screens as components (session card, list, empty state, create form,
-header) and their time formatting, prove the database harness works, guard
+header) and their time formatting, M3's location rules (distance, excluded
+place types, reading Google's responses), prove the database harness works, guard
 that every table has Row Level Security enabled, and check the starter data
 loaded. Only the validation tests and the W5 component tests touch a row
 below, and neither completes one: **the UI runs on fixture stubs, so no
@@ -24,7 +25,7 @@ acceptance criterion is verified end to end.**
 | --- | --- | --- | --- | --- | --- |
 | US-01 | ⬜ | An unregistered student is on the sign-in screen | They submit a valid `@vanderbilt.edu` address | A one-time sign-in link is emailed; non-Vanderbilt addresses are rejected with a specific message | Unit test + a database-level domain check |
 | US-01b | ⬜ | An attacker calls the auth API directly with a non-Vanderbilt address | The request bypasses our sign-in form | The database trigger rejects it | DB integration test — TASK-03 |
-| US-02 | ⬜ | A signed-in student is on Create Session | They submit course, topic, a place (from Google Places — there is no building list, ADR 0008), room, time range, capacity | The session is saved, the host is added to the roster, and a pin appears on the map | Unit test + integration test. **So far:** the form exists (W5) and submits to the `createSession` stub, which validates and redirects but **saves nothing** — S3 |
+| US-02 | ⬜ | A signed-in student is on Create Session | They submit course, topic, a place (from Google Places — there is no building list, ADR 0008), room, time range, capacity | The session is saved, the host is added to the roster, and a pin appears on the map | Unit test + integration test. **So far:** the form exists (W5) and submits to the `createSession` stub, which validates and redirects but **saves nothing** — S3. M3's server-side place check (radius, excluded types) is unit tested in its pure parts — `src/lib/geo.test.ts`, `src/lib/place-policy.test.ts` — but has **never called Google** (no key yet), and `tests/db/locations.test.ts` (clients read locations, never write them) is written but **has not run** |
 | US-02b | 🚧 | A signed-in student is on Create Session | They submit an end time before the start, or a time in the past | Submission is blocked with a field-level error | Unit test: `src/lib/validation.test.ts`, the "US-02b" block — the rule and its field-level messages. Component test: `src/components/CreateSessionForm.test.tsx` — the form shows a `startsAt`/`endsAt` error beside its input (`role="alert"`, `aria-describedby`) and keeps what was typed (W5). **Not yet:** the database refusing them (S1) |
 | US-03 | ⬜ | Three upcoming sessions and one ended session exist | A signed-in student opens the map | Three pins appear, the ended one does not; tapping a pin shows course, time, and seats left | Manual on staging — Sprint 3. **So far (list half, not the map):** `SessionBrowser.test.tsx` renders course, time and seats left per card; the ended/cancelled filter is only the fixture stub's (`fixtures.test.ts`) until S4 |
 | US-04 | ⬜ | A signed-in student views an open session with space | They tap Join | Attendee count increases by one, their name appears on the roster, and the chat unlocks | E2E — Sprint 3 |
@@ -127,6 +128,22 @@ given. They do not prove anything is saved, read from the database, or
 protected — every call below the UI is still a stub. The form was also
 clicked through once on the dev server at 375px (errors shown and kept, a
 valid submit landing on `/sessions`); that is a manual check, not a test.
+
+M3's unit tests (`src/lib/geo.test.ts`, `src/lib/place-policy.test.ts`)
+check the distance maths against a published haversine value and against
+points just inside and just outside the radius; that residences, lodging and
+bare addresses are refused even alongside an allowed type, and a place with
+no types is refused; that a malformed or path-changing place id is rejected
+before any request; and how each Google error status maps to a student-facing
+reason. `resolvePlace()` itself is server-only, so Vitest cannot import it:
+its glue (request URL and headers, field mask, the upsert, the fixture-id
+rule) was exercised once with a mocked `fetch` and database in a throwaway
+test that is not in the repo. **Not verified at all:** a real Place Details
+response (no key exists until M1) — the error mapping rests partly on
+Google's generic error codes, not on documented Places behaviour — and the
+`locations` policies: `tests/db/locations.test.ts` was written without a
+running database and has never run. The known gap stays open: Google has
+no dormitory type, so a residence hall labelled `university` would pass.
 
 The green CI badge certifies that the code compiles, lints, reaches a
 database, has RLS switched on everywhere, that the generated files are
