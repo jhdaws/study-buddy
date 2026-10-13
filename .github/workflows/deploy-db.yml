@@ -1,0 +1,55 @@
+name: Deploy database
+
+# W7 (#34) and W10 (#54). After CI passes on a push to main, apply any new
+# migrations in supabase/migrations/ to the hosted databases -- staging first,
+# then production. Vercel deploys the app from the same push on its own, so a
+# migration must work with the app version that is already live (additive
+# changes are fine; renames and drops take two steps -- docs/tickets.md, W7).
+#
+# A separate workflow, not a job in ci.yml: ci.yml cancels an in-progress run
+# when a newer push arrives, which is right for tests and wrong for a
+# migration halfway through. This one queues instead.
+#
+# Setup (supabase/README.md, "Deploying migrations"): GitHub environments
+# `production` and `staging`, each with the variable SUPABASE_PROJECT_ID and
+# the secrets SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD. An environment
+# without SUPABASE_PROJECT_ID is skipped, so staging is a no-op until W10
+# creates it. Never --include-seed here: reseeding production stays manual.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # Re-run by hand (Actions -> Deploy database -> Run workflow), e.g. after
+  # fixing a secret. Deploys main's current migrations.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-db
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    # Only after a green CI run for a push to main -- never for a PR's run.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    uses: ./.github/workflows/push-migrations.yml
+    with:
+      environment: staging
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+    secrets: inherit
+
+  production:
+    # Staging is the canary: if its push fails, production is not touched.
+    needs: staging
+    uses: ./.github/workflows/push-migrations.yml
+    with:
+      environment: production
+      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+    secrets: inherit

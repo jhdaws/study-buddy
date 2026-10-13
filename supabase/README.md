@@ -68,6 +68,58 @@ committed `database.types.ts` does not match the migrations.
 `seed.sql` is generated from `data/` by `npm run db:seed` — edit the JSON,
 not this file. See [`data/README.md`](../data/README.md).
 
+## Deploying migrations (W7, W10)
+
+Merging to `main` applies new migrations to the hosted databases by itself:
+`.github/workflows/deploy-db.yml` waits for CI to pass on that push, then runs
+`supabase db push --include-all` against **staging**, then **production**. If
+staging fails, production is not touched. Vercel deploys the app from the same
+push in parallel, so **a migration must work with the app version already
+live**: add columns, tables, functions and policies freely, but rename or drop
+in two steps. The seed is never pushed from CI.
+
+To re-run it (after fixing a secret, say): Actions → Deploy database → Run
+workflow. To see what it would do, from a machine linked to the project:
+`npx supabase db push --include-all --dry-run`.
+
+### One-time setup (repo admin)
+
+GitHub → Settings → Environments. For each of `production` and `staging`,
+create the environment and add:
+
+| Name | Kind | Value |
+| --- | --- | --- |
+| `SUPABASE_PROJECT_ID` | Variable | The project ref: the part of its URL before `.supabase.co` |
+| `SUPABASE_ACCESS_TOKEN` | Secret | A personal access token from supabase.com → Account → Access Tokens |
+| `SUPABASE_DB_PASSWORD` | Secret | That project's database password (Project Settings → Database; reset it there if nobody knows it) |
+
+An environment without `SUPABASE_PROJECT_ID` is skipped with a notice. Until
+W10 creates a staging project, leave `staging` empty, and the workflow deploys
+to production only.
+
+### A staging database for previews (W10)
+
+Vercel previews should not use the production database. The free option is a
+second Supabase project that previews share:
+
+1. Create the project in the dashboard (`study-buddy-staging`).
+2. Load its schema and the seed once, without relinking your machine, using
+   the connection string from its **Connect** button:
+   `npx supabase db push --db-url "<staging connection string>" --include-seed`
+3. Fill in the `staging` environment above. From then on, merges deploy to it
+   first.
+4. In Vercel → Settings → Environment Variables, make each of
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and
+   `SUPABASE_SECRET_KEY` **Production only**, and add the staging project's
+   values for **Preview**. Redeploy a preview to pick them up.
+5. Sign in on a preview with `npm run auth:link`, using the staging keys in
+   `.env.hosted` and `SIGN_IN_SITE_URL` set to the preview's URL (step 6 below).
+
+Staging follows `main`, not each PR: a preview of a PR that adds a migration
+runs without it until the PR merges. CI's `db` job is what tests a PR's
+migrations. Supabase's per-PR preview branches would close that gap, but they
+are switched off in the integration settings and may need a paid plan.
+
 ## Hosted auth settings (A1)
 
 Sign-in (A3/A4) needs settings that live in the hosted project's dashboard,
