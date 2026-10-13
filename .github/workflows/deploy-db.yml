@@ -12,7 +12,7 @@ name: Deploy database
 #
 # Setup (supabase/README.md, "Deploying migrations"): GitHub environments
 # `production` and `staging`, each with the variable SUPABASE_PROJECT_ID and
-# the secrets SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD. An environment
+# the secret SUPABASE_ACCESS_TOKEN (SUPABASE_DB_PASSWORD is optional). An environment
 # without SUPABASE_PROJECT_ID is skipped, so staging is a no-op until W10
 # creates it. Never --include-seed here: reseeding production stays manual.
 

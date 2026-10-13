@@ -91,7 +91,7 @@ create the environment and add:
 | --- | --- | --- |
 | `SUPABASE_PROJECT_ID` | Variable | The project ref: the part of its URL before `.supabase.co` |
 | `SUPABASE_ACCESS_TOKEN` | Secret | A personal access token from supabase.com → Account → Access Tokens |
-| `SUPABASE_DB_PASSWORD` | Secret | That project's database password (Project Settings → Database; reset it there if nobody knows it) |
+| `SUPABASE_DB_PASSWORD` | Secret, **optional** | Not needed: with only the access token, the CLI connects through a temporary login role (checked 2026-10-13). Add the database password only if that ever fails |
 
 An environment without `SUPABASE_PROJECT_ID` is skipped with a notice. Until
 W10 creates a staging project, leave `staging` empty, and the workflow deploys
