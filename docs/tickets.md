@@ -6,6 +6,21 @@ story (`w2-schema-skeleton`, `s3-us-02-create-session`).
 **Sizes:** S ≈ 1–2h · M ≈ 3–4h · L ≈ 5–6h — guesses; re-size after this sprint.
 **Status:** ⬜ not started · 🚧 in progress · ✅ done
 
+## Sprint 3 focus (from 2026-10-12, ends Oct 20)
+
+Everything aims at the Sprint 3 finish line; demo-only work waits for
+Sprint 4. The project board's **Priority** field orders it:
+
+| Priority | Tickets | Owner |
+| --- | --- | --- |
+| **P0 · CI/CD** | W1 (remaining items), W7, W8, W9, W10 | Jack |
+| **P1 · Sprint 3 core** | S4, S5, S6 · M1, M2, M3 · M5 | Nate (S4, S6), Tapan (S5, M5), Moses (M1–M3) |
+| **P2 · Sprint 3 stretch** | M4 (map), W0 | Moses, Jack |
+| **P3 · Sprint 4** | W6, A1, A5, M6 | Jack (W6), Moses |
+
+Until A1 and A5 give production a working email sender, sign in with
+`npm run auth:link` (`supabase/README.md`, step 6).
+
 ## Sprint 2 goal
 
 **A Vanderbilt student can sign in, create a study session, and see sessions
@@ -26,10 +41,10 @@ W4 lands, nobody is waiting on anybody.
 
 | Track | Owner | Builds | Replaces these stubs |
 | --- | --- | --- | --- |
-| **W · Wiring** | Jack (W7, W9: Tapan; W8: Nate) | Schema skeleton, starter data, the stubs themselves, basic UI | — |
-| **A · Auth** | Moses (A1, hosted settings: Jack) | Sign-in, display name, route protection | `src/app/login/*`, `src/app/auth/confirm/route.ts`, `src/lib/supabase/proxy.ts` |
-| **S · Sessions API** | Tapan (S1–S3), Nate (S4) | Creating sessions, the session list, course typeahead | `src/app/sessions/actions.ts`, `src/lib/sessions.ts` |
-| **M · Google Maps** | Moses (M1, keys and billing: Jack) | Keys, location picker, location validation | `src/components/LocationPicker.tsx`, `src/lib/places.ts` |
+| **W · Wiring** | Jack | Schema skeleton, starter data, the stubs themselves, basic UI | — |
+| **A · Auth** | Moses | Sign-in, display name, route protection | `src/app/login/*`, `src/app/auth/confirm/route.ts`, `src/lib/supabase/proxy.ts` |
+| **S · Sessions API** | Tapan (S1–S3, S5), Nate (S4, S6) | Creating sessions, the session list, course typeahead | `src/app/sessions/actions.ts`, `src/lib/sessions.ts` |
+| **M · Google Maps** | Moses (M5: Tapan) | Keys, location picker, location validation | `src/components/LocationPicker.tsx`, `src/lib/places.ts` |
 
 ```mermaid
 flowchart LR
@@ -130,14 +145,14 @@ flowchart LR
 - [x] Works end to end on fixtures: submitting the form validates and lands on the list (the stub saves nothing, so the new session does not appear until S3)
 
 #### W6 · Integration and demo
-**M · end of sprint · Jack**
+**M · Sprint 4 (deprioritised 2026-10-12) · Jack**
 - [ ] Merge tracks as they land; fix any seam mismatches
 - [ ] Run the Sprint 2 "done when" on production with two real accounts
 - [ ] `docs/test-cases.md` updated with what is genuinely verified
 - [ ] Fixtures no longer used by the app kept only where tests need them
 
 #### W7 · Deploy migrations from CI
-**S · TASK-03 · now — before #31–#33's migrations need to reach the hosted project · Tapan; Jack adds the two secrets**
+**S · TASK-03 · P0 CI/CD · Jack**
 
 The hosted database changes only when someone runs `supabase db push` by hand, while Vercel deploys `main` on every merge. Once #31–#33 merge, production would run code calling `create_session` before the hosted database has it.
 - [ ] A job on push to `main`: `supabase link`, then `supabase db push` to the hosted project, with `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` in a GitHub `production` environment
@@ -148,7 +163,7 @@ The hosted database changes only when someone runs `supabase db push` by hand, w
 - [ ] Documented in `supabase/README.md`
 
 #### W8 · End-to-end smoke test in CI
-**M · Sprint 3 · after S4, M5 · Nate**
+**M · Sprint 3 · P0 CI/CD · Jack** — start with journey 1 (sign-in); add journeys 2 and 3 as S4, M5 and S5 land
 
 One browser test of the Sprint 2 "done when", so the main path is checked on every PR rather than by hand at demo time. Not before S4 and M5: until then it could only click through fixtures.
 - [ ] Playwright, one test: two `@vanderbilt.edu` users sign in with the code read from Mailpit's API; one names themselves and creates a session; the other sees it in the list with the right seat count
@@ -157,7 +172,7 @@ One browser test of the Sprint 2 "done when", so the main path is checked on eve
 - [ ] Added to the ruleset's required checks once it has run a week without flaking
 
 #### W9 · Unit tests for the riskiest server code
-**M · Sprint 3 · TEST_PLAN.md "Next tests" · Tapan**
+**M · Sprint 3 · P0 CI/CD · TEST_PLAN.md "Next tests" · Jack**
 
 Sprint 3 needs 60%+ coverage and integration tests. The baseline is 77.2% branch, 68.1% line, and the two riskiest server functions have no unit tests: `resolvePlace()` (0 of 35 branches) and `createSession()` (0%). Vitest can import both since #41.
 - [ ] `resolvePlace()` with `fetch` and the admin client mocked: a place 5 km away refused as `outside_campus` with nothing written; an excluded type refused; Google's errors and a timeout mapped; fixture ids accepted only without a server key
@@ -165,12 +180,21 @@ Sprint 3 needs 60%+ coverage and integration tests. The baseline is 77.2% branch
 - [ ] Re-measured with `npm run test:coverage`; the baseline in `TEST_PLAN.md` updated (targets: ≥ 80% branch overall, ≥ 90% on `src/lib/`)
 - [ ] `coverage.thresholds` in `vitest.config.mts` set to the new numbers, so coverage cannot quietly drop
 
+#### W10 · Preview deployments get their own database
+**M · Sprint 3 · P0 CI/CD · Jack**
+
+Every Vercel preview uses the production Supabase project (W1 set the same values for Production, Preview and Development), so a PR's preview runs new code against production's old schema and writes test data into production.
+- [ ] Decide: Supabase preview branches (a database per PR; disabled in the integration settings now, may need a paid plan) or a second, free Supabase project as shared staging
+- [ ] If staging: migrations and seed pushed to it; its keys in Vercel's **Preview** environment only; W7's workflow pushes migrations there too
+- [ ] Sign-in on a preview works with `npm run auth:link` and `SIGN_IN_SITE_URL` set to the preview URL
+- [ ] Production's variables are on Production only; documented in `supabase/README.md`
+
 ---
 
 ## Track A · Auth
 
 #### A1 · Hosted auth settings
-**S · US-01 · start now · Jack**
+**S · US-01 · Sprint 4 · Moses** — the templates are locked until A5's custom SMTP exists
 - [ ] Supabase Auth Site URL = production URL; redirect URLs cover localhost and Vercel previews
 - [ ] Magic-link email template points at `/auth/confirm` with `token_hash` — written (`supabase/templates/magic_link.html`, a 6-digit code plus the link); **not yet pasted into the hosted dashboard** — steps in [`supabase/README.md`](../supabase/README.md#hosted-auth-settings-a1)
 - [x] Same settings in `supabase/config.toml` for local (local emails appear in Mailpit at http://127.0.0.1:54324) — never run locally (Docker down)
@@ -216,7 +240,7 @@ ADR 0003 still says "magic link" — not edited.
 - [x] `requireUser()` implemented — S3 calls it — unit-tested (`server.test.ts`), and redirected a nameless user from `/sessions/new` against a local Supabase
 
 #### A5 · Demo email delivery
-**S · US-01 · after A1, #33 · Moses**
+**S · US-01 · Sprint 4 · after A1, #33 · Moses**
 
 Per #33, Supabase's built-in sender reaches only members of the Supabase organization, about 2 emails an hour — not enough for the demo.
 - [ ] Every tester can receive a sign-in email: custom SMTP (Authentication → SMTP), or every tester in the Supabase organization
@@ -261,12 +285,36 @@ Per #33, Supabase's built-in sender reaches only members of the Supabase organiz
 - [ ] `listDepartments()`; `searchCourses()` ordered by how many sessions used each course
 - [ ] `hostDisplayName` on each item needs A2's profiles read policy — until A2 lands, return null (shown as "Deleted user") or coordinate with A2
 
+#### S5 · Join and leave with a seat limit
+**L · US-04, US-07, US-08 · Sprint 3 · Tapan**
+
+The other half of the core loop: a student can host and browse, but not yet join. Design in `architecture.md` §3: join and leave go through database functions holding a row lock, never a plain `INSERT` from app code.
+- [ ] `join_session(session_id)`: SECURITY DEFINER, locks the session row (`for update`); refuses when full, cancelled, ended, already joined, signed out, or without a display name, each with a short raised message; inserts into `session_attendees`
+- [ ] `leave_session(session_id)`: removes the caller; the host cannot leave (they cancel, US-09, later)
+- [ ] No client INSERT or DELETE on `session_attendees`; `anon` gets no EXECUTE on either function
+- [ ] `joinSession()` and `leaveSession()` server actions, errors mapped in `databaseErrorMessage()`
+- [ ] Database tests for every refusal, and **US-07b**: two concurrent joins for the last seat, exactly one succeeds. Then delete `tests/db/harness.test.ts` (CLAUDE.md)
+- [ ] Seats left in the list reflect joins and leaves
+
+#### S6 · Session page with roster
+**M · US-04, US-23 · Sprint 3 · after S4 · Nate**
+
+`src/app/sessions/[id]/page.tsx` and `src/components/SessionRoster.tsx` are comment-only stubs; their TODOs are the spec.
+- [ ] `/sessions/[id]`: the session in campus time, seats left; a 404 when it does not exist or is not visible
+- [ ] `<SessionRoster>`: attendees by display name (US-23, never email — US-25), live seat count, host marked
+- [ ] Join and Leave wired to S5's actions; disabled at capacity with the reason; "You're hosting" for the host
+- [ ] A notice when the host has cancelled
+- [ ] The home page's and cards' "View" links point here
+
 ---
 
 ## Track M · Google Maps
 
 #### M1 · Google Cloud and keys
-**M · TASK-06 · after W1's push protection · Jack**
+**M · TASK-06 · after W1's push protection · Moses · needed by about Oct 14**
+
+M2 and the map (M4) wait on these keys, and Sprint 3 ends Oct 20. If billing cannot be set up by then, M4 moves to Sprint 4 so Moses is not blocked.
+
 - [ ] Billing account attached; owner agreed by the team
 - [ ] Maps JavaScript API and **Places API (New)** enabled — the legacy Places API lacks `locationRestriction` and `includedPrimaryTypes`
 - [ ] Browser key restricted by **HTTP referrer** (production, previews, localhost) and by API
@@ -301,7 +349,7 @@ Per #33, Supabase's built-in sender reaches only members of the Supabase organiz
 - [ ] List / map toggle on `/sessions`; one marker per session, distinct when full; loads client-side only
 
 #### M5 · A location sessions can use before M2
-**S · US-02 · decide now; build after #31, #32 · Jack**
+**S · US-02 · Sprint 3 · Tapan** — W8 needs a location sessions can use in CI
 
 Once #31 and #32 merge, the stub picker's fixture place ids resolve to `20000000-…` location ids that are not rows, so `create_session` fails its foreign key and the student sees "Something went wrong saving that" (checked 2026-10-06 with #31–#33 merged locally). Until M1 and M2 land, nothing can be created anywhere — which blocks W6's demo and W8.
 - [ ] Decide: wait for M1 and M2, or put the three fixture locations into local and CI databases only — never the hosted project
@@ -309,7 +357,7 @@ Once #31 and #32 merge, the stub picker's fixture place ids resolve to `20000000
 - [ ] W6 can create a session locally
 
 #### M6 · Refresh stored coordinates
-**S · Sprint 3 · after M1, M3 · Moses**
+**S · Sprint 4 (moved 2026-10-12, to make room for S5 and S6) · after M1, M3 · Moses**
 
 #31 reports Google's terms allow caching a place's coordinates for 30 days at most — not yet checked on Google's own page. `locations.validated_at` exists for this.
 - [ ] Check the rule on Google's page; record it in ADR 0008
