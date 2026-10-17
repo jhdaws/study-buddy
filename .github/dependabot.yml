@@ -8,6 +8,23 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+      # vitest and its coverage plugin must move together: on its own,
+      # vitest 5 fails to install against @vitest/coverage-v8 4 (#61).
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
+        update-types: ["major"]
+    ignore:
+      # Held until after Sprint 3 (ends 2026-10-20). Delete these entries
+      # to get the updates back.
+      # vitest 5: needs @vitest/coverage-v8 5 alongside it (#61).
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@vitest/*"
+        update-types: ["version-update:semver-major"]
+      # eslint 10: the React lint rules under eslint-config-next fail to
+      # load with it ("contextOrFilename.getFilename is not a function", #62).
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
