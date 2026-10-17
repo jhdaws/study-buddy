@@ -79,6 +79,11 @@ Anything needing real Postgres behaviour — constraints, RLS, locks — goes in
 (`npm run db:start`, needs Docker). Those tests refuse to connect anywhere but
 localhost. CI runs them in a separate `db` job.
 
+The main journeys run in a real browser with `npm run test:e2e` (Playwright,
+`tests/e2e/`): a production build against the full local stack, with
+sign-in codes read from Mailpit. They refuse any non-local Supabase, because
+they create users. CI runs them in the `e2e` job.
+
 `tests/db/harness.test.ts` only proves the database harness works. **Delete it
 once US-07b lands.** `docs/test-cases.md` tracks what is genuinely verified
 versus what is assumed — keep it honest, because a green CI badge should never

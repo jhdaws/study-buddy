@@ -166,9 +166,9 @@ The hosted database changes only when someone runs `supabase db push` by hand, w
 **M · Sprint 3 · P0 CI/CD · Jack** — start with journey 1 (sign-in); add journeys 2 and 3 as S4, M5 and S5 land
 
 One browser test of the Sprint 2 "done when", so the main path is checked on every PR rather than by hand at demo time. Not before S4 and M5: until then it could only click through fixtures.
-- [ ] Playwright, one test: two `@vanderbilt.edu` users sign in with the code read from Mailpit's API; one names themselves and creates a session; the other sees it in the list with the right seat count
-- [ ] Runs in CI against the full local stack (`supabase start`) with the app built and started (`next build && next start`), at 375px (ADR 0004)
-- [ ] A Playwright trace uploaded as a workflow artifact on failure
+- [ ] Playwright: two `@vanderbilt.edu` users sign in with the code read from Mailpit's API; one names themselves and creates a session; the other sees it in the list with the right seat count — journeys 1 (sign in, name step) and 2 (host a session, checked in the database) pass; journey 3 waits for S4 (`tests/e2e/journeys.spec.ts`)
+- [x] Runs in CI against the full local stack (`supabase start`) with the app built and started (`next build && next start`), at 375px (ADR 0004) — the `e2e` job
+- [x] A Playwright trace uploaded as a workflow artifact on failure
 - [ ] Added to the ruleset's required checks once it has run a week without flaking
 
 #### W9 · Unit tests for the riskiest server code

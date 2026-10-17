@@ -98,8 +98,12 @@ Why the 9s:
 3. A second student signs in → sees that session with the right number of
    seats left. Once joining exists, they join and the count drops by one.
 
-All three run at 375px against the full local stack. The journeys can't create
-anything until M5 (#36) gives them a location that exists.
+All three run at 375px against a production build and the full local stack
+(`tests/e2e/`, `npm run test:e2e`; CI's `e2e` job). **Status, 2026-10-17:**
+journeys 1 and 2 pass. Journey 2 checks the saved session in the database,
+because the list still reads fixtures. Journey 3 is marked `fixme` until S4
+(#21). `tests/e2e/global-setup.ts` gives the stub picker's fixture places
+location rows in the local database, which is M5's local-and-CI half.
 
 ## Not testing (and why)
 
@@ -179,4 +183,5 @@ npm test                 # unit and component tests
 npm run db:start         # once; needs Docker
 npm run test:db          # database tests against the local stack
 npm run test:coverage    # unit tests with branch coverage over all of src/
+npm run test:e2e         # browser journeys; needs the full local stack (npm run db:start)
 ```
