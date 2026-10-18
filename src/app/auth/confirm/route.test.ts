@@ -15,9 +15,10 @@ import { GET } from "./route";
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn(), pathAfterSignIn: vi.fn() }));
 
 const verifyOtp = vi.fn();
+const exchangeCodeForSession = vi.fn();
 
 function mockClient() {
-  vi.mocked(createClient).mockResolvedValue({ auth: { verifyOtp } } as never);
+  vi.mocked(createClient).mockResolvedValue({ auth: { verifyOtp, exchangeCodeForSession } } as never);
   if (!vi.mocked(pathAfterSignIn).getMockImplementation()) {
     vi.mocked(pathAfterSignIn).mockImplementation(async (_client, _id, next) => safeNext(next));
   }
@@ -106,5 +107,46 @@ describe("GET /auth/confirm", () => {
     expect(verifyOtp).not.toHaveBeenCalled();
     expect(location?.pathname).toBe("/login");
     expect(location?.searchParams.get("error")).toBe("link");
+  });
+});
+
+// Supabase's default email (no custom SMTP yet, A5): its link goes through
+// Supabase's /verify and comes back with a PKCE `code`, not a token_hash.
+describe("GET /auth/confirm with a code (Supabase's default email)", () => {
+  it("exchanges the code and goes on to a same-origin next", async () => {
+    exchangeCodeForSession.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    const { response, location } = await visit("next=%2Fsessions%2Fnew&code=pkce-code-1");
+
+    expect(exchangeCodeForSession).toHaveBeenCalledWith("pkce-code-1");
+    expect(verifyOtp).not.toHaveBeenCalled();
+    expect(response.status).toBe(303);
+    expect(location?.origin).toBe(ORIGIN);
+    expect(location?.pathname + (location?.search ?? "")).toBe("/sessions/new");
+  });
+
+  it("sends a first-time student to the name step", async () => {
+    exchangeCodeForSession.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    vi.mocked(pathAfterSignIn).mockResolvedValueOnce("/login/name");
+    const { location } = await visit("code=pkce-code-1");
+    expect(vi.mocked(pathAfterSignIn)).toHaveBeenCalledWith(expect.anything(), "u1", "/sessions");
+    expect(location?.pathname).toBe("/login/name");
+  });
+
+  it("sends a code that cannot be exchanged -- another device, used, expired -- back to /login, keeping next", async () => {
+    exchangeCodeForSession.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { code: "bad_code_verifier", status: 400, message: "code verifier mismatch" },
+    });
+    const { location } = await visit("next=%2Fsessions%2Fnew&code=pkce-code-1");
+    expect(location?.pathname).toBe("/login");
+    expect(location?.searchParams.get("error")).toBe("link");
+    expect(location?.searchParams.get("next")).toBe("/sessions/new");
+  });
+
+  it("never follows an off-site next, whatever the code", async () => {
+    exchangeCodeForSession.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    const { location } = await visit("next=https%3A%2F%2Fevil.example&code=pkce-code-1");
+    expect(location?.origin).toBe(ORIGIN);
+    expect(location?.pathname).toBe("/sessions");
   });
 });

@@ -109,7 +109,7 @@ export type AuthErrorLike = {
 };
 
 export const SIGN_IN_RATE_LIMITED_MESSAGE =
-  "Too many sign-in emails have gone out recently. Wait a minute, then try again.";
+  "Too many sign-in emails have gone out recently. Try again in a few minutes.";
 
 const SIGN_IN_MESSAGES: Record<string, string> = {
   // The per-address 60-second throttle and the project's hourly email cap
