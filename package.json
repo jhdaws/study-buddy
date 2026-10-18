@@ -13,10 +13,11 @@
     "test:coverage": "vitest run --coverage",
     "test:db": "vitest run --config vitest.db.config.mts",
     "test:e2e": "playwright test",
-    "db:start": "supabase start",
+    "db:start": "supabase start && npm run db:seed:locations",
     "db:stop": "supabase stop",
-    "db:reset": "supabase db reset",
+    "db:reset": "supabase db reset && npm run db:seed:locations",
     "db:seed": "node scripts/build-seed.mjs",
+    "db:seed:locations": "node scripts/seed-local-locations.mts",
     "auth:link": "node --env-file=.env.hosted scripts/sign-in-link.mjs",
     "db:types": "supabase gen types --lang typescript --local > src/lib/database.types.ts",
     "db:status": "supabase status"
