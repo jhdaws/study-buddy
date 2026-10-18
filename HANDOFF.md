@@ -71,6 +71,80 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-10-18 · S5: join and leave with a seat limit
+
+**Branch:** `s5-us-04-join-leave`, from `main` · **Commits made:** one, pushed; no PR opened yet (no `gh` CLI in this environment — the push printed the compare link, `https://github.com/jhdaws/study-buddy/pull/new/s5-us-04-join-leave`).
+
+### What changed
+- `supabase/migrations/20261018184357_join_leave_session.sql` (new) —
+  `join_session(session_id)` and `leave_session(session_id)`, SECURITY
+  DEFINER, same no-plain-write pattern as S1's `create_session`. `join_session`
+  locks the session row (`for update`) before counting the roster — the
+  mechanism US-07b exists to prove. Both get an explicit
+  `revoke execute ... from anon`, not just `from public`: BUG-08 already found
+  that the implicit grant alone leaves `anon` able to execute `create_session`.
+- `src/app/sessions/actions.ts` — `joinSession()`/`leaveSession()`, bound the
+  way Next's docs describe for a Server Action needing more than
+  `(prevState, formData)`: `joinSession.bind(null, sessionId)`. Neither
+  redirects; both `revalidatePath()` the session's own path and `/sessions`.
+- `src/lib/errors.ts` — seven new `RAISED_MESSAGES` entries for what the two
+  functions raise.
+- `tests/db/join-leave-session.test.ts` (new, 17 tests, including US-07b:
+  two connections racing `join_session()` for the last seat via
+  `Promise.allSettled`). **Deleted `tests/db/harness.test.ts`** per
+  CLAUDE.md's instruction, now that US-07b has a real replacement; removed
+  the matching paragraph from `CLAUDE.md` itself.
+- `src/app/sessions/actions.test.ts` (+7), `src/lib/errors.test.ts` (+1 block)
+  — mocked Supabase, same pattern as S3/W9's `createSession()` tests.
+- `docs/contracts.md` — new section documenting the `joinSession`/
+  `leaveSession` seam for S6 (signatures, the bind pattern, what error
+  strings mean, what is explicitly *not* this track's job: the button itself,
+  "You're hosting", the roster).
+- `docs/tickets.md`, `docs/test-cases.md`, `docs/backlog.md` — S5 ticked
+  except "seats left in the list reflect joins and leaves" (mechanically true
+  once S4 lands, not watchable before then); US-04/US-07/US-07b/US-08 moved
+  ⬜ → 🚧 with notes on exactly what is and is not covered.
+
+### Verified versus assumed
+- **Verified:** `npm run lint` (4 pre-existing-shape warnings — `_prev`/
+  `_formData` unused on both new actions, since neither needs the submitted
+  form; same reason `createSession`'s own `_prev` is unused, just now on two
+  trailing params instead of one, so eslint's "after-used" default flags
+  both — not fixed, it's a warning and matches how the codebase already
+  tolerates this), `npm run typecheck`, `npm test` (405 passed, 14 new),
+  `npm run build`, `npm run test:coverage` (82.9% branches / 93.7%
+  `src/lib`, both above the enforced threshold), and the seed-freshness
+  check.
+- **Not verified — no Docker in this environment, same gap every S1/S2/M3
+  session before this one hit:** the migration has never been applied to a
+  real Postgres, and `join-leave-session.test.ts` has only been checked for
+  shape (it parses, types check under `npm run test:db`, and fails at the
+  connection step exactly like every other file in `tests/db/` — not a
+  single assertion in it has actually run). **Run
+  `npm run db:start && npm run test:db` for real before trusting the lock
+  behaviour, the grants, or the RLS deny-by-default DELETE test.**
+  `src/lib/database.types.ts`'s two new function entries were hand-written to
+  match the generator's exact style (same thing S1/M3 each did without
+  Docker) — **not** produced by `supabase gen types`; CI's `db` job is the
+  real check.
+
+### Things the next agent should be careful about
+- **RLS denies DELETE differently from INSERT.** With no policy at all, an
+  INSERT's failing `WITH CHECK` always raises an error (S1's existing test);
+  a DELETE's failing `USING` just filters the target row out first, so the
+  statement succeeds with `rowCount: 0` — no exception. The DELETE test in
+  `join-leave-session.test.ts` asserts the row count, not a `.rejects`. Get
+  this backwards and you'll write a test that looks right and silently
+  verifies nothing.
+- **No UI exists for any of this.** S6 (`src/components/SessionRoster.tsx`,
+  `src/app/sessions/[id]/page.tsx`) is still comment-only. `docs/contracts.md`
+  has what it needs to wire the buttons; this session did not touch either
+  file.
+- The M5 branch (`m5-us-02-local-locations`, same session, separate PR) is
+  independent of this one — don't rebase one onto the other.
+
+---
+
 ## 2026-10-11 · Rebuilt Track A by mistake, then shipped US-19 instead
 
 **Branch:** `us-19-calendar-download` · **Commits made:** one on this branch.
