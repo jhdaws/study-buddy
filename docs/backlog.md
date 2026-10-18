@@ -31,21 +31,23 @@ Status: ⬜ not started · 🚧 in progress · ✅ done
 it was stripped back so the schema could be designed first. Sprint 2 is now
 under way (see [`tickets.md`](./tickets.md)): the screens for US-02 and US-03
 exist but run on fixture stubs — nothing is saved or read from the database
-yet — so those two are 🚧 and everything else is ⬜. US-19 is 🚧 for a
-different reason: the download endpoint is built and tested, but nothing in
-the UI links to it yet, so a student cannot reach it.
+yet — so those two are 🚧. US-19 is 🚧 for a different reason: the download
+endpoint is built and tested, but nothing in the UI links to it yet, so a
+student cannot reach it. US-04, US-07 and US-08 are 🚧 for the same reason as
+US-19: S5 built the database functions and server actions, but no button
+calls them yet — that is S6.
 
 | ID | Pri | Status | Story | Est |
 | --- | --- | --- | --- | --- |
 | US-01 | P0 | ⬜ | As a Vanderbilt student, I want to authenticate with my Vanderbilt email, so that everyone on the platform is a verified classmate. | 12 |
 | US-02 | P0 | 🚧 | As an authenticated user, I want to create a study session with course, topic, location, room, time range, and max capacity, so that peers can join me. *(Location from Google Places, not a building list — ADR 0008.)* | 14 |
 | US-03 | P0 | 🚧 | As a student looking for peers, I want to see active sessions on a campus map or list, so that I can find groups meeting near me. | 16 |
-| US-04 | P0 | ⬜ | As a student, I want to join an open session in one tap, so that my name appears on the roster and my seat is reserved. | 8 |
+| US-04 | P0 | 🚧 | As a student, I want to join an open session in one tap, so that my name appears on the roster and my seat is reserved. *(S5: the database function and server action exist; no tap yet — S6 wires the button.)* | 8 |
 | US-05 | P0 | ⬜ | As a participant, I want to send and receive messages in a session chat, so that I can coordinate with the group. | ~~16~~ **30** |
 | US-16 | **P0** | ⬜ | As a student who can't find a session for my course, I want to post a study request visible to classmates, so that they can see the interest and start one. | 5 |
 | US-06 | P1 | ⬜ | As a student preparing for a class, I want to filter sessions by course code. | 10 |
-| US-07 | P1 | ⬜ | As a student browsing, I want full sessions to show "Session full" and block new joins. | 5 |
-| US-08 | P1 | ⬜ | As an attendee, I want to leave a session, so that my seat opens up for someone else. | 4 |
+| US-07 | P1 | 🚧 | As a student browsing, I want full sessions to show "Session full" and block new joins. *(S5: `join_session` blocks them at the database; no "Session full" text yet — S6.)* | 5 |
+| US-08 | P1 | 🚧 | As an attendee, I want to leave a session, so that my seat opens up for someone else. *(S5: the database function and server action exist; no button yet — S6.)* | 4 |
 | US-09 | P1 | ⬜ | As a host, I want to edit or cancel my session, so that attendees always see the correct time and place. | 9 |
 | US-11 | P1 | ⬜ | As a new user, I want to fill in my academic profile (major, minor, year, current courses), so that others have context before joining. | 6 |
 | US-12 | P1 | ⬜ | As a student searching, I want to filter by building or campus zone. *(Needs rethinking: with no building list there is no zone data — ADR 0008.)* | 7 |

@@ -253,5 +253,53 @@ Handler**:
   names and SQLSTATEs to the two tables; it should not need a new function.
 - **The display-name route** is `/login/name?next=…` (A4). `/auth/confirm`,
   `verifyCode()` and `requireUser()` send nameless students there.
-- **Joining, leaving, cancelling, chat** are later sprints. The note about
-  atomic joins is in `src/app/sessions/actions.ts`.
+- **Cancelling and chat** are later sprints.
+
+## Joining and leaving (S5), for S6 to wire up
+
+`src/app/sessions/actions.ts`:
+
+```ts
+export type SessionActionState = { error?: string };
+export async function joinSession(
+  sessionId: string,
+  prev: SessionActionState,
+  formData: FormData,
+): Promise<SessionActionState>;
+export async function leaveSession(
+  sessionId: string,
+  prev: SessionActionState,
+  formData: FormData,
+): Promise<SessionActionState>;
+```
+
+Both call `requireUser()` first (redirects a signed-out or nameless student),
+then `join_session(session_id)` / `leave_session(session_id)` over
+`supabase.rpc()` — the only way a row is ever written to or removed from
+`session_attendees` after a session is created. Neither redirects on
+success: they `revalidatePath()` the session's own path and `/sessions`, and
+return `{}`, so the caller's own page (not a different one) shows the fresh
+roster and seat count.
+
+**Bind the session id**, the way the
+[Next.js docs](https://nextjs.org/docs/app/getting-started/updating-data#passing-additional-arguments)
+describe for a Server Action that needs more than `(prevState, formData)`:
+
+```tsx
+const [state, action] = useActionState(joinSession.bind(null, session.id), {});
+// <form action={action}><button>Join</button></form>
+```
+
+**Errors.** `state.error` is set, never thrown, for every rule `join_session`/
+`leave_session` raise — `session_full`, `session_cancelled`, `session_ended`,
+`already_joined`, `not_joined`, `host_cannot_leave`, `session_not_found` —
+mapped to copy in `src/lib/errors.ts`. US-07 ("Session full" disables the
+button) and the cancellation notice (US-09, later) read off these, not off a
+separate status computed in the component: the database is still the
+authority on whether a join would succeed, because only it holds the lock
+that makes that answer correct under concurrency (US-07b).
+
+**Not this track's job:** disabling the Join button at capacity before the
+click (a UX nicety — the function refuses it either way), showing "You're
+hosting" instead of a button for the host, and the roster itself. All S6
+(`src/components/SessionRoster.tsx`, `src/app/sessions/[id]/page.tsx`).
