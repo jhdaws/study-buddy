@@ -175,10 +175,10 @@ One browser test of the Sprint 2 "done when", so the main path is checked on eve
 **M · Sprint 3 · P0 CI/CD · TEST_PLAN.md "Next tests" · Jack**
 
 Sprint 3 needs 60%+ coverage and integration tests. The baseline is 77.2% branch, 68.1% line, and the two riskiest server functions have no unit tests: `resolvePlace()` (0 of 35 branches) and `createSession()` (0%). Vitest can import both since #41.
-- [ ] `resolvePlace()` with `fetch` and the admin client mocked: a place 5 km away refused as `outside_campus` with nothing written; an excluded type refused; Google's errors and a timeout mapped; fixture ids accepted only without a server key
-- [ ] `createSession()` with Supabase mocked: a `PlaceError` becomes a field error on `placeId`; an RPC error goes through `databaseErrorMessage()` and is logged; success redirects to `/sessions`
-- [ ] Re-measured with `npm run test:coverage`; the baseline in `TEST_PLAN.md` updated (targets: ≥ 80% branch overall, ≥ 90% on `src/lib/`)
-- [ ] `coverage.thresholds` in `vitest.config.mts` set to the new numbers, so coverage cannot quietly drop
+- [x] `resolvePlace()` with `fetch` and the admin client mocked: a place 5 km away refused as `outside_campus` with nothing written; an excluded type refused; Google's errors and a timeout mapped; fixture ids accepted only without a server key
+- [x] `createSession()` with Supabase mocked: a `PlaceError` becomes a field error on `placeId`; an RPC error goes through `databaseErrorMessage()` and is logged; success redirects to `/sessions`
+- [x] Re-measured with `npm run test:coverage`; the baseline in `TEST_PLAN.md` updated (targets: ≥ 80% branch overall, ≥ 90% on `src/lib/`)
+- [x] `coverage.thresholds` in `vitest.config.mts` set to the new numbers, so coverage cannot quietly drop
 
 #### W10 · Preview deployments get their own database
 **M · Sprint 3 · P0 CI/CD · Jack**

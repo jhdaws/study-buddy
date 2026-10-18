@@ -54,8 +54,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Unit tests
-        run: npm test
+      # With coverage: vitest.config.mts sets the thresholds, so a PR that
+      # lowers coverage below them fails here (W9).
+      - name: Unit tests and coverage
+        run: npm run test:coverage
 
       - name: Build
         run: npm run build

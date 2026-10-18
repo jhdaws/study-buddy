@@ -33,6 +33,12 @@ gave 289 unit tests, so re-measure once they merge.
 
 ## Targets (end of Sprint 3)
 
+**Met on 2026-10-16 (W9, #48):** 82.8% branches and 83.1% lines overall
+(from 77.8% and 76.0% on that day's `main`), and 94.0% of `src/lib/`'s
+branches. Every server action now has unit tests (`createSession` in W9; the
+sign-in actions came with #33). `vitest.config.mts` sets these as thresholds
+and CI runs `npm run test:coverage`, so a PR that falls below them fails.
+
 - **Branch coverage ≥ 80% overall** (77.2% today) **and lines ≥ 75%**
   (68.1% today). Both are above the course's 60%.
 - **≥ 90% branch coverage on `src/lib/`**, excluding `src/lib/supabase/`
@@ -127,11 +133,11 @@ location rows in the local database, which is M5's local-and-CI half.
 
 ## Next tests, in order
 
-1. **`resolvePlace` refuses an off-campus place before writing anything.**
+1. ✅ *Done in W9 (#48), `src/lib/places.test.ts`.* **`resolvePlace` refuses an off-campus place before writing anything.**
    Mock fetch to return a place 5 km from `CAMPUS_CENTER`; expect
    `PlaceError("outside_campus")` and no call to the admin client. This starts
    on the 0% file with the highest risk.
-2. **`createSession` unit tests** with Supabase mocked: a `PlaceError` becomes a
+2. ✅ *Done in W9 (#48), `src/app/sessions/actions.test.ts`.* **`createSession` unit tests** with Supabase mocked: a `PlaceError` becomes a
    field error, an RPC error is mapped through `errors.ts`, success redirects.
    This is after #32.
 3. **E2E journey 1** (sign in), once #33 is merged (W8, #37).
