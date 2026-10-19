@@ -46,12 +46,16 @@ export async function signInAsNewStudent(
   nextPath = "/sessions/new",
 ): Promise<void> {
   await page.goto(nextPath);
-  // The proxy sends a signed-out visitor to /login, keeping where they were going.
-  await expect(page).toHaveURL(`/login?next=${encodeURIComponent(nextPath)}`);
+  // The proxy sends a signed-out visitor to /login, keeping where they were
+  // going -- except /sessions, the default, which needs no `next`.
+  await expect(page).toHaveURL(
+    nextPath === "/sessions" ? "/login" : `/login?next=${encodeURIComponent(nextPath)}`,
+  );
 
   await page.getByLabel("Vanderbilt email").fill(email);
   await page.getByRole("button", { name: "Send code" }).click();
-  await expect(page.getByText("Check your inbox")).toBeVisible();
+  // By role: Next's hidden route announcer repeats the heading's text.
+  await expect(page.getByRole("heading", { name: "Check your inbox" })).toBeVisible();
 
   await page.getByLabel("Sign-in code").fill(await signInCodeFor(email));
   await page.getByRole("button", { name: "Sign in" }).click();
