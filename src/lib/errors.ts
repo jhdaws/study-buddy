@@ -170,8 +170,8 @@ const VERIFY_CODE_MESSAGES: Record<string, string> = {
   // ("Token has expired or is invalid"), so the message covers both.
   otp_expired: CODE_REJECTED_MESSAGE,
   validation_failed: CODE_REJECTED_MESSAGE,
-  // The demo account signs in with its code as a password
-  // (src/lib/demo-account.ts); a wrong one is just a wrong code.
+  // The test login signs in with its code as a password
+  // (src/lib/test-login.ts); a wrong one is just a wrong code.
   invalid_credentials: CODE_REJECTED_MESSAGE,
   // Verifications are rate limited per IP (30 per 5 minutes by default),
   // which is also what makes guessing a code impractical.

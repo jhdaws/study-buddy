@@ -68,6 +68,58 @@ committed `database.types.ts` does not match the migrations.
 `seed.sql` is generated from `data/` by `npm run db:seed` — edit the JSON,
 not this file. See [`data/README.md`](../data/README.md).
 
+## Deploying migrations (W7, W10)
+
+Merging to `main` applies new migrations to the hosted databases by itself:
+`.github/workflows/deploy-db.yml` waits for CI to pass on that push, then runs
+`supabase db push --include-all` against **staging**, then **production**. If
+staging fails, production is not touched. Vercel deploys the app from the same
+push in parallel, so **a migration must work with the app version already
+live**: add columns, tables, functions and policies freely, but rename or drop
+in two steps. The seed is never pushed from CI.
+
+To re-run it (after fixing a secret, say): Actions → Deploy database → Run
+workflow. To see what it would do, from a machine linked to the project:
+`npx supabase db push --include-all --dry-run`.
+
+### One-time setup (repo admin)
+
+GitHub → Settings → Environments. For each of `production` and `staging`,
+create the environment and add:
+
+| Name | Kind | Value |
+| --- | --- | --- |
+| `SUPABASE_PROJECT_ID` | Variable | The project ref: the part of its URL before `.supabase.co` |
+| `SUPABASE_ACCESS_TOKEN` | Secret | A personal access token from supabase.com → Account → Access Tokens |
+| `SUPABASE_DB_PASSWORD` | Secret, **optional** | Not needed: with only the access token, the CLI connects through a temporary login role (checked 2026-10-13). Add the database password only if that ever fails |
+
+An environment without `SUPABASE_PROJECT_ID` is skipped with a notice. Until
+W10 creates a staging project, leave `staging` empty, and the workflow deploys
+to production only.
+
+### A staging database for previews (W10)
+
+Vercel previews should not use the production database. The free option is a
+second Supabase project that previews share:
+
+1. Create the project in the dashboard (`study-buddy-staging`).
+2. Load its schema and the seed once, without relinking your machine, using
+   the connection string from its **Connect** button:
+   `npx supabase db push --db-url "<staging connection string>" --include-seed`
+3. Fill in the `staging` environment above. From then on, merges deploy to it
+   first.
+4. In Vercel → Settings → Environment Variables, make each of
+   `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` and
+   `SUPABASE_SECRET_KEY` **Production only**, and add the staging project's
+   values for **Preview**. Redeploy a preview to pick them up.
+5. Sign in on a preview with `npm run auth:link`, using the staging keys in
+   `.env.hosted` and `SIGN_IN_SITE_URL` set to the preview's URL (step 6 below).
+
+Staging follows `main`, not each PR: a preview of a PR that adds a migration
+runs without it until the PR merges. CI's `db` job is what tests a PR's
+migrations. Supabase's per-PR preview branches would close that gap, but they
+are switched off in the integration settings and may need a paid plan.
+
 ## Hosted auth settings (A1)
 
 Sign-in (A3/A4) needs settings that live in the hosted project's dashboard,
@@ -109,6 +161,12 @@ unlisted.
 
 ### 2. Authentication → Emails → Templates
 
+**Locked until custom SMTP is set up** (found 2026-10-11). On this plan the
+dashboard shows "Set up custom SMTP to edit templates" and sends Supabase's
+default emails: a link through Supabase's own `/verify` and no code, which
+this app cannot finish signing in with. So step 4's custom SMTP comes first.
+Until then, use the stopgap in step 6.
+
 Set **both "Confirm signup" and "Magic link"** — `signInWithOtp()` sends
 *Confirm signup* to a first-time address and *Magic link* to a returning
 one. Same subject and body for both:
@@ -126,7 +184,8 @@ device, whichever one opened the email.
 template, and the template alone decides whether the student gets a link,
 a code, or both. Supabase's default template contains only a link
 (`{{ .ConfirmationURL }}`), so **until this template is pasted into the
-dashboard, production emails have no code in them.** Ours contains only
+dashboard (which needs custom SMTP first, above), production emails have no
+code in them.** Ours contains only
 `{{ .Token }}`. The link was dropped on 2026-10-12: Vanderbilt mail goes
 through Microsoft Outlook, whose link scanning can open a link before the
 student does and spend the one-time token (Supabase's email-template docs
@@ -134,9 +193,9 @@ warn about this), and the link and the code are the same token, so a
 scanned link also broke the code. With no link in the email there is
 nothing to scan.
 
-`/auth/confirm` still exists and `signIn()` still passes `emailRedirectTo`,
-so an email built from an old or default template lands somewhere that
-works, but nothing in the current email points there.
+`/auth/confirm` still exists and `signIn()` still passes `emailRedirectTo`:
+until the template can be changed, Supabase's default link email is what
+production sends, and it lands there.
 
 ### 3. Authentication → Sign In / Providers → Email
 
@@ -171,30 +230,54 @@ never in this repository.
 
 ### 5. Not a Supabase setting, but blocks sign-in
 
-Production is behind Vercel's login (Deployment Protection — W1). Until that
-is turned off for production, a student following an emailed link hits
-Vercel's sign-in page, not `/auth/confirm`.
+Production was behind Vercel's login (Deployment Protection — W1). Turned off:
+checked 2026-10-11, `/` and `/login` return 200 to a signed-out visitor.
 
-### 6. Demo account (`njpm@vanderbilt.edu`, code `123456`)
+### 6. Signing in without email — a demo stopgap
 
-A fixed account for graders and classmates without a Vanderbilt inbox, and
-for demos that should not spend the two-emails-an-hour allowance. Entering
-`njpm@vanderbilt.edu` on `/login` sends **no email**; the code step accepts
-`123456`. How: `src/lib/demo-account.ts`. The code is the demo user's
-**password** in Supabase Auth, so the account has to exist in each project
-that should accept it:
+Until step 4 is done, nobody can sign in on production by email. For the
+Sprint 2 demo, the project owner can make a one-time sign-in link without
+sending anything:
 
-- **Hosted:** Authentication → Users → Add user → Create new user. Email
-  `njpm@vanderbilt.edu`, password `123456`, **Auto Confirm User** ticked.
-  If the dashboard refuses the password as too short or weak, check
-  Authentication → Sign In / Providers → Email → minimum password length
-  (default 6) and leaked-password protection (Pro plans only).
-- **Local:** the same in Studio (http://127.0.0.1:54323), or
-  `curl -X POST http://127.0.0.1:54321/auth/v1/admin/users -H "apikey: $SECRET" -H "Authorization: Bearer $SECRET" -H "Content-Type: application/json" -d '{"email":"njpm@vanderbilt.edu","password":"123456","email_confirm":true}'`
-  with the secret key from `npx supabase status`.
+1. Create `.env.hosted` in the repo root (ignored by git, like every
+   `.env*`) with the **hosted** project's `NEXT_PUBLIC_SUPABASE_URL` and
+   `SUPABASE_SECRET_KEY` (Project Settings → API Keys, the secret key).
+2. `npm run auth:link -- name@vanderbilt.edu`
+3. Send the printed link to that person. It signs them in on any device,
+   once, within the hour; a first-time address gets an account and the
+   name step.
 
-A2's signup trigger accepts the address (it is `@vanderbilt.edu`) and makes
-its profile; the first sign-in then asks for a display name as usual. Where
-the account does not exist, the demo address just gets "That code didn't
-work". The address and code are public: never give this account anything
-worth protecting, and delete the user to switch the demo off.
+It skips proving the person owns the inbox, which is why only someone with
+the secret key can run it, and why it is a stopgap rather than a feature.
+The Vanderbilt-only rule still holds. `scripts/sign-in-link.mjs` has the
+details.
+
+### 7. Test login (`group4@vanderbilt.edu`), for local and previews only
+
+For building and testing without the email limits. Entering the test address
+on `/login` sends **no email**; the code step takes the test user's
+**password**, checked by Supabase (`signInWithPassword`). How:
+`src/lib/test-login.ts`.
+
+It is **off on production**: the app ignores it whenever Vercel says the
+deployment is production (`VERCEL_ENV=production`), whatever else is set.
+It is also off anywhere `TEST_LOGIN_EMAIL` is unset.
+
+**The code is never written in this repository** (the repo is public). Share
+it with the team privately. To set it up:
+
+1. Pick a random code of **6 to 10 digits** (the code field accepts only
+   that). Longer is better; 10 digits is a good choice.
+2. **Create the user.** Hosted: Authentication → Users → Add user → Create
+   new user, email `group4@vanderbilt.edu`, the code as the password, **Auto
+   Confirm User** ticked. Local: the same in Studio
+   (http://127.0.0.1:54323).
+3. **Turn it on.** Set `TEST_LOGIN_EMAIL=group4@vanderbilt.edu` in
+   `.env.local` and, in Vercel, for the **Preview** environment only.
+
+A2's signup trigger accepts the address and makes its profile; the first
+sign-in asks for a display name as usual. One limit to know: previews and
+production share the hosted project, so the account exists there too, and
+anyone holding the password could sign in through Supabase's API directly.
+That is why the password stays private and long. To switch it off, delete the
+user.

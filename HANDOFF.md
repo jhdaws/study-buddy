@@ -71,6 +71,32 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-10-18 · #55 updated from main; public demo account replaced by a gated test login
+
+### What changed
+
+On `ui-calm-pass` (#55): merged `main` (conflicts in `docs/ai-usage-log.md`,
+`supabase/README.md`; Jack's step 6 kept, test login is step 7). The
+`njpm@vanderbilt.edu` / `123456` demo account from 2026-10-12 is gone, per
+Jack's review: the repo is public. In its place, `src/lib/test-login.ts`: the
+address in `TEST_LOGIN_EMAIL` (meant to be `group4@vanderbilt.edu`) skips the
+email and signs in with its password; ignored whenever `VERCEL_ENV` is
+production. The code is set only in Supabase and shared privately.
+
+### Open questions for the user
+
+Not done, needs a person: create `group4@vanderbilt.edu` in hosted Supabase
+with a private 6-10 digit password, and set `TEST_LOGIN_EMAIL` in Vercel
+for Preview only. #55's title and description still need `US-nn` and a
+summary (Jack's review).
+
+### Things the next agent should be careful about
+
+The test user lives in the hosted project that production also uses, so its
+password is a real credential: never write it in the repo or in chat logs.
+Local Supabase could not start in the cloud container (Docker Hub and ECR
+pulls are refused), so nothing here ran against a real Supabase.
+
 ## 2026-10-12 · Sign-in email is code-only; demo account njpm@vanderbilt.edu
 
 ### What changed

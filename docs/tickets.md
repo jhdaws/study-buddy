@@ -6,6 +6,21 @@ story (`w2-schema-skeleton`, `s3-us-02-create-session`).
 **Sizes:** S ≈ 1–2h · M ≈ 3–4h · L ≈ 5–6h — guesses; re-size after this sprint.
 **Status:** ⬜ not started · 🚧 in progress · ✅ done
 
+## Sprint 3 focus (from 2026-10-12, ends Oct 20)
+
+Everything aims at the Sprint 3 finish line; demo-only work waits for
+Sprint 4. The project board's **Priority** field orders it:
+
+| Priority | Tickets | Owner |
+| --- | --- | --- |
+| **P0 · CI/CD** | W1 (remaining items), W7, W8, W9, W10 | Jack |
+| **P1 · Sprint 3 core** | S4, S5, S6 · M1, M2, M3 · M5 | Nate (S4, S6), Tapan (S5, M5), Moses (M1–M3) |
+| **P2 · Sprint 3 stretch** | M4 (map), W0 | Moses, Jack |
+| **P3 · Sprint 4** | W6, A1, A5, M6 | Jack (W6), Moses |
+
+Until A1 and A5 give production a working email sender, sign in with
+`npm run auth:link` (`supabase/README.md`, step 6).
+
 ## Sprint 2 goal
 
 **A Vanderbilt student can sign in, create a study session, and see sessions
@@ -27,9 +42,9 @@ W4 lands, nobody is waiting on anybody.
 | Track | Owner | Builds | Replaces these stubs |
 | --- | --- | --- | --- |
 | **W · Wiring** | Jack | Schema skeleton, starter data, the stubs themselves, basic UI | — |
-| **A · Auth** | | Sign-in, display name, route protection | `src/app/login/*`, `src/app/auth/confirm/route.ts`, `src/lib/supabase/proxy.ts` |
-| **S · Sessions API** | | Creating sessions, the session list, course typeahead | `src/app/sessions/actions.ts`, `src/lib/sessions.ts` |
-| **M · Google Maps** | | Keys, location picker, location validation | `src/components/LocationPicker.tsx`, `src/lib/places.ts` |
+| **A · Auth** | Moses | Sign-in, display name, route protection | `src/app/login/*`, `src/app/auth/confirm/route.ts`, `src/lib/supabase/proxy.ts` |
+| **S · Sessions API** | Tapan (S1–S3, S5), Nate (S4, S6) | Creating sessions, the session list, course typeahead | `src/app/sessions/actions.ts`, `src/lib/sessions.ts` |
+| **M · Google Maps** | Moses (M5: Tapan) | Keys, location picker, location validation | `src/components/LocationPicker.tsx`, `src/lib/places.ts` |
 
 ```mermaid
 flowchart LR
@@ -88,11 +103,11 @@ flowchart LR
 - [x] Same two Supabase values in Vercel for Production, Preview, and Development — done (reported); not checkable from outside while production is behind Vercel's login
 - [ ] Supabase URL and publishable key shared with the team through a password manager
 - [x] Production URL in the README: https://study-buddy-jdaws.vercel.app
-- [ ] **Production loads for a signed-out visitor.** It does not yet: every page redirects to Vercel's login (Deployment Protection), so teammates without Vercel access — and every magic link in A1/A3 — hit a login wall. Turn protection off for production (Vercel → Settings → Deployment Protection); decide separately whether previews stay protected
+- [x] **Production loads for a signed-out visitor.** Confirmed 2026-10-11: `/` and `/login` return 200, `/sessions` redirects to `/login`. Before that it did not: every page redirects to Vercel's login (Deployment Protection), so teammates without Vercel access — and every magic link in A1/A3 — hit a login wall. Turn protection off for production (Vercel → Settings → Deployment Protection); decide separately whether previews stay protected
 - [x] **Before M1 creates any keys:** secret scanning and push protection on
 - [x] `main` ruleset: PR with one approval required, `verify` check required, no force push, no deletion
 - [ ] Add the `db` check to the ruleset's required checks
-- [ ] Require branches to be up to date before merging (ruleset → required status checks). #31–#33 were each green alone; merged together, 21 `db` tests failed (2026-10-06 review)
+- [x] Require branches to be up to date before merging (ruleset → required status checks). #31–#33 were each green alone; merged together, 21 `db` tests failed (2026-10-06 review)
 - [ ] "Automatically delete head branches" on (Settings → General)
 - [ ] Dependabot config for npm and GitHub Actions
 
@@ -130,14 +145,14 @@ flowchart LR
 - [x] Works end to end on fixtures: submitting the form validates and lands on the list (the stub saves nothing, so the new session does not appear until S3)
 
 #### W6 · Integration and demo
-**M · end of sprint**
+**M · Sprint 4 (deprioritised 2026-10-12) · Jack**
 - [ ] Merge tracks as they land; fix any seam mismatches
 - [ ] Run the Sprint 2 "done when" on production with two real accounts
 - [ ] `docs/test-cases.md` updated with what is genuinely verified
 - [ ] Fixtures no longer used by the app kept only where tests need them
 
 #### W7 · Deploy migrations from CI
-**S · TASK-03 · now — before #31–#33's migrations need to reach the hosted project**
+**S · TASK-03 · P0 CI/CD · Jack**
 
 The hosted database changes only when someone runs `supabase db push` by hand, while Vercel deploys `main` on every merge. Once #31–#33 merge, production would run code calling `create_session` before the hosted database has it.
 - [ ] A job on push to `main`: `supabase link`, then `supabase db push` to the hosted project, with `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` in a GitHub `production` environment
@@ -148,48 +163,62 @@ The hosted database changes only when someone runs `supabase db push` by hand, w
 - [ ] Documented in `supabase/README.md`
 
 #### W8 · End-to-end smoke test in CI
-**M · Sprint 3 · after S4, M5**
+**M · Sprint 3 · P0 CI/CD · Jack** — start with journey 1 (sign-in); add journeys 2 and 3 as S4, M5 and S5 land
 
 One browser test of the Sprint 2 "done when", so the main path is checked on every PR rather than by hand at demo time. Not before S4 and M5: until then it could only click through fixtures.
-- [ ] Playwright, one test: two `@vanderbilt.edu` users sign in with the code read from Mailpit's API; one names themselves and creates a session; the other sees it in the list with the right seat count
-- [ ] Runs in CI against the full local stack (`supabase start`) with the app built and started (`next build && next start`), at 375px (ADR 0004)
-- [ ] A Playwright trace uploaded as a workflow artifact on failure
+- [ ] Playwright: two `@vanderbilt.edu` users sign in with the code read from Mailpit's API; one names themselves and creates a session; the other sees it in the list with the right seat count — journeys 1 (sign in, name step) and 2 (host a session, checked in the database) pass; journey 3 waits for S4 (`tests/e2e/journeys.spec.ts`)
+- [x] Runs in CI against the full local stack (`supabase start`) with the app built and started (`next build && next start`), at 375px (ADR 0004) — the `e2e` job
+- [x] A Playwright trace uploaded as a workflow artifact on failure
 - [ ] Added to the ruleset's required checks once it has run a week without flaking
+
+#### W9 · Unit tests for the riskiest server code
+**M · Sprint 3 · P0 CI/CD · TEST_PLAN.md "Next tests" · Jack**
+
+Sprint 3 needs 60%+ coverage and integration tests. The baseline is 77.2% branch, 68.1% line, and the two riskiest server functions have no unit tests: `resolvePlace()` (0 of 35 branches) and `createSession()` (0%). Vitest can import both since #41.
+- [x] `resolvePlace()` with `fetch` and the admin client mocked: a place 5 km away refused as `outside_campus` with nothing written; an excluded type refused; Google's errors and a timeout mapped; fixture ids accepted only without a server key
+- [x] `createSession()` with Supabase mocked: a `PlaceError` becomes a field error on `placeId`; an RPC error goes through `databaseErrorMessage()` and is logged; success redirects to `/sessions`
+- [x] Re-measured with `npm run test:coverage`; the baseline in `TEST_PLAN.md` updated (targets: ≥ 80% branch overall, ≥ 90% on `src/lib/`)
+- [x] `coverage.thresholds` in `vitest.config.mts` set to the new numbers, so coverage cannot quietly drop
+
+#### W10 · Preview deployments get their own database
+**M · Sprint 3 · P0 CI/CD · Jack**
+
+Every Vercel preview uses the production Supabase project (W1 set the same values for Production, Preview and Development), so a PR's preview runs new code against production's old schema and writes test data into production.
+- [ ] Decide: Supabase preview branches (a database per PR; disabled in the integration settings now, may need a paid plan) or a second, free Supabase project as shared staging
+- [ ] If staging: migrations and seed pushed to it; its keys in Vercel's **Preview** environment only; W7's workflow pushes migrations there too
+- [ ] Sign-in on a preview works with `npm run auth:link` and `SIGN_IN_SITE_URL` set to the preview URL
+- [ ] Production's variables are on Production only; documented in `supabase/README.md`
 
 ---
 
 ## Track A · Auth
 
 #### A1 · Hosted auth settings
-**S · US-01 · start now**
+**S · US-01 · Sprint 4 · Moses** — the templates are locked until A5's custom SMTP exists
 - [ ] Supabase Auth Site URL = production URL; redirect URLs cover localhost and Vercel previews
 - [ ] Magic-link email template points at `/auth/confirm` with `token_hash` — written (`supabase/templates/magic_link.html`, a 6-digit code plus the link); **not yet pasted into the hosted dashboard** — steps in [`supabase/README.md`](../supabase/README.md#hosted-auth-settings-a1)
 - [x] Same settings in `supabase/config.toml` for local (local emails appear in Mailpit at http://127.0.0.1:54324) — never run locally (Docker down)
 - [x] Free-plan email rate limit checked — **2 emails an hour for the whole project, delivered only to Supabase organization members** (Supabase docs, 2026-09-30). The "done when" needs both people in the organization, or custom SMTP
 
 #### A2 · Profile rules
-**M · US-01, US-25 · after W2 · 🚧 written, not yet run on a real Supabase database**
+**M · US-01, US-25 · after W2 · ✅ merged in #33 (via #42); `npm run test:db` passes on a real local Supabase and in CI**
 
 `supabase/migrations/20260930210000_profile_rules.sql` and
-`tests/db/profiles.test.ts` exist, but Docker was not available when they
-were written: the migration has **not** been applied with `supabase db reset`
-and `npm run test:db` has **not** run. They were run against PGlite (Postgres
-17 in WASM) with a hand-made imitation of Supabase's `auth` schema and roles —
-all pass, and nine deliberate breakages of the migration each fail a test —
-which shows the SQL is valid and the tests can fail, not that it works on
-Supabase. Tick the boxes once `npm run test:db` passes locally or in CI.
-- [ ] Trigger rejecting non-`@vanderbilt.edu` signups — also on an email change
-- [ ] Trigger creating a `profiles` row on signup
-- [ ] `display_name` CHECK matching `displayNameSchema`: 1–50 characters after trimming (`DISPLAY_NAME_MAX_LENGTH` in `src/lib/limits.ts`)
-- [ ] RLS: signed-in users read display names; users update only their own
+`tests/db/profiles.test.ts`. First run on a real Supabase in CI's `db` job on
+#33, then locally on 2026-10-11 with every other database test (93 passing);
+applied to the hosted project.
+- [x] Trigger rejecting non-`@vanderbilt.edu` signups — also on an email change
+- [x] Trigger creating a `profiles` row on signup
+- [x] `display_name` CHECK matching `displayNameSchema`: 1–50 characters after trimming (`DISPLAY_NAME_MAX_LENGTH` in `src/lib/limits.ts`)
+- [x] RLS: signed-in users read display names; users update only their own
 - [x] **Don't copy email into `profiles`.** It already lives in `auth.users`,
       which clients cannot read — that satisfies US-25 without column grants.
       (A column grant *is* used, but for a different reason: so a user can
       update only `display_name`, not `id` or `created_at`.)
-- [ ] Database tests: US-01b (direct non-Vanderbilt signup rejected); a user cannot update someone else's profile
+- [x] Database tests: US-01b (direct non-Vanderbilt signup rejected); a user cannot update someone else's profile
 
 #### A3 · Magic-link sign-in
-**M · US-01, US-21 · start now · 🚧 written and unit-tested against a mocked Supabase; never run against Supabase Auth**
+**M · US-01, US-21 · start now · ✅ merged in #33; run end to end against a local Supabase Auth on 2026-10-11 — not yet on production (A1, A5)**
 
 Scope added by the user: the email carries a **one-time code as well as the
 link**, and `/login` takes the code (`verifyCode()`). Reason: Vanderbilt mail
@@ -198,20 +227,20 @@ student does; the code also works across devices. **Caveat found while
 building it:** link and code are one token, so a scanner that opens the link
 spends the code as well — see `supabase/README.md`, "Hosted auth settings".
 ADR 0003 still says "magic link" — not edited.
-- [ ] `signIn()` validates with `signInSchema` and sends the link — written; no email has actually been sent
+- [x] `signIn()` validates with `signInSchema` and sends the link — local email (Mailpit) received with code and link, 2026-10-11; no real email yet (A5)
 - [x] `/login` page with "check your inbox" state and `role="alert"` errors — component-tested (`SignInForm.test.tsx`), plus the code step
-- [ ] `/auth/confirm` exchanges the token and redirects **only to same-origin paths** — the redirect rule is unit-tested (`safe-next.test.ts`, `route.test.ts`); the token exchange has not run against Supabase
-- [ ] Code sign-in: `verifyCode()` — written and unit-tested; not run against Supabase
-- [ ] `signOut()` (US-21) — written and unit-tested; not run against Supabase
+- [x] `/auth/confirm` exchanges the token and redirects **only to same-origin paths** — the redirect rule is unit-tested (`safe-next.test.ts`, `route.test.ts`); the link signed in against a local Supabase, opened in the browser that asked for it (another device not tried)
+- [x] Code sign-in: `verifyCode()` — unit-tested, and signed in with a real code against a local Supabase
+- [x] `signOut()` (US-21) — unit-tested, and run in the browser against a local Supabase
 
 #### A4 · Display name and route protection
-**M · US-01 · after W2, A3 · 🚧 written and unit-tested against a mocked Supabase; never run against Supabase**
-- [ ] First sign-in without a display name goes to a name step (`/login/name`) before anything else; `saveDisplayName()` — written and unit-tested; the update has not run against A2's policies. A nameless student who skips the step can still *browse* `/sessions` (the proxy only checks sign-in); every page or action that calls `requireUser()` — `/sessions/new`, `createSession` — sends them back to it, which is what ADR 0008 rule 1 requires
+**M · US-01 · after W2, A3 · ✅ merged in #33; run end to end against a local Supabase on 2026-10-11**
+- [x] First sign-in without a display name goes to a name step (`/login/name`) before anything else; `saveDisplayName()` — unit-tested, and run in the browser against A2's policies (the stale header after it was BUG-11, fixed in #44). A nameless student who skips the step can still *browse* `/sessions` (the proxy only checks sign-in); every page or action that calls `requireUser()` — `/sessions/new`, `createSession` — sends them back to it, which is what ADR 0008 rule 1 requires
 - [x] Proxy redirects signed-out users away from `/sessions*`, keeping `?next=` — unit-tested (`proxy.test.ts`), including that the redirect keeps refreshed cookies; Supabase mocked
-- [ ] `requireUser()` implemented — S3 calls it — written and unit-tested (`server.test.ts`), Supabase mocked
+- [x] `requireUser()` implemented — S3 calls it — unit-tested (`server.test.ts`), and redirected a nameless user from `/sessions/new` against a local Supabase
 
 #### A5 · Demo email delivery
-**S · US-01 · after A1, #33**
+**S · US-01 · Sprint 4 · after A1, #33 · Moses**
 
 Per #33, Supabase's built-in sender reaches only members of the Supabase organization, about 2 emails an hour — not enough for the demo.
 - [ ] Every tester can receive a sign-in email: custom SMTP (Authentication → SMTP), or every tester in the Supabase organization
@@ -232,15 +261,14 @@ Per #33, Supabase's built-in sender reaches only members of the Supabase organiz
 - [x] No client INSERT on `session_attendees` (joining is later, through its own function)
 - [x] RLS: signed-in users read sessions and attendees
 - [x] Database tests for each rejection, and for the host landing on the
-      roster (`tests/db/session-rules.test.ts`) — passing against a
-      hand-built plain-Postgres stand-in (no Docker in the environment that
-      wrote them, so not the real Supabase stack). Run `npm run db:start &&
-      npm run test:db` for real before trusting this further — see
-      `HANDOFF.md`.
+      roster (`tests/db/session-rules.test.ts`) — first written against a
+      plain-Postgres stand-in; since 2026-10-11 passing on a real local
+      Supabase and in CI (#46), with the length CHECKs of
+      `*_session_text_limits.sql` (`tests/db/session-text-limits.test.ts`)
 
 #### S2 · Departments and courses
 **M · US-02 · rules start now, database after W2**
-- [x] Normalization in `src/lib/validation.ts` and matching SQL — `cs`, ` CS `, `C.S.` → `CS`; unit tested (database twin passing against a stand-in Postgres — see S1)
+- [x] Normalization in `src/lib/validation.ts` and matching SQL — `cs`, ` CS `, `C.S.` → `CS`; unit tested; the database twin passes on a real Supabase (see S1)
 - [x] Create-on-use: a function returning a course id, creating the department or course if new
 - [x] RLS: signed-in users read and create; no client updates or deletes
 
@@ -252,17 +280,41 @@ Per #33, Supabase's built-in sender reaches only members of the Supabase organiz
       `listSessions()` is still S4's stub, reading fixtures, not the database
 
 #### S4 · Lists and typeahead for real
-**M · US-03 · after S1**
+**M · US-03 · after S1 · Nate; Tapan reviews**
 - [ ] `listSessions()`: ended and cancelled sessions excluded, seats left derived from the roster (never stored), soonest first
 - [ ] `listDepartments()`; `searchCourses()` ordered by how many sessions used each course
 - [ ] `hostDisplayName` on each item needs A2's profiles read policy — until A2 lands, return null (shown as "Deleted user") or coordinate with A2
+
+#### S5 · Join and leave with a seat limit
+**L · US-04, US-07, US-08 · Sprint 3 · Tapan**
+
+The other half of the core loop: a student can host and browse, but not yet join. Design in `architecture.md` §3: join and leave go through database functions holding a row lock, never a plain `INSERT` from app code.
+- [ ] `join_session(session_id)`: SECURITY DEFINER, locks the session row (`for update`); refuses when full, cancelled, ended, already joined, signed out, or without a display name, each with a short raised message; inserts into `session_attendees`
+- [ ] `leave_session(session_id)`: removes the caller; the host cannot leave (they cancel, US-09, later)
+- [ ] No client INSERT or DELETE on `session_attendees`; `anon` gets no EXECUTE on either function
+- [ ] `joinSession()` and `leaveSession()` server actions, errors mapped in `databaseErrorMessage()`
+- [ ] Database tests for every refusal, and **US-07b**: two concurrent joins for the last seat, exactly one succeeds. Then delete `tests/db/harness.test.ts` (CLAUDE.md)
+- [ ] Seats left in the list reflect joins and leaves
+
+#### S6 · Session page with roster
+**M · US-04, US-23 · Sprint 3 · after S4 · Nate**
+
+`src/app/sessions/[id]/page.tsx` and `src/components/SessionRoster.tsx` are comment-only stubs; their TODOs are the spec.
+- [ ] `/sessions/[id]`: the session in campus time, seats left; a 404 when it does not exist or is not visible
+- [ ] `<SessionRoster>`: attendees by display name (US-23, never email — US-25), live seat count, host marked
+- [ ] Join and Leave wired to S5's actions; disabled at capacity with the reason; "You're hosting" for the host
+- [ ] A notice when the host has cancelled
+- [ ] The home page's and cards' "View" links point here
 
 ---
 
 ## Track M · Google Maps
 
 #### M1 · Google Cloud and keys
-**M · TASK-06 · after W1's push protection**
+**M · TASK-06 · after W1's push protection · Moses · needed by about Oct 14**
+
+M2 and the map (M4) wait on these keys, and Sprint 3 ends Oct 20. If billing cannot be set up by then, M4 moves to Sprint 4 so Moses is not blocked.
+
 - [ ] Billing account attached; owner agreed by the team
 - [ ] Maps JavaScript API and **Places API (New)** enabled — the legacy Places API lacks `locationRestriction` and `includedPrimaryTypes`
 - [ ] Browser key restricted by **HTTP referrer** (production, previews, localhost) and by API
@@ -273,7 +325,7 @@ Per #33, Supabase's built-in sender reaches only members of the Supabase organiz
 - [ ] Pricing, and **whether a place's name may be cached**, checked on Google's own pages
 
 #### M2 · Location picker
-**L · US-02 · after M1**
+**L · US-02 · after M1 · Moses**
 - [ ] Replace the `<LocationPicker>` stub, keeping its props
 - [ ] Places Autocomplete with `locationRestriction` from `CAMPUS_CENTER` and `CAMPUS_RADIUS_METERS`
 - [ ] `includedPrimaryTypes` that surface campus buildings as well as cafés and
@@ -281,7 +333,7 @@ Per #33, Supabase's built-in sender reaches only members of the Supabase organiz
 - [ ] Session tokens used; submits a `place_id`, never coordinates
 
 #### M3 · Validate and store locations
-**M · US-02 · after W2, M1**
+**M · US-02 · after W2, M1 · Moses**
 - [ ] Replace the `resolvePlace()` stub: look the place up with the server key, check the distance and place type, store it, return a location id
       — **code written, not yet verified:** no Google call has been made (no
       key exists until M1) and it has never written to a database. Fixture
@@ -293,11 +345,11 @@ Per #33, Supabase's built-in sender reaches only members of the Supabase organiz
       Docker was down, so neither has touched a database
 
 #### M4 · Map view (stretch)
-**M · US-03 · only once M1–M3 are done**
+**M · US-03 · only once M1–M3 are done · Moses**
 - [ ] List / map toggle on `/sessions`; one marker per session, distinct when full; loads client-side only
 
 #### M5 · A location sessions can use before M2
-**S · US-02 · decide now; build after #31, #32**
+**S · US-02 · Sprint 3 · Tapan** — W8 needs a location sessions can use in CI
 
 Once #31 and #32 merge, the stub picker's fixture place ids resolve to `20000000-…` location ids that are not rows, so `create_session` fails its foreign key and the student sees "Something went wrong saving that" (checked 2026-10-06 with #31–#33 merged locally). Until M1 and M2 land, nothing can be created anywhere — which blocks W6's demo and W8.
 - [ ] Decide: wait for M1 and M2, or put the three fixture locations into local and CI databases only — never the hosted project
@@ -305,7 +357,7 @@ Once #31 and #32 merge, the stub picker's fixture place ids resolve to `20000000
 - [ ] W6 can create a session locally
 
 #### M6 · Refresh stored coordinates
-**S · Sprint 3 · after M1, M3**
+**S · Sprint 4 (moved 2026-10-12, to make room for S5 and S6) · after M1, M3 · Moses**
 
 #31 reports Google's terms allow caching a place's coordinates for 30 days at most — not yet checked on Google's own page. `locations.validated_at` exists for this.
 - [ ] Check the rule on Google's page; record it in ADR 0008

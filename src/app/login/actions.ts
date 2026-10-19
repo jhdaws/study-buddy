@@ -19,10 +19,10 @@ import {
   signInErrorMessage,
   verifyCodeErrorMessage,
 } from "@/lib/errors";
-import { isDemoEmail } from "@/lib/demo-account";
 import { requestOrigin } from "@/lib/request-origin";
 import { DEFAULT_NEXT_PATH, loginPath, safeNext, safeNextPath } from "@/lib/safe-next";
 import { createClient, getCurrentUser, pathAfterSignIn } from "@/lib/supabase/server";
+import { isTestLoginEmail } from "@/lib/test-login";
 import {
   displayNameSchema,
   formValues,
@@ -65,8 +65,9 @@ export type DisplayNameState = FormState<DisplayNameField>;
 // built from an older template, or Supabase's default one, still lands on
 // /auth/confirm on this origin rather than somewhere that cannot sign in.
 //
-// The demo address (src/lib/demo-account.ts) gets no email at all: it goes
-// straight to the code step, and verifyCode() handles it.
+// The test login's address (src/lib/test-login.ts; local and previews only)
+// gets no email at all: it goes straight to the code step, and verifyCode()
+// handles it.
 //
 // Same reply whether or not the address already has an account:
 // signInWithOtp() signs up a new address and signs in a known one, and both
@@ -84,7 +85,7 @@ export async function signIn(
   }
   const { email } = parsed.data;
 
-  if (isDemoEmail(email)) {
+  if (isTestLoginEmail(email)) {
     return { sentTo: email };
   }
 
@@ -116,9 +117,10 @@ export async function signIn(
 // scanning can open a link before the student does and spend the token, and
 // a code typed on a phone works even when the email was opened on a laptop.
 //
-// The demo address signs in with signInWithPassword(), the typed code being
-// the demo user's password (src/lib/demo-account.ts). A wrong one comes back
-// as invalid_credentials, which errors.ts maps to the usual wrong-code text.
+// The test login's address signs in with signInWithPassword(), the typed
+// code being that user's password (src/lib/test-login.ts). A wrong one comes
+// back as invalid_credentials, which errors.ts maps to the usual wrong-code
+// text.
 //
 // Form fields: `email` and `next` (hidden, carried over from the sign-in
 // step) and `code`. The email is re-validated -- the hidden field is as
@@ -137,7 +139,7 @@ export async function verifyCode(
   const { email, code } = parsed.data;
 
   const supabase = await createClient();
-  const { data, error } = isDemoEmail(email)
+  const { data, error } = isTestLoginEmail(email)
     ? await supabase.auth.signInWithPassword({ email, password: code })
     : await supabase.auth.verifyOtp({ email, token: code, type: "email" });
   if (error || !data.user) {

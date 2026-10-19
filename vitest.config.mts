@@ -15,7 +15,20 @@ export default defineConfig({
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
       exclude: ["src/**/*.test.{ts,tsx}", "src/lib/database.types.ts"],
-      reporter: ["text", "json-summary"],
+      reporter: ["text", "json-summary", "html"],
+      // The coverage gate (W9, #48). Floors just under what main measured on
+      // 2026-10-16 -- 82.8% branches, 83.1% lines, 76.5% functions, 82.4%
+      // statements, 94.0% of src/lib's branches -- and above TEST_PLAN.md's
+      // Sprint 3 targets. CI runs `npm run test:coverage`, so a PR that drops
+      // below any of them fails. Raise them as coverage grows; never lower
+      // them to get a PR through.
+      thresholds: {
+        branches: 80,
+        lines: 80,
+        statements: 80,
+        functions: 75,
+        "src/lib/**": { branches: 90 },
+      },
     },
   },
   resolve: {

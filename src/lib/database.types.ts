@@ -27,6 +27,7 @@ export type Database = {
                   Row: {
                     "created_at": string,"created_by": string | null,"department_code": string,"id": string,"merged_into": string | null,"number": string,"title": string | null
                   }
+                  ComputedFields: never
                   Insert: {
                     "created_at"?: string,"created_by"?: string | null,"department_code": string,"id"?: string,"merged_into"?: string | null,"number": string,"title"?: string | null
                   }
@@ -58,6 +59,7 @@ isOneToOne: false
                   Row: {
                     "code": string,"created_at": string,"created_by": string | null,"merged_into": string | null,"name": string | null
                   }
+                  ComputedFields: never
                   Insert: {
                     "code": string,"created_at"?: string,"created_by"?: string | null,"merged_into"?: string | null,"name"?: string | null
                   }
@@ -83,6 +85,7 @@ isOneToOne: false
                   Row: {
                     "id": string,"lat": number,"lng": number,"place_id": string,"validated_at": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "id"?: string,"lat": number,"lng": number,"place_id": string,"validated_at"?: string
                   }
@@ -96,6 +99,7 @@ isOneToOne: false
                   Row: {
                     "created_at": string,"display_name": string | null,"id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "created_at"?: string,"display_name"?: string | null,"id": string
                   }
@@ -109,6 +113,7 @@ isOneToOne: false
                   Row: {
                     "joined_at": string,"session_id": string,"user_id": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "joined_at"?: string,"session_id": string,"user_id": string
                   }
@@ -134,6 +139,7 @@ isOneToOne: false
                   Row: {
                     "capacity": number,"course_id": string,"created_at": string,"ends_at": string,"host_id": string | null,"id": string,"location_id": string,"location_label": string,"room": string | null,"starts_at": string,"status": Database["public"]['Enums']["session_status"],"topic": string
                   }
+                  ComputedFields: never
                   Insert: {
                     "capacity": number,"course_id": string,"created_at"?: string,"ends_at": string,"host_id"?: string | null,"id"?: string,"location_id": string,"location_label": string,"room"?: string | null,"starts_at": string,"status"?: Database["public"]['Enums']["session_status"],"topic": string
                   }
@@ -323,4 +329,3 @@ export const Constants = {
           }
         }
 } as const
-

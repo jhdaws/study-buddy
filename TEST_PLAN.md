@@ -33,6 +33,12 @@ gave 289 unit tests, so re-measure once they merge.
 
 ## Targets (end of Sprint 3)
 
+**Met on 2026-10-16 (W9, #48):** 82.8% branches and 83.1% lines overall
+(from 77.8% and 76.0% on that day's `main`), and 94.0% of `src/lib/`'s
+branches. Every server action now has unit tests (`createSession` in W9; the
+sign-in actions came with #33). `vitest.config.mts` sets these as thresholds
+and CI runs `npm run test:coverage`, so a PR that falls below them fails.
+
 - **Branch coverage ≥ 80% overall** (77.2% today) **and lines ≥ 75%**
   (68.1% today). Both are above the course's 60%.
 - **≥ 90% branch coverage on `src/lib/`**, excluding `src/lib/supabase/`
@@ -98,8 +104,12 @@ Why the 9s:
 3. A second student signs in → sees that session with the right number of
    seats left. Once joining exists, they join and the count drops by one.
 
-All three run at 375px against the full local stack. The journeys can't create
-anything until M5 (#36) gives them a location that exists.
+All three run at 375px against a production build and the full local stack
+(`tests/e2e/`, `npm run test:e2e`; CI's `e2e` job). **Status, 2026-10-17:**
+journeys 1 and 2 pass. Journey 2 checks the saved session in the database,
+because the list still reads fixtures. Journey 3 is marked `fixme` until S4
+(#21). `tests/e2e/global-setup.ts` gives the stub picker's fixture places
+location rows in the local database, which is M5's local-and-CI half.
 
 ## Not testing (and why)
 
@@ -123,11 +133,11 @@ anything until M5 (#36) gives them a location that exists.
 
 ## Next tests, in order
 
-1. **`resolvePlace` refuses an off-campus place before writing anything.**
+1. ✅ *Done in W9 (#48), `src/lib/places.test.ts`.* **`resolvePlace` refuses an off-campus place before writing anything.**
    Mock fetch to return a place 5 km from `CAMPUS_CENTER`; expect
    `PlaceError("outside_campus")` and no call to the admin client. This starts
    on the 0% file with the highest risk.
-2. **`createSession` unit tests** with Supabase mocked: a `PlaceError` becomes a
+2. ✅ *Done in W9 (#48), `src/app/sessions/actions.test.ts`.* **`createSession` unit tests** with Supabase mocked: a `PlaceError` becomes a
    field error, an RPC error is mapped through `errors.ts`, success redirects.
    This is after #32.
 3. **E2E journey 1** (sign in), once #33 is merged (W8, #37).
@@ -179,4 +189,5 @@ npm test                 # unit and component tests
 npm run db:start         # once; needs Docker
 npm run test:db          # database tests against the local stack
 npm run test:coverage    # unit tests with branch coverage over all of src/
+npm run test:e2e         # browser journeys; needs the full local stack (npm run db:start)
 ```
