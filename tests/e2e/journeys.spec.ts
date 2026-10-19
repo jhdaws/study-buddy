@@ -16,12 +16,22 @@ test("journey 1: a new student signs in with a code, names themselves, and lands
   await expect(page.getByRole("button", { name: "Account" })).toHaveText("R");
 });
 
+/**
+ * The session journey 2 hosts, which journey 3 then looks for as a different
+ * student. They share it through the file rather than each creating their own
+ * because the point of journey 3 is that one student sees *another's* session:
+ * playwright.config.ts runs the journeys one at a time, in order, against one
+ * database (`workers: 1`).
+ */
+let hostedTopic: string | null = null;
+
 test("journey 2: a signed-in student hosts a session, and it is saved with them on the roster", async ({
   page,
 }) => {
   await signInAsNewStudent(page, newStudentEmail("journey2"), "Harper Host");
 
   const topic = `E2E host journey ${Date.now()}`;
+  hostedTopic = topic;
   await page.getByLabel("Department").selectOption("CS");
   await page.getByLabel("Course number").fill("3251");
   await page.getByLabel("What are you studying?").fill(topic);
@@ -33,7 +43,13 @@ test("journey 2: a signed-in student hosts a session, and it is saved with them 
 
   await expect(page).toHaveURL("/sessions");
 
-  // The list still reads fixtures until S4 (#21), so check the database.
+  // Since S4 (#21) the list is read from the database, so the host sees the
+  // session they just created rather than a fixture that resembles it.
+  await expect(page.locator("article").filter({ hasText: topic })).toBeVisible();
+
+  // The roster is still worth checking in the database: the list shows a seat
+  // count, but only the table shows that the host was seated in the same
+  // transaction as the session (S1's create_session).
   const db = await connect();
   try {
     const { rows } = await db.query<{ capacity: number; attendees: number; host: string }>(
@@ -51,6 +67,26 @@ test("journey 2: a signed-in student hosts a session, and it is saved with them 
   }
 });
 
-test("journey 3: another student sees the session in the list with the right seats left", async () => {
-  test.fixme(true, "Needs S4 (#21): the session list still reads fixture data, not the database.");
+test("journey 3: another student sees the session in the list with the right seats left", async ({
+  page,
+}) => {
+  if (hostedTopic === null) {
+    throw new Error("Journey 3 reads the session journey 2 hosts; journey 2 did not get that far.");
+  }
+
+  await signInAsNewStudent(page, newStudentEmail("journey3"), "Robin Reader", "/sessions");
+
+  // Found by its topic rather than by position: the list is every open
+  // session on this database, so the one journey 2 made is not the only one.
+  const card = page.locator("article").filter({ hasText: hostedTopic });
+  await expect(card).toBeVisible();
+
+  await expect(card).toContainText("CS 3251");
+  // The host's display name comes from profiles through A2's read policy --
+  // the part of the card a signed-out or policy-less reader cannot get.
+  await expect(card).toContainText("Harper Host");
+  // Capacity 4 with only the host on the roster. Derived from
+  // session_attendees on every read, never stored (ADR 0008 rule 9).
+  await expect(card).toContainText("3 seats left");
+  await expect(card).toContainText("1 of 4 going");
 });
