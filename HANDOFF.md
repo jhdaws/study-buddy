@@ -143,6 +143,44 @@ spends its first hour rediscovering the same dead end.
 - The M5 branch (`m5-us-02-local-locations`, same session, separate PR) is
   independent of this one — don't rebase one onto the other.
 
+### Update, same session: Jack's review caught exactly the predicted bug
+
+Jack reviewed PR #73 and requested changes: CI's `db` job failed, every
+`join_session`/`leave_session` call raised `column reference "session_id" is
+ambiguous` — all 9 new database tests. Root cause: the `session_id`
+parameter shares a name with `session_attendees.session_id`, so every
+unqualified reference inside the function body (the already-joined check,
+the seat count, the leave `DELETE`) could mean either. Same bug as BUG-03 on
+`get_or_create_course` — logged as **BUG-13**.
+
+This is precisely the thing the "Not verified" section above flagged as
+unverified and told the next session to check with real Docker. Jack's `db`
+job was that check; the no-Docker gap in this environment is real, not
+theoretical.
+
+**Fixed:** every ambiguous reference qualified with a table alias
+(`sa.session_id`) rather than renaming the parameter, so the
+`supabase.rpc("join_session", { session_id })` call sites didn't need to
+change. The migration hasn't merged or run on the hosted project, so editing
+it in place (rather than a new migration) was fine, per Jack's own note.
+
+Jack also caught that the "already ended" test tried to create a past
+session through `create_session`, which refuses a start more than 5 minutes
+in the past by design — the test could never have passed. Fixed by inserting
+that row directly as the database's own role (`reset role`, the same thing
+`session-text-limits.test.ts` does for its location row), the way Jack
+suggested. **While fixing that, found the same silent-failure trap already
+documented in `docs/bug_database.md`'s "Not a bug, but worth knowing"
+section applied to the "cancelled" status test too:** it updated
+`sessions.status` as `authenticated`, but there's no UPDATE policy on
+`sessions` either, so that update was silently affecting zero rows. Also
+moved onto the server role.
+
+**Still true, unchanged by this fix:** no Docker in this environment, so
+none of this has actually been run — only re-checked for shape the same way
+as before (lint, typecheck, 405 tests, build all pass). **The real
+confirmation is CI's `db` job on the next push**, not this session.
+
 ---
 
 ## 2026-10-11 · Rebuilt Track A by mistake, then shipped US-19 instead
