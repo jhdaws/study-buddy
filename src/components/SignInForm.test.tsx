@@ -122,6 +122,12 @@ describe("<SignInForm> code step", () => {
     }
   });
 
+  it("says plainly when it is the test login and no email went out", () => {
+    render(<SignInForm initialState={{ sentTo: "group4@vanderbilt.edu", testLogin: true }} />);
+    expect(screen.getByRole("heading", { name: "Test login" })).toBeTruthy();
+    expect(screen.getByRole("status").textContent).toMatch(/No email was sent/);
+  });
+
   it("draws one box per digit, at least six, over a single real input", () => {
     render(<SignInForm initialState={sent} />);
     const code = screen.getByLabelText("Sign-in code") as HTMLInputElement;

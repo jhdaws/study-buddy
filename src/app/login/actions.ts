@@ -42,6 +42,8 @@ import {
  */
 export type SignInState = FormState<SignInField> & {
   sentTo?: string;
+  /** The test login's address (src/lib/test-login.ts): no email was sent. */
+  testLogin?: true;
 };
 
 /**
@@ -86,7 +88,7 @@ export async function signIn(
   const { email } = parsed.data;
 
   if (isTestLoginEmail(email)) {
-    return { sentTo: email };
+    return { sentTo: email, testLogin: true };
   }
 
   const origin = requestOrigin(await headers());
@@ -127,6 +129,10 @@ export async function signIn(
 // forgeable as any other -- and Supabase checks that the code belongs to it.
 // ---------------------------------------------------------------------------
 
+/** The test login's own refusal: the usual text would send people to an email that never came. */
+const TEST_LOGIN_REFUSED_MESSAGE =
+  "No test user with that code. In Supabase, check this exact address exists under Authentication → Users with that code as its password, and is confirmed.";
+
 /** Sign in with the one-time code from the email (US-01). */
 export async function verifyCode(
   _prev: VerifyCodeState,
@@ -139,10 +145,15 @@ export async function verifyCode(
   const { email, code } = parsed.data;
 
   const supabase = await createClient();
-  const { data, error } = isTestLoginEmail(email)
+  const testLogin = isTestLoginEmail(email);
+  const { data, error } = testLogin
     ? await supabase.auth.signInWithPassword({ email, password: code })
     : await supabase.auth.verifyOtp({ email, token: code, type: "email" });
   if (error || !data.user) {
+    if (testLogin && (error?.code === "invalid_credentials" || error?.code === "email_not_confirmed")) {
+      // Previews and local only, so naming the setup step leaks nothing.
+      return { formError: TEST_LOGIN_REFUSED_MESSAGE, values: formValues(formData) };
+    }
     return { formError: verifyCodeErrorMessage(error), values: formValues(formData) };
   }
 

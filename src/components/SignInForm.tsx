@@ -90,6 +90,7 @@ export default function SignInForm({ next, initialState = {} }: SignInFormProps)
       <CodeStep
         key={round}
         email={state.sentTo}
+        testLogin={state.testLogin === true}
         next={next}
         resend={formAction}
         resending={pending}
@@ -190,12 +191,15 @@ function EmailStep({
 
 function CodeStep({
   email,
+  testLogin,
   next,
   resend,
   resending,
   onChangeEmail,
 }: {
   email: string;
+  /** The test login (src/lib/test-login.ts): no email went out. */
+  testLogin: boolean;
   next?: string;
   resend: (formData: FormData) => void;
   resending: boolean;
@@ -239,14 +243,16 @@ function CodeStep({
   return (
     <section aria-labelledby={ids.heading}>
       <h1 id={ids.heading} className="text-center text-[26px] leading-tight font-bold tracking-tight">
-        Check your inbox
+        {testLogin ? "Test login" : "Check your inbox"}
       </h1>
       {/* role="status" so a screen reader announces the change of step. */}
       <p role="status" className="mt-2 mb-6 text-center text-base text-white/80">
-        We sent a sign-in code to{" "}
+        {testLogin ? "No email was sent to" : "We sent a sign-in code to"}{" "}
         <strong className="block font-bold text-white [overflow-wrap:anywhere]">{email}</strong>
         <span className="mt-1 block text-sm text-white/72">
-          Enter the code from that email below.
+          {testLogin
+            ? "Enter the test code: the password set for this user in Supabase."
+            : "Enter the code from that email below."}
         </span>
       </p>
 

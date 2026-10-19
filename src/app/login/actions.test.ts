@@ -139,7 +139,7 @@ describe("signIn", () => {
   it("sends no email for the test login's address and goes straight to the code step", async () => {
     vi.stubEnv("TEST_LOGIN_EMAIL", "group4@vanderbilt.edu");
     const state = await signIn({}, form({ email: " GROUP4@vanderbilt.edu " }));
-    expect(state).toEqual({ sentTo: "group4@vanderbilt.edu" });
+    expect(state).toEqual({ sentTo: "group4@vanderbilt.edu", testLogin: true });
     expect(auth.signInWithOtp).not.toHaveBeenCalled();
   });
 
@@ -218,14 +218,14 @@ describe("verifyCode", () => {
     expect(path).toBe("/sessions/new");
   });
 
-  it("treats a wrong test-login code like any wrong code", async () => {
+  it("tells the tester to check the Supabase user when the test code is refused", async () => {
     vi.stubEnv("TEST_LOGIN_EMAIL", "group4@vanderbilt.edu");
     auth.signInWithPassword.mockResolvedValue({
       data: { user: null, session: null },
       error: { code: "invalid_credentials", status: 400, message: "Invalid login credentials" },
     });
     const state = await verifyCode({}, form({ email: "group4@vanderbilt.edu", code: "000000" }));
-    expect(state.formError).toMatch(/didn't work/);
+    expect(state.formError).toMatch(/No test user with that code/);
     expect(state.formError).not.toMatch(/Invalid login/);
   });
 });
