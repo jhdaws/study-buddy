@@ -58,9 +58,25 @@ beforeAll(async () => {
   }
 });
 
-/** A session hosted by `host`, who is already seated as its first attendee. */
+/**
+ * Runs `fn` as the database's own role (bypassing RLS), then restores
+ * `authenticated` -- for test setup `create_session`/`join_session`/
+ * `leave_session` refuse on purpose, the same way session-rules.test.ts
+ * borrows the server's role for its course and location rows.
+ */
+async function asServer<T>(db: Client, fn: () => Promise<T>): Promise<T> {
+  await db.query("reset role");
+  try {
+    return await fn();
+  } finally {
+    await db.query("set role authenticated");
+  }
+}
+
+/** A session hosted by `hostId` (signed in on `db`), already seated as its first attendee. */
 async function hostSession(
   db: Client,
+  hostId: string,
   options: {
     capacity?: number;
     startsInMinutes?: number;
@@ -70,28 +86,59 @@ async function hostSession(
 ): Promise<string> {
   const startsAt = new Date(Date.now() + (options.startsInMinutes ?? 60) * 60 * 1000);
   const endsAt = new Date(Date.now() + (options.endsInMinutes ?? 120) * 60 * 1000);
-  const { rows } = await db.query<{ id: string }>(
-    `select (public.create_session(
-       $1::uuid, $2::uuid, $3::text, $4::text, $5::text,
-       $6::timestamptz, $7::timestamptz, $8::integer
-     )).id`,
-    [
-      courseId,
-      locationId,
-      "Featheringill Hall",
-      "134",
-      "Sprint 3 join/leave",
-      startsAt.toISOString(),
-      endsAt.toISOString(),
-      options.capacity ?? 4,
-    ],
-  );
-  const sessionId = rows[0].id;
-  if (options.status === "cancelled") {
-    // No cancel function yet (US-09, later) -- set it directly as the test's
-    // own setup, not a path join_session/leave_session should ever take.
-    await db.query(`update public.sessions set status = 'cancelled' where id = $1`, [sessionId]);
+  const capacity = options.capacity ?? 4;
+
+  let sessionId: string;
+  if (startsAt.getTime() < Date.now() - 5 * 60 * 1000) {
+    // create_session refuses a start more than the 5-minute grace period in
+    // the past (starts_in_past, S1) -- by design, the same grace it allows.
+    // An "already ended" session has to be set up directly instead, as
+    // session-rules.test.ts does for its course and location rows.
+    sessionId = await asServer(db, async () => {
+      const inserted = await db.query<{ id: string }>(
+        `insert into public.sessions
+           (host_id, course_id, location_id, location_label, room, topic, starts_at, ends_at, capacity)
+         values ($1, $2, $3, 'Featheringill Hall', '134', 'Sprint 3 join/leave', $4, $5, $6)
+         returning id`,
+        [hostId, courseId, locationId, startsAt.toISOString(), endsAt.toISOString(), capacity],
+      );
+      const id = inserted.rows[0].id;
+      await db.query(
+        `insert into public.session_attendees (session_id, user_id) values ($1, $2)`,
+        [id, hostId],
+      );
+      return id;
+    });
+  } else {
+    const { rows } = await db.query<{ id: string }>(
+      `select (public.create_session(
+         $1::uuid, $2::uuid, $3::text, $4::text, $5::text,
+         $6::timestamptz, $7::timestamptz, $8::integer
+       )).id`,
+      [
+        courseId,
+        locationId,
+        "Featheringill Hall",
+        "134",
+        "Sprint 3 join/leave",
+        startsAt.toISOString(),
+        endsAt.toISOString(),
+        capacity,
+      ],
+    );
+    sessionId = rows[0].id;
   }
+
+  if (options.status === "cancelled") {
+    // No cancel function yet (US-09, later), and no UPDATE policy on
+    // sessions either -- without the server's role this would silently
+    // affect 0 rows (RLS's implicit USING(false), same as the DELETE test
+    // below), not actually cancel anything.
+    await asServer(db, () =>
+      db.query(`update public.sessions set status = 'cancelled' where id = $1`, [sessionId]),
+    );
+  }
+
   return sessionId;
 }
 
@@ -117,7 +164,7 @@ describe("join_session (S5, US-04, US-07)", () => {
     const host = await connection();
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
-    const sessionId = await hostSession(host);
+    const sessionId = await hostSession(host, hostId);
 
     await expect(joinSession(db, sessionId)).rejects.toThrow(/not_signed_in/);
   });
@@ -126,7 +173,7 @@ describe("join_session (S5, US-04, US-07)", () => {
     const host = await connection();
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
-    const sessionId = await hostSession(host);
+    const sessionId = await hostSession(host, hostId);
 
     const db = await connection();
     const userId = await createUser(db, { displayName: null });
@@ -147,7 +194,7 @@ describe("join_session (S5, US-04, US-07)", () => {
     const host = await connection();
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
-    const sessionId = await hostSession(host, { status: "cancelled" });
+    const sessionId = await hostSession(host, hostId, { status: "cancelled" });
 
     const db = await connection();
     const userId = await createUser(db, { displayName: "Alex Student" });
@@ -159,7 +206,7 @@ describe("join_session (S5, US-04, US-07)", () => {
     const host = await connection();
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
-    const sessionId = await hostSession(host, { startsInMinutes: -120, endsInMinutes: -60 });
+    const sessionId = await hostSession(host, hostId, { startsInMinutes: -120, endsInMinutes: -60 });
 
     const db = await connection();
     const userId = await createUser(db, { displayName: "Alex Student" });
@@ -171,7 +218,7 @@ describe("join_session (S5, US-04, US-07)", () => {
     const host = await connection();
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
-    const sessionId = await hostSession(host);
+    const sessionId = await hostSession(host, hostId);
 
     // The host is already seated by create_session.
     await expect(joinSession(host, sessionId)).rejects.toThrow(/already_joined/);
@@ -181,7 +228,7 @@ describe("join_session (S5, US-04, US-07)", () => {
     const host = await connection();
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
-    const sessionId = await hostSession(host, { capacity: 2 });
+    const sessionId = await hostSession(host, hostId, { capacity: 2 });
 
     const filler = await connection();
     const fillerId = await createUser(filler, { displayName: "Taylor Filler" });
@@ -198,7 +245,7 @@ describe("join_session (S5, US-04, US-07)", () => {
     const host = await connection();
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
-    const sessionId = await hostSession(host);
+    const sessionId = await hostSession(host, hostId);
 
     const db = await connection();
     const userId = await createUser(db, { displayName: "Alex Student" });
@@ -215,7 +262,7 @@ describe("join_session (S5, US-04, US-07)", () => {
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
     // Capacity 2: the host already fills one seat, leaving exactly one.
-    const sessionId = await hostSession(host, { capacity: 2 });
+    const sessionId = await hostSession(host, hostId, { capacity: 2 });
 
     const a = await connection();
     const aliceId = await createUser(a, { displayName: "Alice Racer" });
@@ -243,7 +290,7 @@ describe("leave_session (S5, US-08)", () => {
     const host = await connection();
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
-    const sessionId = await hostSession(host);
+    const sessionId = await hostSession(host, hostId);
 
     const db = await connection();
     await expect(leaveSession(db, sessionId)).rejects.toThrow(/not_signed_in/);
@@ -262,7 +309,7 @@ describe("leave_session (S5, US-08)", () => {
     const host = await connection();
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
-    const sessionId = await hostSession(host);
+    const sessionId = await hostSession(host, hostId);
 
     await expect(leaveSession(host, sessionId)).rejects.toThrow(/host_cannot_leave/);
     expect(await rosterCount(host, sessionId)).toBe(1);
@@ -272,7 +319,7 @@ describe("leave_session (S5, US-08)", () => {
     const host = await connection();
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
-    const sessionId = await hostSession(host);
+    const sessionId = await hostSession(host, hostId);
 
     const db = await connection();
     const userId = await createUser(db, { displayName: "Alex Student" });
@@ -284,7 +331,7 @@ describe("leave_session (S5, US-08)", () => {
     const host = await connection();
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
-    const sessionId = await hostSession(host, { capacity: 2 });
+    const sessionId = await hostSession(host, hostId, { capacity: 2 });
 
     const alex = await connection();
     const alexId = await createUser(alex, { displayName: "Alex Student" });
@@ -309,7 +356,7 @@ describe("grants on join_session and leave_session (S5)", () => {
     const host = await connection();
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
-    const sessionId = await hostSession(host);
+    const sessionId = await hostSession(host, hostId);
 
     const anon = await connection();
     await anon.query("set role anon");
@@ -320,7 +367,7 @@ describe("grants on join_session and leave_session (S5)", () => {
     const host = await connection();
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
-    const sessionId = await hostSession(host);
+    const sessionId = await hostSession(host, hostId);
 
     const anon = await connection();
     await anon.query("set role anon");
@@ -331,7 +378,7 @@ describe("grants on join_session and leave_session (S5)", () => {
     const host = await connection();
     const hostId = await createUser(host, { displayName: "Jamie Host" });
     await signInAs(host, hostId);
-    const sessionId = await hostSession(host);
+    const sessionId = await hostSession(host, hostId);
 
     const other = await connection();
     const otherId = await createUser(other, { displayName: "Alex Student" });

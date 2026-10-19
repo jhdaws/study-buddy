@@ -72,16 +72,20 @@ begin
     raise exception 'session_ended' using errcode = 'P0001';
   end if;
 
+  -- Table-qualified: the parameter is also named session_id, and an
+  -- unqualified reference here is ambiguous against the column of the same
+  -- name on session_attendees -- the same bug BUG-03 found in
+  -- get_or_create_course.
   if exists (
-    select 1 from public.session_attendees
-    where session_id = locked.id and user_id = caller
+    select 1 from public.session_attendees sa
+    where sa.session_id = locked.id and sa.user_id = caller
   ) then
     raise exception 'already_joined' using errcode = 'P0001';
   end if;
 
   select count(*) into seats_taken
-  from public.session_attendees
-  where session_id = locked.id;
+  from public.session_attendees sa
+  where sa.session_id = locked.id;
 
   if seats_taken >= locked.capacity then
     raise exception 'session_full' using errcode = 'P0001';
@@ -137,8 +141,9 @@ begin
     raise exception 'host_cannot_leave' using errcode = 'P0001';
   end if;
 
-  delete from public.session_attendees
-  where session_id = target.id and user_id = caller;
+  -- Table-qualified, same reason as join_session above.
+  delete from public.session_attendees sa
+  where sa.session_id = target.id and sa.user_id = caller;
 
   if not found then
     raise exception 'not_joined' using errcode = 'P0001';
