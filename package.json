@@ -17,7 +17,7 @@
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset && npm run db:seed:locations",
     "db:seed": "node scripts/build-seed.mjs",
-    "db:seed:locations": "node scripts/seed-local-locations.mts",
+    "db:seed:locations": "node scripts/seed-local-locations.mjs",
     "auth:link": "node --env-file=.env.hosted scripts/sign-in-link.mjs",
     "db:types": "supabase gen types --lang typescript --local > src/lib/database.types.ts",
     "db:status": "supabase status"

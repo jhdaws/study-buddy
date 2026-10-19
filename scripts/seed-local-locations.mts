@@ -17,8 +17,11 @@
 // (a different process, before the dev server exists). Keep both in sync if
 // FIXTURE_LOCATIONS changes shape.
 //
-//   node scripts/seed-local-locations.ts
+//   npm run db:seed:locations
 //
+// That runs scripts/seed-local-locations.mjs, a plain-JS wrapper that checks
+// the Node version before importing this file -- importing fixtures.ts here
+// needs Node 22.18+ to strip TypeScript syntax on its own; see that file.
 // Run automatically by `npm run db:start` and `npm run db:reset`. Safe to
 // run again: `on conflict (id) do nothing`.
 
