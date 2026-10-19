@@ -15,7 +15,7 @@ export default defineConfig({
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],
       exclude: ["src/**/*.test.{ts,tsx}", "src/lib/database.types.ts"],
-      reporter: ["text", "json-summary"],
+      reporter: ["text", "json-summary", "html"],
       // The coverage gate (W9, #48). Floors just under what main measured on
       // 2026-10-16 -- 82.8% branches, 83.1% lines, 76.5% functions, 82.4%
       // statements, 94.0% of src/lib's branches -- and above TEST_PLAN.md's
