@@ -126,6 +126,29 @@ spends its first hour rediscovering the same dead end.
   `package.json`, which would be a much larger blast radius for a cosmetic
   warning.
 
+### Update, same session: Jack approved, with a portability gap
+
+Jack approved PR #74. One real note: `scripts/seed-local-locations.mts`
+needs Node 22.18+ to strip TypeScript syntax on its own; on an older Node,
+`npm run db:start` would fail partway through, *after* Supabase had already
+started, with a confusing error.
+
+**Fixed:** added `scripts/seed-local-locations.mjs`, a plain-JS entry point
+every Node version can at least parse, which checks `process.versions.node`
+first and only then dynamically imports the `.mts` file. The version check
+could not live inside the `.mts` file itself — on a Node too old to load a
+`.mts` file, nothing in it runs, not even a check at the top.
+`db:seed:locations` in `package.json` now points at the wrapper.
+
+Also flagged, not yet acted on: **Jack's other note is a separate, real
+production bug (BUG-09), not something this PR touches.** Creating a session
+on the live site still fails on the foreign key — this PR was always scoped
+to local and CI only (that's the whole point of #36's "local and CI only"
+decision). Jack offered to insert the same three rows into the *hosted*
+`locations` table with his own access, as a stopgap until M2. That is a call
+for the user/team to make on GitHub, not something this session decided or
+implemented.
+
 ---
 
 ## 2026-10-11 · Rebuilt Track A by mistake, then shipped US-19 instead
