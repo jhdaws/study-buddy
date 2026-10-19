@@ -1,16 +1,34 @@
 # Study Buddy
 
+[![CI](https://github.com/jhdaws/study-buddy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jhdaws/study-buddy/actions/workflows/ci.yml)
+
 Find and join study sessions happening across Vanderbilt's campus — by course,
 by place, with seats left.
 
-**Live:** https://study-buddy-jdaws.vercel.app — currently behind Vercel's
-login (Deployment Protection), so it only opens for members of the Vercel
-project. See W1 in [`docs/tickets.md`](./docs/tickets.md).
+**Live:** https://study-buddy-jdaws.vercel.app — Vercel deploys it from `main`
+on every merge, and builds a preview for every pull request.
 
 CS 4278: Principles of Software Engineering · Group 4 · Fall 2026
 Jack Dawson · Nate Dalbert · Moses Banda · Tapan Sidhwani
 
 ---
+
+## CI/CD
+
+Every pull request and every push to `main` runs [`ci.yml`](./.github/workflows/ci.yml),
+in order, stopping at the first failure:
+
+1. **verify**: `npm ci` from the lockfile → seed check → lint → typecheck →
+   unit tests with a coverage gate (thresholds in `vitest.config.mts`) → build
+2. **db** and **e2e**: integration tests. Database rules, policies and
+   functions against real Postgres (`tests/db/`), and the main journeys in a
+   browser against the full local stack (`tests/e2e/`)
+3. **coverage-report**: the coverage table and HTML report
+
+`main` is protected: a pull request, a teammate's approval, and green `verify`
+and `db` checks are required. On merge, Vercel deploys the app, and
+[`deploy-db.yml`](./.github/workflows/deploy-db.yml) applies new migrations to
+the hosted database once CI has passed.
 
 ## Stack
 

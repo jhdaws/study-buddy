@@ -60,6 +60,14 @@ export async function signInAsNewStudent(
   // same words in a <div role="alert">, so getByText finds two elements and
   // fails strict mode -- intermittently, depending on how the announcer and
   // the heading race.
+  // going -- except /sessions, the default, which needs no `next`.
+  await expect(page).toHaveURL(
+    nextPath === "/sessions" ? "/login" : `/login?next=${encodeURIComponent(nextPath)}`,
+  );
+
+  await page.getByLabel("Vanderbilt email").fill(email);
+  await page.getByRole("button", { name: "Send code" }).click();
+  // By role: Next's hidden route announcer repeats the heading's text.
   await expect(page.getByRole("heading", { name: "Check your inbox" })).toBeVisible();
 
   await page.getByLabel("Sign-in code").fill(await signInCodeFor(email));

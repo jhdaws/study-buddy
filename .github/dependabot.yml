@@ -25,6 +25,10 @@ updates:
       # load with it ("contextOrFilename.getFilename is not a function", #62).
       - dependency-name: "eslint"
         update-types: ["version-update:semver-major"]
+      # TypeScript 7: typescript-eslint, under eslint-config-next, does not
+      # support it yet ("typescript-eslint does not support TS 7.0", #69).
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule:

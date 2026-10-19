@@ -1,12 +1,23 @@
 name: CI
 
-# Runs on every push and every pull request. Set up in Sprint 1 deliberately:
-# it is roughly an hour of work and it guards every merge for the rest of the
-# semester. See docs/adr/0005-ci-in-sprint-one.md.
+# Runs on every pull request, every push to main, and every `sprint*` tag (the
+# sprint3 tag's run is the graded "green run"). Set up in Sprint 1
+# deliberately; see docs/adr/0005-ci-in-sprint-one.md.
+#
+# Stages, in order, stopping at the first failure:
+#   verify           install (npm ci, from package-lock.json) -> seed check
+#                    -> lint -> typecheck -> unit tests with the coverage gate
+#                    -> build
+#   db, e2e          integration tests: real Postgres, and browser journeys
+#                    against the full local stack -- only once verify passed
+#   coverage-report  published only once every test stage has passed
+# Delivery is outside this file: Vercel deploys every merge to main (and a
+# preview per PR), and deploy-db.yml applies migrations after this passes.
 
 on:
   push:
     branches: [main]
+    tags: ["sprint*"]
   pull_request:
 
 permissions:
@@ -59,6 +70,14 @@ jobs:
       - name: Unit tests and coverage
         run: npm run test:coverage
 
+      # Handed to the last stage, coverage-report.
+      - name: Keep the coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+
       - name: Build
         run: npm run build
 
@@ -67,6 +86,8 @@ jobs:
   # applies every migration in supabase/migrations/, then supabase/seed.sql,
   # on the way up.
   db:
+    # Integration tests run only after unit tests pass.
+    needs: verify
     runs-on: ubuntu-latest
 
     steps:
@@ -103,6 +124,7 @@ jobs:
   # yet: add it to the ruleset once it has run a week without flaking
   # (docs/tickets.md, W8). See playwright.config.ts.
   e2e:
+    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -135,3 +157,27 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+  # The last stage: once unit and integration tests have all passed, publish
+  # the unit-test coverage -- a table on the run's summary page, and the full
+  # HTML report as the `coverage` artifact. The gate itself is in verify
+  # (thresholds in vitest.config.mts).
+  coverage-report:
+    needs: [verify, db, e2e]
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage
+          path: coverage
+
+      - name: Coverage summary
+        run: |
+          node -e '
+            const total = require("./coverage/coverage-summary.json").total;
+            const rows = ["statements", "branches", "functions", "lines"].map(
+              (metric) => `| ${metric} | ${total[metric].pct}% | ${total[metric].covered} / ${total[metric].total} |`,
+            );
+            console.log(["### Unit-test coverage", "", "| Metric | Covered | Count |", "| --- | --- | --- |", ...rows].join("\n"));
+          ' >> "$GITHUB_STEP_SUMMARY"

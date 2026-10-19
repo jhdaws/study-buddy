@@ -89,4 +89,40 @@ test("journey 3: another student sees the session in the list with the right sea
   // session_attendees on every read, never stored (ADR 0008 rule 9).
   await expect(card).toContainText("3 seats left");
   await expect(card).toContainText("1 of 4 going");
+test("sign-out (US-21): the session ends, and private pages send the student back to sign in", async ({
+  page,
+}) => {
+  await signInAsNewStudent(page, newStudentEmail("signout"), "Sam Signout");
+
+  await page.getByRole("button", { name: "Account" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL("/");
+
+  // The proxy no longer sees a session: /sessions redirects to sign-in.
+  await page.goto("/sessions");
+  await expect(page).toHaveURL(/\/login/);
+});
+
+test("calendar download (US-19): a session from the list downloads as an .ics event", async ({
+  page,
+}) => {
+  await signInAsNewStudent(page, newStudentEmail("calendar"), "Casey Calendar", "/sessions");
+
+  // Each card's heading is `session-<id>` (SessionCard.tsx).
+  const headingId = await page.locator('[id^="session-"]').first().getAttribute("id");
+  const sessionId = headingId?.replace(/^session-/, "");
+  expect(sessionId).toBeTruthy();
+
+  // page.request carries the signed-in cookies: the route calls requireUser().
+  const response = await page.request.get(`/sessions/${sessionId}/calendar.ics`);
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toMatch(/^text\/calendar/);
+  expect(response.headers()["content-disposition"]).toMatch(/^attachment; filename=".+\.ics"$/);
+  const body = await response.text();
+  expect(body.startsWith("BEGIN:VCALENDAR\r\n")).toBe(true);
+  expect(body).toContain(`UID:${sessionId}@study-buddy`);
+});
+
+test("journey 3: another student sees the session in the list with the right seats left", async () => {
+  test.fixme(true, "Needs S4 (#21): the session list still reads fixture data, not the database.");
 });
