@@ -46,7 +46,7 @@ export type CourseLabel = {
  * nothing it does not -- no host id, no roster, no coordinates.
  */
 export type SessionListItem = {
-  /** `sessions.id` -- for the link to /sessions/[id] (a later sprint). */
+  /** `sessions.id` -- for the link to /sessions/[id] (S6). */
   id: string;
   course: CourseLabel;
   topic: string;
@@ -74,6 +74,29 @@ export type SessionListItem = {
   seatsLeft: number;
   /** The host's display name; null if they deleted their account ("Deleted user"). */
   hostDisplayName: string | null;
+};
+
+/** One person on a session's roster (US-23). */
+export type Attendee = {
+  /** `profiles.id` -- a React key, and how the page spots the viewer. */
+  userId: string;
+  /** Never an email (US-25). Null only for a profile with no name yet. */
+  displayName: string | null;
+  isHost: boolean;
+};
+
+/**
+ * The session page (S6, #52): a list item, plus what only the page shows --
+ * whether it was cancelled, who hosts it, and who is going. Unlike the list,
+ * cancelled and ended sessions are returned too: someone holding a link to
+ * one should be told what happened, not shown a 404.
+ */
+export type SessionDetail = SessionListItem & {
+  status: "open" | "cancelled";
+  /** Null when the host deleted their account. */
+  hostId: string | null;
+  /** The host first, then everyone else in the order they joined. */
+  attendees: Attendee[];
 };
 
 /** A department for the create-session department picker. */
@@ -170,6 +193,79 @@ export async function listSessions(): Promise<SessionListItem[]> {
       hostDisplayName: row.profiles?.display_name ?? null,
     };
   });
+}
+
+// ===========================================================================
+// getSession (S6, #52)
+//
+// The same embeds as listSessions -- including the NAMED host foreign key,
+// for the same PGRST201 reason -- plus the roster itself. The roster's own
+// `profiles (display_name)` needs no name: from session_attendees there is
+// only one way to reach a profile, its user_id.
+//
+// Reading the roster needs S1's session_attendees_select policy and A2's
+// profiles read policy; both allow any signed-in user, so a student can see
+// who is going before they join (US-23). Emails are never selected (US-25).
+// ===========================================================================
+
+/** A session id is a uuid; anything else cannot match a row. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** One session with its roster, or null when there is no such session. */
+export async function getSession(id: string): Promise<SessionDetail | null> {
+  // Asked about a malformed id, Postgres fails with 22P02 rather than finding
+  // nothing -- and a mistyped URL is a 404, not an error page.
+  if (!UUID.test(id)) return null;
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("sessions")
+    .select(
+      `id, topic, location_label, room, starts_at, ends_at, capacity, status, host_id,
+       courses!inner (department_code, number, title),
+       profiles!sessions_host_id_fkey (display_name),
+       session_attendees (user_id, joined_at, profiles (display_name))`,
+    )
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`Could not load the session: ${error.message}`);
+  }
+  if (!data) return null;
+
+  const attendees: Attendee[] = [...data.session_attendees]
+    .sort((a, b) => {
+      const hostFirst = Number(b.user_id === data.host_id) - Number(a.user_id === data.host_id);
+      return hostFirst || Date.parse(a.joined_at) - Date.parse(b.joined_at);
+    })
+    .map((row) => ({
+      userId: row.user_id,
+      displayName: row.profiles?.display_name ?? null,
+      isHost: row.user_id === data.host_id,
+    }));
+
+  return {
+    id: data.id,
+    course: {
+      departmentCode: data.courses.department_code,
+      number: data.courses.number,
+      title: data.courses.title,
+    },
+    topic: data.topic,
+    locationLabel: data.location_label,
+    room: data.room,
+    startsAt: data.starts_at,
+    endsAt: data.ends_at,
+    capacity: data.capacity,
+    attendeeCount: attendees.length,
+    seatsLeft: Math.max(0, data.capacity - attendees.length),
+    hostDisplayName: data.profiles?.display_name ?? null,
+    status: data.status,
+    hostId: data.host_id,
+    attendees,
+  };
 }
 
 // ===========================================================================

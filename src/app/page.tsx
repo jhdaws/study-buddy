@@ -15,8 +15,7 @@
  * (hours studied, sessions joined/hosted, streak, classmates met, activity
  * chart), "Up next" as MY joined sessions, courses "for you" (no enrolment
  * data), study requests (US-16) and the map. Inventing those numbers would be
- * fixture data on the home page. "View" links jump to the session's card in
- * the list until the detail page exists.
+ * fixture data on the home page. "View" links open the session's page (S6).
  *
  * Phones read top to bottom in DOM order (ADR 0004). From lg up the same
  * cards are placed on a grid with explicit columns and rows: ring, soonest
@@ -77,9 +76,9 @@ export default async function HomePage() {
   return <SignedInHome displayName={displayName} sessions={sessions} now={new Date()} />;
 }
 
-/** `/sessions#session-<id>`: the card's heading in the list. */
+/** The session's own page (S6). */
 function viewHref(session: SessionListItem) {
-  return `/sessions#session-${session.id}`;
+  return `/sessions/${session.id}`;
 }
 
 function Chip({ icon, children }: { icon: IconName; children: React.ReactNode }) {
@@ -185,7 +184,7 @@ function SignedInHome({
               href={viewHref(soonest)}
               className="relative mt-5 hidden min-h-11 items-center gap-1.5 text-sm font-bold text-blue-200 underline-offset-4 hover:underline lg:inline-flex"
             >
-              View in the list
+              View session
               <Icon name="arrowRight" className="size-4" />
             </Link>
           )}

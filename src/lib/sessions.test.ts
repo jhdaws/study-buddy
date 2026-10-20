@@ -2,7 +2,13 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { COURSE_SUGGESTION_LIMIT, listDepartments, listSessions, searchCourses } from "./sessions";
+import {
+  COURSE_SUGGESTION_LIMIT,
+  getSession,
+  listDepartments,
+  listSessions,
+  searchCourses,
+} from "./sessions";
 
 // S4's three reads (#21) with the database replaced. The policies themselves
 // are tested against real Postgres in tests/db/session-rules.test.ts ("lets any
@@ -31,7 +37,7 @@ function fakeBuilder(result: Result, calls: Recorded) {
     then: (resolve: (value: Result) => unknown) => Promise.resolve(result).then(resolve),
   };
 
-  for (const method of ["select", "eq", "gt", "is", "or", "order", "limit"]) {
+  for (const method of ["select", "eq", "gt", "is", "or", "order", "limit", "maybeSingle"]) {
     builder[method] = (...args: unknown[]) => {
       calls.push({ method, args });
       return builder;
@@ -195,6 +201,137 @@ describe("listSessions", () => {
     respond(null, { message: "connection terminated" });
 
     await expect(listSessions()).rejects.toThrow(/connection terminated/);
+  });
+});
+
+// S6 (#52). Ids are uuids in the 4/8 variant, which is what Postgres hands out.
+const HOST = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const EARLY = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+const LATE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+
+const detailRow = (overrides: Record<string, unknown> = {}) =>
+  sessionRow({
+    status: "open",
+    host_id: HOST,
+    // Deliberately out of order: the late joiner first, the host in the middle.
+    session_attendees: [
+      { user_id: LATE, joined_at: "2026-10-01T18:00:00+00:00", profiles: { display_name: "Sam" } },
+      { user_id: HOST, joined_at: "2026-10-01T12:00:00+00:00", profiles: { display_name: "Priya" } },
+      { user_id: EARLY, joined_at: "2026-10-01T13:00:00+00:00", profiles: { display_name: "Alex" } },
+    ],
+    ...overrides,
+  });
+
+describe("getSession", () => {
+  const id = "11111111-1111-4111-8111-111111111111";
+
+  it("maps a row onto the session page, with its roster", async () => {
+    respond(detailRow());
+
+    expect(await getSession(id)).toEqual({
+      id,
+      course: {
+        departmentCode: "CS",
+        number: "3251",
+        title: "Intermediate Software Design",
+      },
+      topic: "Dynamic programming",
+      locationLabel: "Central Library",
+      room: "418",
+      startsAt: "2026-10-01T19:30:00+00:00",
+      endsAt: "2026-10-01T21:00:00+00:00",
+      capacity: 6,
+      attendeeCount: 3,
+      seatsLeft: 3,
+      hostDisplayName: "Priya",
+      status: "open",
+      hostId: HOST,
+      attendees: [
+        { userId: HOST, displayName: "Priya", isHost: true },
+        { userId: EARLY, displayName: "Alex", isHost: false },
+        { userId: LATE, displayName: "Sam", isHost: false },
+      ],
+    });
+  });
+
+  it("asks for that one session, by id", async () => {
+    respond(detailRow());
+    await getSession(id);
+
+    expect(callTo("from")).toEqual(["sessions"]);
+    expect(callTo("eq")).toEqual(["id", id]);
+    expect(callTo("maybeSingle")).toEqual([]);
+  });
+
+  it("does not filter out cancelled or ended sessions", async () => {
+    respond(detailRow());
+    await getSession(id);
+
+    // The page tells someone holding a link what happened; the list's
+    // filters here would turn that into a 404.
+    expect(callTo("gt")).toBeUndefined();
+    expect(calls.filter((call) => call.method === "eq")).toHaveLength(1);
+  });
+
+  it("names the host_id foreign key, and never selects an email", async () => {
+    respond(detailRow());
+    await getSession(id);
+
+    const select = String(callTo("select")?.[0]);
+    expect(select).toContain("profiles!sessions_host_id_fkey");
+    expect(select).toContain("session_attendees (user_id, joined_at, profiles (display_name))");
+    // US-25: the roster is names only.
+    expect(select).not.toContain("email");
+  });
+
+  it("returns null when there is no such session", async () => {
+    respond(null);
+
+    expect(await getSession(id)).toBeNull();
+  });
+
+  it("returns null for an id that is not a uuid, without asking the database", async () => {
+    respond(detailRow());
+
+    // Postgres would fail with 22P02 rather than find nothing.
+    expect(await getSession("not-a-session")).toBeNull();
+    expect(await getSession(`${id}' or 1=1`)).toBeNull();
+    expect(db.from).not.toHaveBeenCalled();
+  });
+
+  it("derives the seat count from the roster it fetched", async () => {
+    respond(detailRow({ capacity: 3 }));
+
+    const session = await getSession(id);
+    expect(session?.attendeeCount).toBe(3);
+    expect(session?.seatsLeft).toBe(0);
+  });
+
+  it("keeps a cancelled session's status, and a deleted host's empty name", async () => {
+    respond(
+      detailRow({
+        status: "cancelled",
+        host_id: null,
+        profiles: null,
+        session_attendees: [
+          { user_id: EARLY, joined_at: "2026-10-01T13:00:00+00:00", profiles: { display_name: "Alex" } },
+        ],
+      }),
+    );
+
+    const session = await getSession(id);
+    expect(session?.status).toBe("cancelled");
+    expect(session?.hostId).toBeNull();
+    expect(session?.hostDisplayName).toBeNull();
+    expect(session?.attendees).toEqual([{ userId: EARLY, displayName: "Alex", isHost: false }]);
+  });
+
+  it("throws with the database's message when the query fails", async () => {
+    respond(null, { message: "permission denied for table sessions" });
+
+    await expect(getSession(id)).rejects.toThrow(
+      "Could not load the session: permission denied for table sessions",
+    );
   });
 });
 
