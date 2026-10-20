@@ -278,7 +278,7 @@ on `/login` sends **no email**; the code step takes the test user's
 
 It is **off on production**: the app ignores it whenever Vercel says the
 deployment is production (`VERCEL_ENV=production`), whatever else is set.
-It is also off anywhere `TEST_LOGIN_EMAIL` is unset.
+Locally it is off unless `TEST_LOGIN_EMAIL` is set.
 
 **The code is never written in this repository** (the repo is public). Share
 it with the team privately. To set it up:
@@ -289,8 +289,11 @@ it with the team privately. To set it up:
    new user, email `group4@vanderbilt.edu`, the code as the password, **Auto
    Confirm User** ticked. Local: the same in Studio
    (http://127.0.0.1:54323).
-3. **Turn it on.** Set `TEST_LOGIN_EMAIL=group4@vanderbilt.edu` in
-   `.env.local` and, in Vercel, for the **Preview** environment only.
+3. **Turn it on.** Vercel previews already have it on for
+   `group4@vanderbilt.edu` (`DEFAULT_PREVIEW_TEST_EMAIL`), because only the
+   project owner can set Vercel variables; `TEST_LOGIN_EMAIL` in Vercel's
+   Preview environment overrides the address. Locally, set
+   `TEST_LOGIN_EMAIL=group4@vanderbilt.edu` in `.env.local`.
 
 A2's signup trigger accepts the address and makes its profile; the first
 sign-in asks for a display name as usual. One limit to know: previews and

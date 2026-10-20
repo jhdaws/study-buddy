@@ -72,6 +72,22 @@ spends its first hour rediscovering the same dead end.
 ---
 
 
+## 2026-10-19 · Test login on by default for previews
+
+### What changed
+
+Branch `a-us-01-test-login-previews`. `testLoginEmail()` now returns
+`group4@vanderbilt.edu` on Vercel previews when `TEST_LOGIN_EMAIL` is unset;
+production is still always off, local still needs the variable. Reason: only
+Jack's account can set Vercel variables (Moses gets a 404 on the project
+settings). Moses created the Supabase user himself; its code is not recorded
+anywhere in the repo.
+
+### Open questions for the user
+
+Not yet a PR. Jack: confirm `njpm@vanderbilt.edu` is absent from hosted
+Supabase (its old code is in public history).
+
 ## 2026-10-19 · S6: the session page, roster and Join/Leave (built for the Sprint 3 deadline)
 
 **Branch:** `s6-us-23-session-page` · **Commits made:** this PR

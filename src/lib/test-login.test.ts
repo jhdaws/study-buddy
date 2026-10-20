@@ -19,6 +19,14 @@ describe("testLoginEmail", () => {
     ).toBe("group4@vanderbilt.edu");
   });
 
+  it("is on for the team's test address on previews with nothing set", () => {
+    expect(testLoginEmail(env({ VERCEL_ENV: "preview" }))).toBe("group4@vanderbilt.edu");
+  });
+
+  it("is off on production with nothing set", () => {
+    expect(testLoginEmail(env({ VERCEL_ENV: "production" }))).toBeNull();
+  });
+
   it("is always off on Vercel production, even if the variable is set", () => {
     expect(
       testLoginEmail(env({ TEST_LOGIN_EMAIL: "group4@vanderbilt.edu", VERCEL_ENV: "production" })),
