@@ -5,7 +5,13 @@
 import { expect, test } from "@playwright/test";
 
 import { connect } from "../db/connection";
-import { campusTime, newStudentEmail, signInAsNewStudent } from "./helpers";
+import {
+  campusTime,
+  E2E_PASSWORD,
+  emailsTo,
+  newStudentEmail,
+  signInAsNewStudent,
+} from "./helpers";
 
 test("journey 1: a new student signs in with a code, names themselves, and lands where they were going", async ({
   page,
@@ -132,6 +138,34 @@ test("journey 4: another student opens the session, joins it, and leaves again (
   await expect(roster.getByRole("button", { name: "Join session" })).toBeVisible();
   await expect(roster).toContainText("1 of 4 going");
   await expect(roster).not.toContainText("Jordan Joiner");
+});
+
+test("returning student (A6): signs back in with email and password, and no email is sent", async ({
+  page,
+}) => {
+  const email = newStudentEmail("password");
+  await signInAsNewStudent(page, email, "Pat Password");
+  await page.getByRole("button", { name: "Account" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL("/");
+  const emailsBefore = await emailsTo(email);
+
+  await page.goto("/sessions/new");
+  await expect(page).toHaveURL("/login?next=%2Fsessions%2Fnew");
+
+  // A wrong password is refused without saying whether the account exists.
+  await page.getByLabel("Vanderbilt email").fill(email);
+  await page.getByLabel("Password").fill("not my password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("don't match");
+
+  await page.getByLabel("Password").fill(E2E_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL("/sessions/new");
+  await expect(page.getByRole("button", { name: "Account" })).toHaveText("P");
+
+  // The whole point: signing in again cost no email.
+  expect(await emailsTo(email)).toBe(emailsBefore);
 });
 
 test("sign-out (US-21): the session ends, and private pages send the student back to sign in", async ({

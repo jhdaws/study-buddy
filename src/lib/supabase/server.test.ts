@@ -11,7 +11,7 @@ import { fetchDisplayName, pathAfterSignIn, requireUser, type ServerClient } fro
 // controls, a redirect() that throws like the real one, and headers carrying
 // the path the proxy forwards.
 const fake = vi.hoisted(() => ({
-  user: null as { id: string } | null,
+  user: null as { id: string; user_metadata?: Record<string, unknown> } | null,
   profile: { data: null as { display_name: string | null } | null, error: null as unknown },
   getSession: vi.fn(),
   path: "/sessions/new",
@@ -75,7 +75,7 @@ describe("requireUser", () => {
   // in a Server Action, every call does the work, so tests stay independent.
 
   it("returns the signed-in student's id and display name", async () => {
-    fake.user = { id: "u1" };
+    fake.user = { id: "u1", user_metadata: { has_password: true } };
     fake.profile = { data: { display_name: "Priya" }, error: null };
     await expect(requireUser()).resolves.toEqual({ id: "u1", displayName: "Priya" });
     // getUser() revalidates with Supabase; getSession() would trust the cookie.
@@ -97,6 +97,12 @@ describe("requireUser", () => {
     expect(await redirectOf(requireUser())).toBe("/login/name?next=%2Fsessions%2Fnew");
   });
 
+  it("sends a named student without a password to the password step (A6)", async () => {
+    fake.user = { id: "u1", user_metadata: {} };
+    fake.profile = { data: { display_name: "Priya" }, error: null };
+    expect(await redirectOf(requireUser())).toBe("/login/password?next=%2Fsessions%2Fnew");
+  });
+
   it("treats a missing profile row as no name", async () => {
     fake.user = { id: "u1" };
     fake.profile = { data: null, error: null };
@@ -112,23 +118,39 @@ describe("requireUser", () => {
 
 describe("pathAfterSignIn", () => {
   const client = () => fakeClient() as unknown as ServerClient;
+  const withPassword = { id: "u1", user_metadata: { has_password: true } };
+  const withoutPassword = { id: "u1", user_metadata: {} };
 
-  it("goes on to a safe next when the student has a name", async () => {
+  it("goes on to a safe next when the student has a name and a password", async () => {
     fake.profile = { data: { display_name: "Priya" }, error: null };
-    expect(await pathAfterSignIn(client(), "u1", "/sessions/new")).toBe("/sessions/new");
-    expect(await pathAfterSignIn(client(), "u1", "https://evil.example")).toBe("/sessions");
+    expect(await pathAfterSignIn(client(), withPassword, "/sessions/new")).toBe("/sessions/new");
+    expect(await pathAfterSignIn(client(), withPassword, "https://evil.example")).toBe("/sessions");
   });
 
   it("goes to the name step, carrying next, when they have none", async () => {
     fake.profile = { data: { display_name: null }, error: null };
-    expect(await pathAfterSignIn(client(), "u1", "/sessions/new")).toBe(
+    expect(await pathAfterSignIn(client(), withoutPassword, "/sessions/new")).toBe(
       "/login/name?next=%2Fsessions%2Fnew",
     );
   });
 
+  it("goes to the password step when they have a name but no password (A6)", async () => {
+    fake.profile = { data: { display_name: "Priya" }, error: null };
+    expect(await pathAfterSignIn(client(), withoutPassword, "/sessions/new")).toBe(
+      "/login/password?next=%2Fsessions%2Fnew",
+    );
+  });
+
+  it("goes to the password step after a code sign-in, even with a password: they forgot it", async () => {
+    fake.profile = { data: { display_name: "Priya" }, error: null };
+    expect(
+      await pathAfterSignIn(client(), withPassword, "/sessions", { choosePassword: true }),
+    ).toBe("/login/password");
+  });
+
   it("still lets a signed-in student through if the profile read fails", async () => {
     fake.profile = { data: null, error: { code: "XX000", message: "boom" } };
-    expect(await pathAfterSignIn(client(), "u1", "/sessions/new")).toBe("/sessions/new");
+    expect(await pathAfterSignIn(client(), withoutPassword, "/sessions/new")).toBe("/sessions/new");
   });
 });
 

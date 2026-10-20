@@ -10,6 +10,10 @@ import {
   START_GRACE_MINUTES,
   createSessionSchema,
   displayNameSchema,
+  passwordSignInSchema,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  setPasswordSchema,
   invalidFormState,
   normalizeCourseNumber,
   normalizeDepartmentCode,
@@ -416,3 +420,59 @@ describe("invalidFormState", () => {
     expect(state.values).toEqual(validSession({ capacity: "1" }));
   });
 });
+
+describe("passwordSignInSchema (A6)", () => {
+  it("normalises the address like signInSchema, and keeps the password exactly", () => {
+    expect(passwordSignInSchema.parse({ email: " Jane@Vanderbilt.EDU ", password: " pw " })).toEqual({
+      email: "jane@vanderbilt.edu",
+      password: " pw ",
+    });
+  });
+
+  it("asks for a password, and only checks that there is one", () => {
+    const result = passwordSignInSchema.safeParse({ email: "jane@vanderbilt.edu", password: "" });
+    expect(result.success).toBe(false);
+    expect(z.flattenError(result.error!).fieldErrors.password).toEqual(["Enter your password."]);
+    expect(passwordSignInSchema.safeParse({ email: "jane@vanderbilt.edu", password: "x" }).success).toBe(
+      true,
+    );
+  });
+});
+
+describe("setPasswordSchema (A6)", () => {
+  const errors = (values: Record<string, unknown>) => {
+    const result = setPasswordSchema.safeParse(values);
+    return result.success ? {} : z.flattenError(result.error).fieldErrors;
+  };
+
+  it(`accepts ${PASSWORD_MIN_LENGTH} to ${PASSWORD_MAX_LENGTH} characters, typed twice`, () => {
+    const shortest = "a".repeat(PASSWORD_MIN_LENGTH);
+    const longest = "a".repeat(PASSWORD_MAX_LENGTH);
+    expect(setPasswordSchema.parse({ password: shortest, confirmPassword: shortest }).password).toBe(
+      shortest,
+    );
+    expect(errors({ password: longest, confirmPassword: longest })).toEqual({});
+  });
+
+  it("refuses one character too few or too many", () => {
+    const short = "a".repeat(PASSWORD_MIN_LENGTH - 1);
+    const long = "a".repeat(PASSWORD_MAX_LENGTH + 1);
+    expect(errors({ password: short, confirmPassword: short }).password).toEqual([
+      `Use at least ${PASSWORD_MIN_LENGTH} characters.`,
+    ]);
+    expect(errors({ password: long, confirmPassword: long }).password).toEqual([
+      `Keep it to ${PASSWORD_MAX_LENGTH} characters or fewer.`,
+    ]);
+  });
+
+  it("refuses two passwords that differ, on the second field", () => {
+    expect(errors({ password: "a long one", confirmPassword: "a long two" })).toEqual({
+      confirmPassword: ["The two passwords don't match."],
+    });
+  });
+
+  it("does not trim: spaces are part of a password", () => {
+    expect(errors({ password: "  spaced  ", confirmPassword: "spaced" }).confirmPassword).toBeDefined();
+  });
+});
+

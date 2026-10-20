@@ -1,7 +1,14 @@
 "use server";
 
-// Server actions for sign-in, the display-name step, and sign-out (US-01,
-// US-21). Owner: Track A.
+// Server actions for sign-in, the display-name and password steps, and
+// sign-out (US-01, US-21). Owner: Track A.
+//
+// Two ways in (A6):
+//   - email + password, for a returning student: signInWithPassword(). No
+//     email is sent, so Supabase's email limits never apply.
+//   - a one-time code by email, to sign up or when the password is
+//     forgotten: signIn() sends it, verifyCode() checks it, and the student
+//     then chooses a password (setPassword()).
 //
 // A "use server" file may export only async functions (and types, which are
 // erased). Every action is a public POST endpoint: validate inside it.
@@ -16,21 +23,38 @@ import { redirect } from "next/navigation";
 
 import {
   databaseErrorMessage,
+  passwordSignInErrorMessage,
+  setPasswordErrorMessage,
   signInErrorMessage,
   verifyCodeErrorMessage,
 } from "@/lib/errors";
 import { requestOrigin } from "@/lib/request-origin";
-import { DEFAULT_NEXT_PATH, loginPath, safeNext, safeNextPath } from "@/lib/safe-next";
-import { createClient, getCurrentUser, pathAfterSignIn } from "@/lib/supabase/server";
-import { isTestLoginEmail } from "@/lib/test-login";
+import {
+  DEFAULT_NEXT_PATH,
+  loginPath,
+  passwordPath,
+  safeNext,
+  safeNextPath,
+} from "@/lib/safe-next";
+import {
+  createClient,
+  getCurrentUser,
+  HAS_PASSWORD,
+  hasPassword,
+  pathAfterSignIn,
+} from "@/lib/supabase/server";
 import {
   displayNameSchema,
   formValues,
   invalidFormState,
+  passwordSignInSchema,
+  setPasswordSchema,
   signInSchema,
   verifyCodeSchema,
   type DisplayNameField,
   type FormState,
+  type PasswordSignInField,
+  type SetPasswordField,
   type SignInField,
   type VerifyCodeField,
 } from "@/lib/validation";
@@ -42,9 +66,16 @@ import {
  */
 export type SignInState = FormState<SignInField> & {
   sentTo?: string;
-  /** The test login's address (src/lib/test-login.ts): no email was sent. */
-  testLogin?: true;
 };
+
+/**
+ * What signInWithPassword() hands back when it does not redirect. Start
+ * from `{}`. `values` never carries the password back to the browser.
+ */
+export type PasswordSignInState = FormState<PasswordSignInField>;
+
+/** What setPassword() hands back when it does not redirect. Start from `{}`. */
+export type SetPasswordState = FormState<SetPasswordField>;
 
 /**
  * What verifyCode() hands back when it does not redirect (it redirects on
@@ -67,10 +98,6 @@ export type DisplayNameState = FormState<DisplayNameField>;
 // built from an older template, or Supabase's default one, still lands on
 // /auth/confirm on this origin rather than somewhere that cannot sign in.
 //
-// The test login's address (src/lib/test-login.ts; local and previews only)
-// gets no email at all: it goes straight to the code step, and verifyCode()
-// handles it.
-//
 // Same reply whether or not the address already has an account:
 // signInWithOtp() signs up a new address and signs in a known one, and both
 // end in { sentTo }.
@@ -86,10 +113,6 @@ export async function signIn(
     return invalidFormState(parsed.error, formData);
   }
   const { email } = parsed.data;
-
-  if (isTestLoginEmail(email)) {
-    return { sentTo: email, testLogin: true };
-  }
 
   const origin = requestOrigin(await headers());
   if (!origin) {
@@ -119,19 +142,13 @@ export async function signIn(
 // scanning can open a link before the student does and spend the token, and
 // a code typed on a phone works even when the email was opened on a laptop.
 //
-// The test login's address signs in with signInWithPassword(), the typed
-// code being that user's password (src/lib/test-login.ts). A wrong one comes
-// back as invalid_credentials, which errors.ts maps to the usual wrong-code
-// text.
+// A code sign-in always goes on to the password step (A6): the student is
+// either new, or here because they forgot their password.
 //
 // Form fields: `email` and `next` (hidden, carried over from the sign-in
 // step) and `code`. The email is re-validated -- the hidden field is as
 // forgeable as any other -- and Supabase checks that the code belongs to it.
 // ---------------------------------------------------------------------------
-
-/** The test login's own refusal: the usual text would send people to an email that never came. */
-const TEST_LOGIN_REFUSED_MESSAGE =
-  "No test user with that code. In Supabase, check this exact address exists under Authentication → Users with that code as its password, and is confirmed.";
 
 /** Sign in with the one-time code from the email (US-01). */
 export async function verifyCode(
@@ -145,22 +162,110 @@ export async function verifyCode(
   const { email, code } = parsed.data;
 
   const supabase = await createClient();
-  const testLogin = isTestLoginEmail(email);
-  const { data, error } = testLogin
-    ? await supabase.auth.signInWithPassword({ email, password: code })
-    : await supabase.auth.verifyOtp({ email, token: code, type: "email" });
+  const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
   if (error || !data.user) {
-    if (testLogin && (error?.code === "invalid_credentials" || error?.code === "email_not_confirmed")) {
-      // Previews and local only, so naming the setup step leaks nothing.
-      return { formError: TEST_LOGIN_REFUSED_MESSAGE, values: formValues(formData) };
-    }
     return { formError: verifyCodeErrorMessage(error), values: formValues(formData) };
   }
 
-  // First sign-in without a display name: the name step first (A4).
-  const destination = await pathAfterSignIn(supabase, data.user.id, formData.get("next"));
+  // The name step first if there is no name (A4), then the password step.
+  const destination = await pathAfterSignIn(supabase, data.user, formData.get("next"), {
+    choosePassword: true,
+  });
   // Outside any try/catch: redirect() works by throwing.
   redirect(destination);
+}
+
+// ---------------------------------------------------------------------------
+// signInWithPassword -- A6. A returning student's way in: no email is sent.
+//
+// Form fields: `email`, `password`, and an optional hidden `next`.
+//
+// Supabase answers an unknown address and a wrong password the same way
+// (invalid_credentials), so the message never says whether an account
+// exists. The password is never echoed back in `values`.
+//
+// An account given its password outside the app -- the Supabase dashboard,
+// or a test user -- has no HAS_PASSWORD flag; signing in with a password
+// proves it has one, so the flag is set here rather than sending the
+// student to choose a password they already have.
+// ---------------------------------------------------------------------------
+
+/** Sign in with a Vanderbilt email and password (US-01). */
+export async function signInWithPassword(
+  _prev: PasswordSignInState,
+  formData: FormData,
+): Promise<PasswordSignInState> {
+  const parsed = passwordSignInSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return withoutPasswords(invalidFormState(parsed.error, formData));
+  }
+  const { email, password } = parsed.data;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  if (error || !data.user) {
+    return { formError: passwordSignInErrorMessage(error), values: { email } };
+  }
+
+  let user = data.user;
+  if (!hasPassword(user)) {
+    const { data: updated } = await supabase.auth.updateUser({ data: { [HAS_PASSWORD]: true } });
+    // If that failed, requireUser() just asks for a password once; not worth
+    // an error now that the student is signed in.
+    if (updated.user) user = updated.user;
+  }
+
+  redirect(await pathAfterSignIn(supabase, user, formData.get("next")));
+}
+
+// ---------------------------------------------------------------------------
+// setPassword -- A6. The step at /login/password, after a code sign-in.
+// Form fields: `password`, `confirmPassword`, and an optional hidden `next`.
+//
+//   1. getCurrentUser() -- NOT requireUser(), which sends a student without
+//      a password to this very step. Signed out: to /login.
+//   2. setPasswordSchema; on failure, field errors (passwords not echoed).
+//   3. updateUser() sets the password and the HAS_PASSWORD flag together.
+//      Supabase enforces its own minimum length (keep it at
+//      PASSWORD_MIN_LENGTH; supabase/README.md) -- the schema is for the
+//      message.
+//   4. redirect() to the safe `next`, else /sessions.
+// ---------------------------------------------------------------------------
+
+/** Choose (or replace) the password for this account (US-01, A6). */
+export async function setPassword(
+  _prev: SetPasswordState,
+  formData: FormData,
+): Promise<SetPasswordState> {
+  const user = await getCurrentUser();
+  if (!user) {
+    redirect(loginPath(formData.get("next")));
+  }
+
+  const parsed = setPasswordSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return withoutPasswords(invalidFormState(parsed.error, formData));
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.auth.updateUser({
+    password: parsed.data.password,
+    data: { [HAS_PASSWORD]: true },
+  });
+  if (error) {
+    return { formError: setPasswordErrorMessage(error) };
+  }
+
+  redirect(safeNext(formData.get("next")));
+}
+
+/** A form state with any password stripped from what goes back to the browser. */
+function withoutPasswords<Field extends string>(state: FormState<Field>): FormState<Field> {
+  if (!state.values) return state;
+  const values: Record<string, string | undefined> = { ...state.values };
+  delete values.password;
+  delete values.confirmPassword;
+  return { ...state, values: values as FormState<Field>["values"] };
 }
 
 // ---------------------------------------------------------------------------
@@ -181,7 +286,8 @@ export async function verifyCode(
 //      in the root layout, which a redirect from a Server Function does not
 //      re-render on its own. Without this it keeps the "no name yet" render
 //      until a full reload.
-//   5. redirect() to the safe `next`, else /sessions -- outside any try.
+//   5. redirect() to the password step if they have no password yet (A6),
+//      else to the safe `next`, or /sessions -- outside any try.
 // ---------------------------------------------------------------------------
 
 /** Shown when the update matched no row: there is no profile to name. */
@@ -217,7 +323,7 @@ export async function saveDisplayName(
   }
 
   revalidatePath("/", "layout");
-  redirect(safeNext(formData.get("next")));
+  redirect(hasPassword(user) ? safeNext(formData.get("next")) : passwordPath(formData.get("next")));
 }
 
 // ---------------------------------------------------------------------------

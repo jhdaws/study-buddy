@@ -56,7 +56,7 @@ describe("GET /auth/confirm", () => {
     vi.mocked(pathAfterSignIn).mockResolvedValueOnce("/login/name?next=%2Fsessions%2Fnew");
     const { location } = await visit("next=%2Fsessions%2Fnew&token_hash=abc123&type=email");
 
-    expect(vi.mocked(pathAfterSignIn)).toHaveBeenCalledWith(expect.anything(), "u1", "/sessions/new");
+    expect(vi.mocked(pathAfterSignIn)).toHaveBeenCalledWith(expect.anything(), { id: "u1" }, "/sessions/new");
     expect(location?.origin).toBe(ORIGIN);
     expect(location?.pathname).toBe("/login/name");
     expect(location?.searchParams.get("next")).toBe("/sessions/new");
@@ -128,7 +128,7 @@ describe("GET /auth/confirm with a code (Supabase's default email)", () => {
     exchangeCodeForSession.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
     vi.mocked(pathAfterSignIn).mockResolvedValueOnce("/login/name");
     const { location } = await visit("code=pkce-code-1");
-    expect(vi.mocked(pathAfterSignIn)).toHaveBeenCalledWith(expect.anything(), "u1", "/sessions");
+    expect(vi.mocked(pathAfterSignIn)).toHaveBeenCalledWith(expect.anything(), { id: "u1" }, "/sessions");
     expect(location?.pathname).toBe("/login/name");
   });
 
