@@ -249,7 +249,7 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# A1 (#14): the sign-in email -- a one-time code, plus a link to /auth/confirm with token_hash.
+# A1 (#14): the sign-in email -- a one-time code only (the link was dropped 2026-10-12).
 # signInWithOtp() sends "magic_link" to an existing user and "confirmation" to a new one, so
 # both use the same template. The hosted project needs the same HTML pasted into its dashboard
 # (supabase/README.md, "Hosted auth settings (A1)"); this file is the source for both.

@@ -224,7 +224,7 @@ export default function CourseNumberInput({
         // Keep focus in the input when an option is pressed, so the tap
         // registers as a click before blur closes the list.
         onMouseDown={(event) => event.preventDefault()}
-        className="absolute inset-x-0 top-full z-20 mt-2 max-h-72 overflow-auto rounded-inner border border-white/15 bg-navy-800/95 p-1.5 text-white shadow-[0_24px_48px_-16px_rgba(5,14,32,0.8)] backdrop-blur-xl"
+        className="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-xl border border-line bg-white p-1 text-ink shadow-lg"
       >
         {noMatch ? (
           <li
@@ -236,7 +236,7 @@ export default function CourseNumberInput({
           >
             <span>
               Nobody&apos;s studied{" "}
-              <span className="font-bold text-blue-200">
+              <span className="font-semibold">
                 {department} {current?.query}
               </span>{" "}
               yet &mdash; create it?
@@ -253,16 +253,16 @@ export default function CourseNumberInput({
               className={optionClass(activeIndex === index)}
             >
               <span>
-                <span className="font-bold text-blue-200">
+                <span className="font-semibold">
                   {suggestion.departmentCode} {suggestion.number}
                 </span>
                 {suggestion.title && (
-                  <span className="text-white/80">
-                    {" "}· {suggestion.title}
+                  <span className="text-ink-2">
+                    {" "}{suggestion.title}
                   </span>
                 )}
               </span>
-              <span className="shrink-0 text-sm text-white/72">
+              <span className="shrink-0 text-sm text-ink-2">
                 {formatSessionCount(suggestion.sessionCount)}
               </span>
             </li>
@@ -274,7 +274,7 @@ export default function CourseNumberInput({
         {status}
       </p>
       {open && current?.status === "error" && (
-        <p className="mt-1 px-1 text-sm text-white/72">
+        <p className="mt-1 text-sm text-ink-2">
           Suggestions aren&apos;t available right now. You can still type the
           course number.
         </p>
@@ -285,7 +285,7 @@ export default function CourseNumberInput({
 
 function optionClass(active: boolean): string {
   return (
-    "flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl px-3 py-2 text-base " +
-    (active ? "bg-white/[0.12]" : "hover:bg-white/[0.07]")
+    "flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-[15px] " +
+    (active ? "bg-paper" : "hover:bg-paper")
   );
 }

@@ -88,7 +88,6 @@ test("journey 3: another student sees the session in the list with the right sea
   // Capacity 4 with only the host on the roster. Derived from
   // session_attendees on every read, never stored (ADR 0008 rule 9).
   await expect(card).toContainText("3 seats left");
-  await expect(card).toContainText("1 of 4 going");
 });
 
 test("journey 4: another student opens the session, joins it, and leaves again (US-04, US-08, US-23)", async ({
@@ -101,9 +100,14 @@ test("journey 4: another student opens the session, joins it, and leaves again (
 
   await signInAsNewStudent(page, newStudentEmail("journey4"), "Jordan Joiner", "/sessions");
 
-  // The whole card links to the session page (S6).
+  // The whole card links to the session page (S6); the course is the link's
+  // name. (The card's other link is "Add to calendar".)
   const openSession = async () => {
-    await page.locator("article").filter({ hasText: topic }).getByRole("link").click();
+    await page
+      .locator("article")
+      .filter({ hasText: topic })
+      .getByRole("link", { name: /^CS 3251/ })
+      .click();
     await expect(page).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
   };
   await openSession();

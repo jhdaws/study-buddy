@@ -2,12 +2,9 @@
 
 **Status:** Accepted · **Date:** 2026-09-17
 
-> **Note, 2026-10-11 (proposed, pending team ratification):** the Claude
-> Design restyle adds a desktop layout from `lg` (1024px) up: a sidebar and,
-> on the home page, a card grid. Below `lg` nothing changes -- phones are
-> still one column with a width cap, list before map. If the team rejects
-> this, `AppShell` and `src/app/page.tsx` fall back to one column by removing
-> their `lg:` classes; nothing else depends on it.
+> **Note, 2026-10-11:** the UI restyle adds a sidebar from `lg` (1024px) up.
+> Content stays one column with a width cap on every screen size; an
+> earlier desktop card grid was removed again the same day.
 
 ## Context
 

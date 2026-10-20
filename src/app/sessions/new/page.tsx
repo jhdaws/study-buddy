@@ -18,6 +18,7 @@
 import type { Metadata } from "next";
 
 import CreateSessionForm from "@/components/CreateSessionForm";
+import { PAGE_LEAD, PAGE_TITLE } from "@/components/ui/styles";
 import { listDepartments } from "@/lib/sessions";
 import { requireUser } from "@/lib/supabase/server";
 
@@ -30,9 +31,9 @@ export default async function NewSessionPage() {
   const departments = await listDepartments();
 
   return (
-    <main className="min-w-0 lg:max-w-5xl">
-      <h1 className="text-3xl font-extrabold tracking-tight text-navy-900">Host a study session</h1>
-      <p className="mt-1 mb-6 text-base text-navy-muted">
+    <main className="min-w-0">
+      <h1 className={PAGE_TITLE}>Host a study session</h1>
+      <p className={`${PAGE_LEAD} mb-6`}>
         Say what you&apos;re studying, where and when. Classmates see it in the
         session list.
       </p>

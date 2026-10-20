@@ -6,6 +6,4 @@
 
 <p>Type it on the Study Buddy sign-in page. It works once and expires in an hour.</p>
 
-<p>Or, on the device you want to use, <a href="{{ if eq .RedirectTo .SiteURL }}{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email{{ else }}{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email{{ end }}">sign in with this link</a>. Use the code or the link, not both: whichever you use first, the other stops working.</p>
-
 <p>If you didn't ask to sign in to Study Buddy, you can ignore this email.</p>

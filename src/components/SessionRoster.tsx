@@ -26,12 +26,13 @@ import { useRouter } from "next/navigation";
 import { useActionState, useEffect } from "react";
 
 import { joinSession, leaveSession, type SessionActionState } from "@/app/sessions/actions";
-import { SeatsPill } from "@/components/SessionCard";
+import { SeatsLabel } from "@/components/SessionCard";
 import {
   BUTTON_PRIMARY,
   BUTTON_SECONDARY,
-  CARD_DARK,
   FORM_ERROR,
+  PANEL,
+  SECTION_TITLE,
 } from "@/components/ui/styles";
 import { formatInitial } from "@/lib/format";
 import type { RosterAction } from "@/lib/roster";
@@ -50,7 +51,7 @@ export type SessionRosterProps = {
 
 const NOTHING_YET: SessionActionState = {};
 
-const NOTE = "rounded-inner border border-white/10 bg-white/[0.06] px-4 py-3 text-base font-semibold";
+const NOTE = "rounded-xl bg-paper px-4 py-3 text-[15px] font-semibold text-ink";
 
 export default function SessionRoster({
   sessionId,
@@ -87,34 +88,34 @@ export default function SessionRoster({
         : undefined;
 
   return (
-    <section aria-labelledby="roster-heading" className={`${CARD_DARK} p-4 sm:p-5`}>
+    <section aria-labelledby="roster-heading" className={`${PANEL} px-4 py-5 sm:px-6`}>
       <div className="flex items-center justify-between gap-3">
-        <h2 id="roster-heading" className="text-lg font-extrabold">
+        <h2 id="roster-heading" className={SECTION_TITLE}>
           Who&apos;s going
         </h2>
-        <SeatsPill seatsLeft={seatsLeft} />
+        <SeatsLabel seatsLeft={seatsLeft} />
       </div>
-      <p className="mt-1 text-sm text-white/80">
+      <p className="mt-0.5 text-sm text-ink-2">
         {attendees.length} of {capacity} going
       </p>
 
-      <ul className="mt-4 flex flex-col gap-1">
+      <ul className="mt-3 divide-y divide-line">
         {attendees.map((attendee) => (
-          <li key={attendee.userId} className="flex min-h-11 items-center gap-3">
+          <li key={attendee.userId} className="flex min-h-12 items-center gap-3 py-2">
             <span
               aria-hidden
-              className="grid size-9 shrink-0 place-items-center rounded-full bg-white/15 text-sm font-extrabold"
+              className="grid size-9 shrink-0 place-items-center rounded-full bg-paper text-sm font-bold text-ink"
             >
               {formatInitial(attendee.displayName)}
             </span>
-            <span className="min-w-0 flex-1 truncate font-semibold">
+            <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink">
               {attendee.displayName ?? "A student"}
               {attendee.userId === viewerId && (
-                <span className="font-normal text-white/72"> (you)</span>
+                <span className="font-normal text-ink-2"> (you)</span>
               )}
             </span>
             {attendee.isHost && (
-              <span className="shrink-0 rounded-full border border-white/25 px-2.5 py-0.5 text-xs font-bold">
+              <span className="shrink-0 rounded-md bg-paper px-2 py-0.5 text-xs font-semibold text-ink-2">
                 Host
               </span>
             )}
@@ -122,7 +123,7 @@ export default function SessionRoster({
         ))}
       </ul>
 
-      <div className="mt-5 flex flex-col gap-3">
+      <div className="mt-4 flex flex-col gap-3">
         {action === "join" && (
           <form action={join}>
             <button type="submit" disabled={joining} className={`${BUTTON_PRIMARY} w-full`}>
@@ -142,7 +143,7 @@ export default function SessionRoster({
               Session full
             </button>
             {!error && (
-              <p id="roster-full-reason" className="px-1 text-sm text-white/80">
+              <p id="roster-full-reason" className="text-sm text-ink-2">
                 Every seat is taken. If someone leaves, their seat opens up here.
               </p>
             )}

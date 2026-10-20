@@ -27,10 +27,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { LivePill } from "@/components/SessionCard";
 import SessionRoster from "@/components/SessionRoster";
 import Icon from "@/components/ui/Icon";
-import { CARD_DARK, LINK_ON_DARK } from "@/components/ui/styles";
+import { LINK, PAGE_TITLE, PANEL } from "@/components/ui/styles";
 import { formatCourseCode, formatSessionTime, isInProgress } from "@/lib/format";
 import { rosterAction } from "@/lib/roster";
 import { getSession } from "@/lib/sessions";
@@ -56,59 +55,54 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
 
   return (
     <main className="min-w-0 lg:max-w-3xl">
-      <Link
-        href="/sessions"
-        className="mb-3 inline-flex min-h-11 items-center text-sm font-bold text-navy-900 underline-offset-4 hover:underline"
-      >
+      <Link href="/sessions" className={`${LINK} mb-2`}>
         All sessions
       </Link>
 
-      <article
-        aria-labelledby="session-heading"
-        className={`${CARD_DARK} p-4 sm:p-6 ${upcoming ? "" : "opacity-80"}`}
-      >
+      <article aria-labelledby="session-heading" className={`${PANEL} px-4 py-5 sm:px-6`}>
         {live && (
-          <div className="mb-2">
-            <LivePill />
-          </div>
+          <p className="mb-2 inline-flex items-center gap-1.5 text-sm font-semibold text-signal">
+            <span aria-hidden className="size-2 rounded-full bg-signal" />
+            Happening now
+          </p>
         )}
         <h1 id="session-heading">
-          <span className="block text-base leading-snug">
-            <span className="font-extrabold">{formatCourseCode(session.course)}</span>
+          <span className="block text-[15px] leading-snug">
+            <span className="font-bold text-ink">{formatCourseCode(session.course)}</span>
             {session.course.title && (
-              <span className="font-medium text-white/72"> · {session.course.title}</span>
+              <span className="font-medium text-ink-2"> {session.course.title}</span>
             )}
           </span>
-          <span className="mt-2 block text-2xl leading-snug font-extrabold tracking-tight">
-            {session.topic}
-          </span>
+          <span className={`mt-1 block ${PAGE_TITLE}`}>{session.topic}</span>
         </h1>
 
-        <dl className="mt-4 grid gap-3 rounded-inner border border-white/10 bg-white/[0.06] p-3.5 text-sm sm:grid-cols-[1fr_1.4fr_auto] sm:gap-4">
+        <dl className="mt-4 grid gap-3 border-t border-line pt-4 text-[15px] sm:grid-cols-3">
           <div>
-            <dt className="text-xs font-bold tracking-wide text-white/72 uppercase">When</dt>
-            <dd className="mt-0.5 font-semibold">
+            <dt className="text-sm text-ink-2">When</dt>
+            <dd className="mt-0.5 font-semibold text-ink">
               <time dateTime={session.startsAt}>
                 {formatSessionTime(session.startsAt, session.endsAt, now)}
               </time>
             </dd>
           </div>
           <div>
-            <dt className="text-xs font-bold tracking-wide text-white/72 uppercase">Where</dt>
-            <dd className="mt-0.5 font-semibold">
+            <dt className="text-sm text-ink-2">Where</dt>
+            <dd className="mt-0.5 font-semibold text-ink">
               {session.locationLabel}
-              {session.room && <> · {session.room}</>}
+              {session.room && <>, {session.room}</>}
             </dd>
           </div>
           <div>
-            <dt className="text-xs font-bold tracking-wide text-white/72 uppercase">Host</dt>
-            <dd className="mt-0.5 font-semibold">{session.hostDisplayName ?? "Deleted user"}</dd>
+            <dt className="text-sm text-ink-2">Host</dt>
+            <dd className="mt-0.5 font-semibold text-ink">
+              {session.hostDisplayName ?? "Deleted user"}
+            </dd>
           </div>
         </dl>
 
         {upcoming && (
-          <a href={`/sessions/${session.id}/calendar.ics`} download className={`${LINK_ON_DARK} mt-2 gap-1.5`}>
-            <Icon name="calendar" className="size-4" />
+          <a href={`/sessions/${session.id}/calendar.ics`} download className={`${LINK} mt-2 gap-1.5`}>
+            <Icon name="calendar" className="size-[18px]" />
             Add to calendar
           </a>
         )}

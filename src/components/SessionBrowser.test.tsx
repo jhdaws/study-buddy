@@ -32,21 +32,18 @@ function session(overrides: Partial<SessionListItem> = {}): SessionListItem {
 const plain = (text: string | null) => (text ?? "").replace(/\s+/g, " ");
 
 describe("<SessionCard>", () => {
-  it("shows how many are going out of the capacity", () => {
-    render(<SessionCard session={session({ capacity: 6, attendeeCount: 4, seatsLeft: 2 })} now={now} />);
-    expect(screen.getByText("4 of 6 going")).toBeTruthy();
+  it("offers the session as a calendar download (US-19)", () => {
+    render(<SessionCard session={session()} now={now} />);
+    const link = screen.getByRole("link", { name: /add to calendar/i });
+    expect(link.getAttribute("href")).toBe("/sessions/30000000-0000-4000-8000-000000000099/calendar.ics");
+    expect(link.hasAttribute("download")).toBe(true);
   });
 
-  it("renders a compact card with the same facts for the home feed", () => {
-    render(<SessionCard session={session()} now={now} variant="compact" />);
-    const card = screen.getByRole("article");
-    expect(plain(within(card).getByRole("heading").textContent)).toBe(
-      "CS 3251 · Intermediate Software Design",
-    );
-    expect(within(card).getByText("Design patterns review")).toBeTruthy();
-    expect(within(card).getByText("2 seats left")).toBeTruthy();
-    expect(within(card).getByText("Priya")).toBeTruthy();
-    expect(card.querySelector("time")?.getAttribute("dateTime")).toBe("2026-10-01T19:00:00.000Z");
+  it("shows the day above the time only when asked", () => {
+    const { rerender } = render(<SessionCard session={session()} now={now} />);
+    expect(screen.queryByText("Today")).toBeNull();
+    rerender(<SessionCard session={session()} now={now} showDay />);
+    expect(screen.getByText("Today")).toBeTruthy();
   });
 
   it("shows the course, topic, place, room, campus time and host", () => {
@@ -54,15 +51,17 @@ describe("<SessionCard>", () => {
     const card = screen.getByRole("article");
 
     expect(plain(within(card).getByRole("heading").textContent)).toBe(
-      "CS 3251 · Intermediate Software Design",
+      "CS 3251 Intermediate Software Design",
     );
     expect(within(card).getByText("Design patterns review")).toBeTruthy();
     expect(plain(within(card).getByText(/Featheringill Hall/).textContent)).toBe(
-      "Featheringill Hall · 2nd floor study area",
+      "Featheringill Hall, 2nd floor study area",
     );
+    // Campus time: 19:00 UTC is 2 PM in Nashville, whatever the machine's zone.
     const time = card.querySelector("time")!;
     expect(time.getAttribute("dateTime")).toBe("2026-10-01T19:00:00.000Z");
-    expect(plain(time.textContent)).toBe("Today · 2:00 – 4:00 PM");
+    expect(plain(time.textContent)).toBe("2:00 PM");
+    expect(plain(card.textContent)).toContain("to 4:00 PM");
     expect(within(card).getByText("Priya")).toBeTruthy();
   });
 
@@ -170,7 +169,7 @@ describe("<SessionBrowser> search and filters", () => {
   it("narrows the list as the student types, and says how many match", () => {
     render(<SessionBrowser sessions={sessions} now={now} />);
     fireEvent.change(screen.getByLabelText("Search sessions"), { target: { value: "linear" } });
-    expect(headings()).toEqual(["MATH 2410 · Methods of Linear Algebra"]);
+    expect(headings()).toEqual(["MATH 2410 Methods of Linear Algebra"]);
     expect(screen.getByText(/Showing 1 of 3 sessions/)).toBeTruthy();
   });
 
@@ -193,7 +192,7 @@ describe("<SessionBrowser> search and filters", () => {
     render(<SessionBrowser sessions={sessions} now={now} />);
     fireEvent.change(screen.getByLabelText("Search sessions"), { target: { value: "ECON 3012" } });
     expect(screen.queryByRole("article")).toBeNull();
-    expect(screen.getByRole("heading", { name: /Nothing for .ECON 3012. yet/ })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: /No sessions for .ECON 3012. yet/ })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Host a session" }).getAttribute("href")).toBe("/sessions/new");
   });
 });

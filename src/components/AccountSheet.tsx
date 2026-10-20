@@ -25,7 +25,6 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { signOut } from "@/app/login/actions";
-import Icon from "@/components/ui/Icon";
 import { BUTTON_SECONDARY } from "@/components/ui/styles";
 import { formatInitial } from "@/lib/format";
 
@@ -64,9 +63,11 @@ export default function AccountSheet({
         aria-expanded={open}
         aria-label="Account"
         onClick={() => setOpen(true)}
-        className="grid size-11 place-items-center rounded-full bg-navy-900 text-base font-bold text-white ring-offset-2 ring-offset-sky-50 hover:ring-2 hover:ring-blue-300"
+        className="grid size-11 place-items-center rounded-full"
       >
-        {formatInitial(displayName)}
+        <span className="grid size-9 place-items-center rounded-full bg-brand text-sm font-bold text-white">
+          {formatInitial(displayName)}
+        </span>
       </button>
 
       {open &&
@@ -77,44 +78,34 @@ export default function AccountSheet({
               aria-label="Close"
               tabIndex={-1}
               onClick={() => setOpen(false)}
-              className="absolute inset-0 bg-navy-950/40 backdrop-blur-[2px] sm:bg-navy-950/10 sm:backdrop-blur-none"
+              className="absolute inset-0 bg-ink/30 sm:bg-transparent"
             />
             <div
               ref={sheet}
               role="dialog"
               aria-modal="true"
               aria-labelledby={titleId}
-              className="glass-dark absolute inset-x-0 bottom-0 rounded-t-hero p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-white sm:inset-x-auto sm:top-16 sm:right-4 sm:bottom-auto sm:w-80 sm:rounded-card"
+              className="absolute inset-x-0 bottom-0 rounded-t-2xl border border-line bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] text-ink shadow-xl sm:inset-x-auto sm:top-14 sm:right-4 sm:bottom-auto sm:w-80 sm:rounded-2xl"
             >
               <span
                 aria-hidden
-                className="mx-auto mb-4 block h-1 w-10 rounded-full bg-white/30 sm:hidden"
+                className="mx-auto mb-4 block h-1 w-10 rounded-full bg-line sm:hidden"
               />
-              <div className="flex items-center gap-3 border-b border-white/10 pb-4">
-                <span
-                  aria-hidden
-                  className="grid size-11 place-items-center rounded-full bg-blue-600 text-base font-bold"
-                >
-                  {formatInitial(displayName)}
-                </span>
-                <div>
-                  <p className="font-bold">{displayName ?? "Your account"}</p>
-                  <p className="text-sm text-white/72">Your display name</p>
-                </div>
-              </div>
-              <h2 id={titleId} className="mt-4 text-xl font-extrabold">
+              <p className="text-[15px] text-ink-2">
+                Signed in as <span className="font-semibold text-ink">{displayName ?? "you"}</span>
+              </p>
+              <h2 id={titleId} className="mt-3 text-[17px] font-bold">
                 Sign out of Study Buddy?
               </h2>
-              <p className="mt-1 text-sm text-white/80">
+              <p className="mt-1 text-sm text-ink-2">
                 To sign back in, you&apos;ll need a new code from your
                 Vanderbilt email.
               </p>
               <form action={signOut} className="mt-5">
                 <button
                   type="submit"
-                  className="inline-flex h-12 min-h-11 w-full items-center justify-center gap-2 rounded-full bg-danger px-6 text-base font-bold text-white hover:bg-danger/90"
+                  className="inline-flex h-11 min-h-11 w-full items-center justify-center rounded-xl bg-danger-on-light px-4 text-[15px] font-semibold text-white hover:bg-danger-on-light/90"
                 >
-                  <Icon name="logout" />
                   Sign out
                 </button>
               </form>
@@ -122,7 +113,7 @@ export default function AccountSheet({
                 ref={cancel}
                 type="button"
                 onClick={() => setOpen(false)}
-                className={`${BUTTON_SECONDARY} mt-3 w-full`}
+                className={`${BUTTON_SECONDARY} mt-2 w-full`}
               >
                 Cancel
               </button>

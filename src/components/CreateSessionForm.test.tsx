@@ -407,7 +407,7 @@ describe("<CreateSessionForm> capacity stepper and preview", () => {
 
     expect(preview().textContent).toContain("Design patterns review");
     expect(preview().textContent).toContain("CS");
-    expect(preview().textContent).toContain("1 of 3 going");
-    expect(preview().textContent).toContain("You");
+    expect(preview().textContent).toContain("2 seats left");
+    expect(preview().textContent).toContain("Hosted by you");
   });
 });

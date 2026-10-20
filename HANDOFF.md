@@ -327,6 +327,105 @@ confirmation is CI's `db` job on the next push**, not this session.
 - S6 (#52) is the other ticket assigned to Nate and is now unblocked for its
   read half. Its buttons still need S5 (#51), open as PR #73.
 
+## 2026-10-18 · #55 updated from main; public demo account replaced by a gated test login
+
+### What changed
+
+On `ui-calm-pass` (#55): merged `main` (conflicts in `docs/ai-usage-log.md`,
+`supabase/README.md`; Jack's step 6 kept, test login is step 7). The
+`njpm@vanderbilt.edu` / `123456` demo account from 2026-10-12 is gone, per
+Jack's review: the repo is public. In its place, `src/lib/test-login.ts`: the
+address in `TEST_LOGIN_EMAIL` (meant to be `group4@vanderbilt.edu`) skips the
+email and signs in with its password; ignored whenever `VERCEL_ENV` is
+production. The code is set only in Supabase and shared privately.
+
+### Open questions for the user
+
+Not done, needs a person: create `group4@vanderbilt.edu` in hosted Supabase
+with a private 6-10 digit password, and set `TEST_LOGIN_EMAIL` in Vercel
+for Preview only. #55's title and description still need `US-nn` and a
+summary (Jack's review).
+
+### Things the next agent should be careful about
+
+The test user lives in the hosted project that production also uses, so its
+password is a real credential: never write it in the repo or in chat logs.
+Local Supabase could not start in the cloud container (Docker Hub and ECR
+pulls are refused), so nothing here ran against a real Supabase.
+
+## 2026-10-12 · Sign-in email is code-only; demo account njpm@vanderbilt.edu
+
+### What changed
+
+On branch `ui-calm-pass`. The sign-in email template now carries only the
+code (`{{ .Token }}`); the link is gone (Outlook link scanning spent the
+shared token). `/auth/confirm` and `emailRedirectTo` stay for old emails.
+New demo account: `njpm@vanderbilt.edu` sends no email and signs in with
+code `123456`, which is that user's password in Supabase Auth
+(`src/lib/demo-account.ts`). Docs: `supabase/README.md` sections 2 and 6.
+
+### Uncommitted at end of session
+
+Nothing; committed and pushed on `ui-calm-pass` (no PR open yet).
+
+### Open questions for the user
+
+The hosted dashboard still needs: the template pasted into both "Magic
+link" and "Confirm signup", and the demo user created (Add user, password
+`123456`, Auto Confirm). Neither has been confirmed done.
+
+### Things the next agent should be careful about
+
+Supabase has no "codes instead of links" toggle; the template decides. If
+production emails arrive with a link and no code, the dashboard template was
+never replaced. The demo account only works where the user exists, and is
+public by design.
+
+## 2026-10-11 (late) · Calm UI pass; sign-in blocked by the email rate limit
+
+**Branch:** `ui-calm-pass`, from `main` at `e94cf8e` · **Commits made:** one.
+
+### What changed
+- **Look only.** Moses found the glass/gradient UI oversized and "generated".
+  Now: white surfaces on `paper`, one type scale (13/15/17/22/28), sentence
+  case, no all-caps labels, no gradients outside the sign-in scene. New
+  tokens in `globals.css`; `ui/styles.ts` has a light set and an `_ON_DARK`
+  set (sign-in only).
+- **Sessions are timetable rows** (`SessionCard`): start time in a left rail,
+  course on one truncated line, topic, place, host, seats on the right, and
+  an "Add to calendar" link to US-19's `.ics` route -- this answers the open
+  question in the US-19 entry below (the link lives on the row).
+- Home is rebuilt on the same rows: greeting, status line, "Next up", the
+  next few under day headings. The ring, tiles and desktop grid are gone.
+- Jack's `AccountSheet` focus fixes (#44) kept; only its classes changed.
+
+### Verified versus assumed
+- **Verified:** lint, typecheck, 364 unit tests, `next build`; screenshots at
+  375 and 1440 px against the throwaway fake Supabase.
+- **Not verified:** real data, real phones.
+
+### Sign-in on production (tried tonight)
+- Production (`study-buddy-jdaws.vercel.app`) serves the new sign-in page.
+- The first email arrived **without a code**: the hosted project still uses
+  Supabase's default template. Its link cannot work either: `/auth/confirm`
+  only accepts `token_hash`. Fix: A1 step 2 in `supabase/README.md`.
+- Later sends failed with "Too many sign-in emails have gone out recently":
+  the built-in sender's hourly cap. Fix for good: custom SMTP (A5).
+- One earlier attempt showed an empty email step with no error after a 200
+  POST; not reproduced -- the next attempt showed the rate-limit error
+  correctly. Watch for it once SMTP is set up.
+
+### Open questions for the user
+- Apply the A1 hosted settings (template, URLs, OTP length) and set up SMTP.
+- The Supabase connector was never connected, so the hosted migrations are
+  unchecked.
+
+### Things the next agent should be careful about
+- `hidden md:inline-flex` on an element that also gets `inline-flex` from a
+  shared class string does not hide it: both are display utilities and the
+  later one in the stylesheet wins. Wrap the element in a `hidden md:block`
+  div instead (done on the home and sessions pages).
+
 ---
 
 ## 2026-10-11 · Rebuilt Track A by mistake, then shipped US-19 instead

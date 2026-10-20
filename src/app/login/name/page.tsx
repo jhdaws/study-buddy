@@ -50,7 +50,7 @@ export default async function DisplayNamePage({
   return (
     <AuthScene>
       <main>
-        <h1 className="text-center text-3xl leading-tight font-extrabold tracking-tight">
+        <h1 className="text-center text-[26px] leading-tight font-bold tracking-tight">
           What should classmates call you?
         </h1>
         <p className="mt-2 mb-6 text-center text-base text-white/80">

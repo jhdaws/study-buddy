@@ -20,12 +20,12 @@ import { useActionState, useId, useState } from "react";
 
 import { saveDisplayName, type DisplayNameState } from "@/app/login/actions";
 import {
-  BUTTON_PRIMARY,
+  BUTTON_ON_DARK,
   FIELD,
-  FIELD_ERROR,
-  FORM_ERROR,
-  INPUT,
-  LABEL,
+  FIELD_ERROR_ON_DARK,
+  FORM_ERROR_ON_DARK,
+  INPUT_ON_DARK,
+  LABEL_ON_DARK,
 } from "@/components/ui/styles";
 import { DISPLAY_NAME_MAX_LENGTH } from "@/lib/limits";
 
@@ -59,7 +59,7 @@ export default function DisplayNameForm({ next, initialState = {} }: DisplayName
       {next && <input type="hidden" name="next" value={next} />}
       <div className={FIELD}>
         <div className="flex items-baseline justify-between gap-3">
-          <label htmlFor={ids.input} className={LABEL}>
+          <label htmlFor={ids.input} className={LABEL_ON_DARK}>
             Display name
           </label>
           <span id={ids.count} aria-live="polite" className="px-1 text-sm text-white/72">
@@ -78,23 +78,23 @@ export default function DisplayNameForm({ next, initialState = {} }: DisplayName
           onChange={(event) => setName(event.target.value)}
           aria-invalid={error ? true : undefined}
           aria-describedby={[ids.hint, error && ids.error].filter(Boolean).join(" ")}
-          className={INPUT}
+          className={INPUT_ON_DARK}
         />
         <p id={ids.hint} className="px-1 text-sm text-white/72">
           Your first name is fine. Up to {DISPLAY_NAME_MAX_LENGTH} characters.
         </p>
         {error && (
-          <p id={ids.error} role="alert" className={FIELD_ERROR}>
+          <p id={ids.error} role="alert" className={FIELD_ERROR_ON_DARK}>
             {error}
           </p>
         )}
       </div>
       {state.formError && (
-        <p role="alert" className={FORM_ERROR}>
+        <p role="alert" className={FORM_ERROR_ON_DARK}>
           {state.formError}
         </p>
       )}
-      <button type="submit" disabled={pending} className={`${BUTTON_PRIMARY} w-full`}>
+      <button type="submit" disabled={pending} className={`${BUTTON_ON_DARK} w-full`}>
         {pending ? "Saving…" : "Continue"}
       </button>
     </form>
