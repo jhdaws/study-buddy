@@ -14,8 +14,10 @@
 //     and the CHECKs on sessions, departments and courses
 //     (*_s1_session_rules.sql, *_s2_course_normalization.sql,
 //     *_session_text_limits.sql).
+//   - S5: what join_session and leave_session raise
+//     (*_join_leave_session.sql).
 // Still to come:
-//   - Later: the join routine's (session full, cancelled, ended, not signed in).
+//   - Later: cancelling a session (US-09, host only) and chat (US-05).
 
 /** For anything we have not mapped. Says nothing about the cause. */
 export const GENERIC_ERROR_MESSAGE =
@@ -69,6 +71,14 @@ const RAISED_MESSAGES: Record<string, string> = {
   starts_in_past: "That start time has already passed.",
   department_required: "Choose or add a department.",
   invalid_course_number: "Enter a 4-digit course number, like 3251 or 2100W.",
+  // S5: join_session and leave_session.
+  session_not_found: "That session doesn't exist anymore.",
+  session_cancelled: "This session has been cancelled.",
+  session_ended: "This session has already ended.",
+  already_joined: "You're already on the roster for this session.",
+  session_full: "This session is full.",
+  not_joined: "You're not on the roster for this session.",
+  host_cannot_leave: "As the host, you can't leave — cancel the session instead.",
 };
 
 /** SQLSTATE codes with one meaning wherever they come from. */
@@ -109,7 +119,7 @@ export type AuthErrorLike = {
 };
 
 export const SIGN_IN_RATE_LIMITED_MESSAGE =
-  "Too many sign-in emails have gone out recently. Wait a minute, then try again.";
+  "Too many sign-in emails have gone out recently. Try again in a few minutes.";
 
 const SIGN_IN_MESSAGES: Record<string, string> = {
   // The per-address 60-second throttle and the project's hourly email cap

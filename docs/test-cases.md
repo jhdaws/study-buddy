@@ -9,19 +9,20 @@ mapping stays honest as the code changes.
 
 Status: ⬜ not yet written · 🚧 partially covered · ✅ automated and passing
 
-**Everything is ⬜ except US-01, US-01b, US-02b, US-16 and US-21, which are
-🚧.** None of the sign-in rows has run against Supabase: the A3 tests mock it,
-and US-01b's database test has not yet run on a Supabase database. An earlier
-scaffold had 15 passing unit tests; it was stripped back so the schema can be
-designed first. The tests in the repo today cover environment configuration,
-the form validation rules, the W4 fixtures and the location picker's props,
-the W5 screens as components (session card, list, empty state, create form,
-header) and their time formatting, M3's location rules (distance, excluded
-place types, reading Google's responses), prove the database harness works, guard
-that every table has Row Level Security enabled, and check the starter data
-loaded. Only the validation tests and the W5 component tests touch a row
-below, and neither completes one: **the UI runs on fixture stubs, so no
-acceptance criterion is verified end to end.**
+**Everything is ⬜ except the rows marked 🚧 or ✅ below.** None of the sign-in rows has run against
+Supabase: the A3 tests mock it, and US-01b's database test has not yet run on
+a Supabase database. An earlier scaffold had 15 passing unit tests; it was
+stripped back so the schema can be designed first. The tests in the repo
+today cover environment configuration, the form validation rules, the W4
+fixtures and the location picker's props, the W5 screens as components
+(session card, list, empty state, create form, header) and their time
+formatting, M3's location rules (distance, excluded place types, reading
+Google's responses), join_session()/leave_session()'s rules including the
+US-07b race (S5, unverified — no Docker), guard that every table has Row
+Level Security enabled, and check the starter data loaded. Only the
+validation tests and the W5 component tests touch a row below, and neither
+completes one: **the UI runs on fixture stubs, so no acceptance criterion is
+verified end to end.**
 
 | ID | Status | Given | When | Then | Verified by |
 | --- | --- | --- | --- | --- | --- |
@@ -31,16 +32,16 @@ acceptance criterion is verified end to end.**
 | US-02 | 🚧 | A signed-in student is on Create Session | They submit course, topic, a place (from Google Places — there is no building list, ADR 0008), room, time range, capacity | The session is saved, the host is added to the roster, and a pin appears on the map | Unit test + integration test. **Unit:** `src/app/sessions/actions.test.ts` (`createSession`: the order of the steps, the RPC arguments, every error path), `src/lib/places.test.ts` (`resolvePlace`, Google mocked), `geo.test.ts`, `place-policy.test.ts`. **Database:** `tests/db/session-rules.test.ts`, `course-normalization.test.ts`, `session-text-limits.test.ts`, `locations.test.ts`, on real Postgres in CI. **End to end:** `tests/e2e/journeys.spec.ts`, journey 2 — the form through the server action and both RPCs into Postgres, then the saved row checked: capacity, one attendee, the host's name. **Not yet:** a pin on the map (M4), and creating on production, where the stub picker's places have no location rows (BUG-09, M5); `resolvePlace` has never called Google (no key, M1) |
 | US-02b | 🚧 | A signed-in student is on Create Session | They submit an end time before the start, or a time in the past | Submission is blocked with a field-level error | Unit test: `src/lib/validation.test.ts`, the "US-02b" block — the rule and its field-level messages. Component test: `src/components/CreateSessionForm.test.tsx` — the form shows a `startsAt`/`endsAt` error beside its input (`role="alert"`, `aria-describedby`) and keeps what was typed (W5). **Not yet:** the database refusing them (S1) |
 | US-03 | ⬜ | Three upcoming sessions and one ended session exist | A signed-in student opens the map | Three pins appear, the ended one does not; tapping a pin shows course, time, and seats left | Manual on staging — Sprint 3. **So far (list half, not the map):** `SessionBrowser.test.tsx` renders course, time and seats left per card; the ended/cancelled filter is only the fixture stub's (`fixtures.test.ts`) until S4 |
-| US-04 | ⬜ | A signed-in student views an open session with space | They tap Join | Attendee count increases by one, their name appears on the roster, and the chat unlocks | E2E — Sprint 3 |
+| US-04 | 🚧 | A signed-in student views an open session with space | They tap Join | Attendee count increases by one, their name appears on the roster, and the chat unlocks | E2E — Sprint 3. **So far (S5):** `join_session()` seats the caller and holds the row lock that makes the count correct; `joinSession()` server action unit-tested (`src/app/sessions/actions.test.ts`) with Supabase mocked. **Not yet:** the tap itself — no Join button exists until S6 wires `<SessionRoster>`; chat is a later sprint **End to end (S6):** `tests/e2e/journeys.spec.ts`, journey 4 — a second student opens the session from its card, taps Join, sees their name on the roster and the count go from 1 to 2 of 4, and the list agree. `SessionRoster.test.tsx` checks the button calls `joinSession` for this session. **Not yet:** "the chat unlocks" — chat is US-05, a later sprint |
 | US-05 | ⬜ | A student has joined a session with at least one other attendee | They type a message and send | It appears for every attendee within a second, tagged with sender and timestamp | Two-client manual test, then E2E |
 | US-05b | ⬜ | A student has **not** joined a session | They query the messages table for it | No rows are returned | Database authorization rule — needs a DB test |
-| US-07 | ⬜ | A session has reached capacity | A new student attempts to join | The join is rejected, the button reads "Session full", and the count does not change | Unit test on message mapping |
-| **US-07b** | ⬜ | A session has exactly one seat left | **Two students attempt to join at the same moment** | Exactly one succeeds; the other is told the session is full; the roster never exceeds capacity | **DB concurrency test — see below** |
-| US-08 | ⬜ | A student has joined a session | They tap Leave | They disappear from the roster and the seat is released | E2E — Sprint 3 |
+| US-07 | ✅ | A session has reached capacity | A new student attempts to join | The join is rejected, the button reads "Session full", and the count does not change | Unit test on message mapping. **So far (S5):** `join_session()` refuses a full roster with `session_full`, mapped to "This session is full." (`errors.test.ts`). **The button (S6):** `SessionRoster.test.tsx` — on a full session it reads "Session full", is disabled and says why; `roster.test.ts` — `rosterAction()` offers it instead of Join, but still offers Leave to someone on the roster. A refused join shows the message and refreshes the stale roster |
+| **US-07b** | 🚧 | A session has exactly one seat left | **Two students attempt to join at the same moment** | Exactly one succeeds; the other is told the session is full; the roster never exceeds capacity | **DB concurrency test — see below.** `tests/db/join-leave-session.test.ts` (S5) replaces `tests/db/harness.test.ts`'s advisory-lock stand-in with two real `join_session()` calls. **Not yet run against a real database — no Docker when written; see HANDOFF.md** |
+| US-08 | ✅ | A student has joined a session | They tap Leave | They disappear from the roster and the seat is released | E2E — Sprint 3. **So far (S5):** `leave_session()` removes the caller and refuses the host; `leaveSession()` server action unit-tested. **End to end (S6):** journey 4 in `tests/e2e/journeys.spec.ts` — after joining, the student taps Leave, disappears from the roster, and the count returns to 1 of 4 |
 | US-09 | ⬜ | A host owns an open session | They cancel it | Attendees see a cancellation notice and new joins are rejected | E2E — Sprint 4 |
 | US-06 / US-12 | 🚧 | Several sessions exist across courses and campus zones *(zone data no longer exists — US-12 needs rethinking, ADR 0008)* | A student applies a course or zone filter | Only matching sessions remain; clearing the filter restores all | Component test — Sprint 3. **So far (US-06, client side only):** `src/lib/session-filters.test.ts` and `SessionBrowser.test.tsx` — search by course code (any spelling), title, topic or place, plus Today / This week / Has seats chips, over the sessions already loaded. **Not yet:** filtering in `listSessions()` (sessions not loaded), and US-12 has no zone data |
 | US-16 | 🚧 | No sessions exist for a student's course | They open the session list | The empty state invites them to start one or post a request | Component test: `src/components/SessionBrowser.test.tsx` — an empty list shows an invitation linking to `/sessions/new`. **Not yet:** "for a student's course" needs the course filter (US-06); "post a request" needs study requests (later sprint) |
-| US-23 | ⬜ | A student is deciding whether to walk across campus | They open a session | They see who is already attending before joining | E2E |
+| US-23 | ✅ | A student is deciding whether to walk across campus | They open a session | They see who is already attending before joining | **End to end (S6):** journey 4 in `tests/e2e/journeys.spec.ts` — before joining, the session page lists the host by name and "1 of 4 going". `SessionRoster.test.tsx` — names in roster order, host marked, the viewer marked "(you)"; `sessions.test.ts` — `getSession()` orders the host first and never selects an email (US-25) |
 | US-11b | ⬜ | A signed-in student queries another student's profile row | They request the `email` column | The request is denied; name, major, and year are returned | Column-level access control — needs a DB test |
 
 ## US-07b is the one to write first
@@ -64,12 +65,16 @@ The exact call depends on the schema decision (TASK-00). What matters is that
 B blocks until A commits, and then fails — rather than reading a stale count
 and succeeding.
 
-Write it as soon as there is a schema. The local database and the harness
-already exist: `tests/db/harness.test.ts` runs exactly this shape with an
-advisory lock standing in for the join, and was checked to fail when the two
-connections do not contend. Note what the test does *not* need: a browser, a
-running app, or two people clicking. Two connections and a transaction are
-enough.
+**Written (S5), real shape, not yet run for real.**
+`tests/db/join-leave-session.test.ts` races two `join_session()` calls for a
+session with exactly one seat left (`Promise.allSettled`, not
+`Promise.all` — both results, win or lose, are checked); `harness.test.ts`'s
+advisory-lock stand-in is deleted now that the real thing exists. No Docker
+in the environment that wrote it, so this has only been checked for shape
+(types, no connection-time errors) — not for the actual race. **Run
+`npm run db:start && npm run test:db` before trusting it.** Note what the
+test does *not* need: a browser, a running app, or two people clicking. Two
+connections and a transaction are enough.
 
 **Why Vitest with two `pg` clients rather than pgTAP.** pgTAP runs each test
 file inside a single database session, so one connection cannot block on

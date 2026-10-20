@@ -228,6 +228,23 @@ verified sender domain) and then raise the email rate limit under
 Authentication → Rate Limits. Its credentials belong in the dashboard only,
 never in this repository.
 
+**Without custom SMTP (where the hosted project is now).** Supabase sends
+its own default email: a link and no code, because our template stays locked
+(step 2). That link goes through Supabase and comes back to `/auth/confirm`
+with a one-time `code`. Since A5, `/auth/confirm` exchanges it, so **the link
+signs the student in when opened on the device and browser they asked
+from**. Opened anywhere else, it fails with a message saying so. To sign
+people in on production this way:
+
+1. Do step 1 (URL Configuration), or the link comes back to the Site URL
+   default (`localhost`) instead of production.
+2. Add each tester to the Supabase organization (Organization settings →
+   Team → Invite), because the built-in sender only delivers to members.
+3. Each tester asks for the email on the device they will use, and opens the
+   link there. The code boxes on `/login` stay empty: this email has no code.
+4. Mind the limit of 2 emails an hour for the whole project. For more, use
+   step 6 (`npm run auth:link`) or custom SMTP.
+
 ### 5. Not a Supabase setting, but blocks sign-in
 
 Production was behind Vercel's login (Deployment Protection — W1). Turned off:

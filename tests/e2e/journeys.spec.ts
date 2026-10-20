@@ -16,12 +16,22 @@ test("journey 1: a new student signs in with a code, names themselves, and lands
   await expect(page.getByRole("button", { name: "Account" })).toHaveText("R");
 });
 
+/**
+ * The session journey 2 hosts, which journey 3 then looks for as a different
+ * student. They share it through the file rather than each creating their own
+ * because the point of journey 3 is that one student sees *another's* session:
+ * playwright.config.ts runs the journeys one at a time, in order, against one
+ * database (`workers: 1`).
+ */
+let hostedTopic: string | null = null;
+
 test("journey 2: a signed-in student hosts a session, and it is saved with them on the roster", async ({
   page,
 }) => {
   await signInAsNewStudent(page, newStudentEmail("journey2"), "Harper Host");
 
   const topic = `E2E host journey ${Date.now()}`;
+  hostedTopic = topic;
   await page.getByLabel("Department").selectOption("CS");
   await page.getByLabel("Course number").fill("3251");
   await page.getByLabel("What are you studying?").fill(topic);
@@ -33,7 +43,13 @@ test("journey 2: a signed-in student hosts a session, and it is saved with them 
 
   await expect(page).toHaveURL("/sessions");
 
-  // The list still reads fixtures until S4 (#21), so check the database.
+  // Since S4 (#21) the list is read from the database, so the host sees the
+  // session they just created rather than a fixture that resembles it.
+  await expect(page.locator("article").filter({ hasText: topic })).toBeVisible();
+
+  // The roster is still worth checking in the database: the list shows a seat
+  // count, but only the table shows that the host was seated in the same
+  // transaction as the session (S1's create_session).
   const db = await connect();
   try {
     const { rows } = await db.query<{ capacity: number; attendees: number; host: string }>(
@@ -49,6 +65,73 @@ test("journey 2: a signed-in student hosts a session, and it is saved with them 
   } finally {
     await db.end();
   }
+});
+
+test("journey 3: another student sees the session in the list with the right seats left", async ({
+  page,
+}) => {
+  if (hostedTopic === null) {
+    throw new Error("Journey 3 reads the session journey 2 hosts; journey 2 did not get that far.");
+  }
+
+  await signInAsNewStudent(page, newStudentEmail("journey3"), "Robin Reader", "/sessions");
+
+  // Found by its topic rather than by position: the list is every open
+  // session on this database, so the one journey 2 made is not the only one.
+  const card = page.locator("article").filter({ hasText: hostedTopic });
+  await expect(card).toBeVisible();
+
+  await expect(card).toContainText("CS 3251");
+  // The host's display name comes from profiles through A2's read policy --
+  // the part of the card a signed-out or policy-less reader cannot get.
+  await expect(card).toContainText("Harper Host");
+  // Capacity 4 with only the host on the roster. Derived from
+  // session_attendees on every read, never stored (ADR 0008 rule 9).
+  await expect(card).toContainText("3 seats left");
+});
+
+test("journey 4: another student opens the session, joins it, and leaves again (US-04, US-08, US-23)", async ({
+  page,
+}) => {
+  if (hostedTopic === null) {
+    throw new Error("Journey 4 joins the session journey 2 hosts; journey 2 did not get that far.");
+  }
+  const topic = hostedTopic;
+
+  await signInAsNewStudent(page, newStudentEmail("journey4"), "Jordan Joiner", "/sessions");
+
+  // The whole card links to the session page (S6); the course is the link's
+  // name. (The card's other link is "Add to calendar".)
+  const openSession = async () => {
+    await page
+      .locator("article")
+      .filter({ hasText: topic })
+      .getByRole("link", { name: /^CS 3251/ })
+      .click();
+    await expect(page).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+  };
+  await openSession();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(topic);
+
+  // Before joining, the student can already see who is going (US-23).
+  const roster = page.getByRole("region", { name: "Who's going" });
+  await expect(roster).toContainText("Harper Host");
+  await expect(roster).toContainText("1 of 4 going");
+
+  await roster.getByRole("button", { name: "Join session" }).click();
+  await expect(roster.getByText("You're going.")).toBeVisible();
+  await expect(roster).toContainText("Jordan Joiner (you)");
+  await expect(roster).toContainText("2 of 4 going");
+
+  // The list counts the same roster: seats left is derived on every read.
+  await page.goto("/sessions");
+  await expect(page.locator("article").filter({ hasText: topic })).toContainText("2 seats left");
+
+  await openSession();
+  await roster.getByRole("button", { name: "Leave session" }).click();
+  await expect(roster.getByRole("button", { name: "Join session" })).toBeVisible();
+  await expect(roster).toContainText("1 of 4 going");
+  await expect(roster).not.toContainText("Jordan Joiner");
 });
 
 test("sign-out (US-21): the session ends, and private pages send the student back to sign in", async ({
@@ -83,8 +166,4 @@ test("calendar download (US-19): a session from the list downloads as an .ics ev
   const body = await response.text();
   expect(body.startsWith("BEGIN:VCALENDAR\r\n")).toBe(true);
   expect(body).toContain(`UID:${sessionId}@study-buddy`);
-});
-
-test("journey 3: another student sees the session in the list with the right seats left", async () => {
-  test.fixme(true, "Needs S4 (#21): the session list still reads fixture data, not the database.");
 });

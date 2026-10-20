@@ -84,10 +84,9 @@ The main journeys run in a real browser with `npm run test:e2e` (Playwright,
 sign-in codes read from Mailpit. They refuse any non-local Supabase, because
 they create users. CI runs them in the `e2e` job.
 
-`tests/db/harness.test.ts` only proves the database harness works. **Delete it
-once US-07b lands.** `docs/test-cases.md` tracks what is genuinely verified
-versus what is assumed — keep it honest, because a green CI badge should never
-imply coverage we do not have.
+`docs/test-cases.md` tracks what is genuinely verified versus what is
+assumed — keep it honest, because a green CI badge should never imply
+coverage we do not have.
 
 ## Bugs
 

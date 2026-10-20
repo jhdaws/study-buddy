@@ -26,9 +26,10 @@ detail than the table below. Read it before you start.
 | Route protection | `src/lib/supabase/proxy.ts` | `updateSession(request)`, `isProtectedPath(pathname)` | A4 [#17](https://github.com/jhdaws/study-buddy/issues/17) | — | Signed-out `GET`/`HEAD` of `/sessions` or `/sessions/*` → `307 /login?next=<path+query>`, carrying every refreshed cookie and no-cache header; POSTs (Server Actions) and `/api/*` are never redirected. Sets `REQUEST_PATH_HEADER` on every request |
 | Sign out | `src/app/login/actions.ts` | `signOut(): Promise<void>` | A3 [#16](https://github.com/jhdaws/study-buddy/issues/16) | **Replaced by A3.** | Done: `supabase.auth.signOut({ scope: "local" })` — this device only (US-21: a shared device) — then `redirect("/")` |
 | Create a session | `src/app/sessions/actions.ts` | `createSession(prev: CreateSessionState, formData: FormData): Promise<CreateSessionState>` | S3 [#20](https://github.com/jhdaws/study-buddy/issues/20) | `requireUser()`; validates with `createSessionSchema()`; checks the place with `resolvePlace()`; redirects to `/sessions`. **Saves nothing** — the new session does not appear | `requireUser()` → validate → `resolvePlace()` → S2's create-on-use course → S1's `create_session` → database errors via `errors.ts` → `redirect("/sessions")` outside any `try` |
-| Session list | `src/lib/sessions.ts` | `listSessions(): Promise<SessionListItem[]>` | S4 [#21](https://github.com/jhdaws/study-buddy/issues/21) | The four listable fixture sessions, soonest first (one full, one host-only) | Query through the cookie-bound client so RLS applies; leave out cancelled and ended (`ends_at <= now()`); derive `attendeeCount` from the roster; soonest first; a view, if used, must be `security_invoker` |
-| Departments | `src/lib/sessions.ts` | `listDepartments(): Promise<Department[]>` | S4 [#21](https://github.com/jhdaws/study-buddy/issues/21) | The five fixture departments, ordered by code | Read `departments`, leave out merged ones, order by code |
-| Course search | `src/lib/sessions.ts` | `searchCourses(departmentCode: string, query: string): Promise<CourseSuggestion[]>` | S4 [#21](https://github.com/jhdaws/study-buddy/issues/21), with S2's [#19](https://github.com/jhdaws/study-buddy/issues/19) normalisers | Fixture courses in the department whose number starts with the query or whose title contains it; most-used first; at most `COURSE_SUGGESTION_LIMIT` (8) | Normalise both arguments (S2); leave out merged courses; order by session count (all sessions, ever), then number; limit; `[]` for an unknown department |
+| Session list | `src/lib/sessions.ts` | `listSessions(): Promise<SessionListItem[]>` | S4 [#21](https://github.com/jhdaws/study-buddy/issues/21) | **Replaced by S4.** | Done: one query through the cookie-bound client, so S1's policies apply; `status = 'open'` and `ends_at=gt.now` (`now` is a Postgres literal, so the comparison uses the **database's** clock); `session_attendees (count)` for `attendeeCount`, so Postgres counts the roster; `starts_at` ascending. No view, so no `security_invoker` to get wrong. The host embed **must** be `profiles!sessions_host_id_fkey` — a plain `profiles` is ambiguous (host_id, or a many-to-many hop through `session_attendees`) and fails at runtime with `PGRST201` |
+| Session page | `src/lib/sessions.ts` | `getSession(id: string): Promise<SessionDetail \| null>` | S6 [#52](https://github.com/jhdaws/study-buddy/issues/52) | **New in S6.** | One session with its roster: `SessionListItem` plus `status`, `hostId` and `attendees` (`{ userId, displayName, isHost }`, the host first, then by `joined_at`). Null for no such session, and for an id that is not a uuid without querying (Postgres would raise 22P02). Unlike `listSessions()` it does **not** drop cancelled or ended sessions: the page says what happened. Same named host embed as `listSessions()`; the roster's own `profiles (display_name)` is unambiguous. Never selects an email (US-25) |
+| Departments | `src/lib/sessions.ts` | `listDepartments(): Promise<Department[]>` | S4 [#21](https://github.com/jhdaws/study-buddy/issues/21) | **Replaced by S4.** | Done: `departments` where `merged_into is null`, ordered by code |
+| Course search | `src/lib/sessions.ts` | `searchCourses(departmentCode: string, query: string): Promise<CourseSuggestion[]>` | S4 [#21](https://github.com/jhdaws/study-buddy/issues/21), with S2's [#19](https://github.com/jhdaws/study-buddy/issues/19) normalisers | **Replaced by S4.** | Done: `normalizeDepartmentCode()`, and `[]` for one that normalises away (never an error — the host may be typing a department that does not exist yet); `merged_into is null`; `number.ilike.<normalised>%` or `title.ilike.%<query>%`, and no filter at all for an empty query; `sessions (count)` for `sessionCount`. **Ranked in TypeScript, not SQL**: the count is an embedded aggregate and PostgREST cannot `ORDER BY` one, so rows come back unordered, are sorted by count then number, then cut to `COURSE_SUGGESTION_LIMIT`. The query is reduced to letters, digits and spaces first: it reaches PostgREST's `or=(…)` as a **string**, so a comma or bracket would be read as filter syntax, and a `%` would match every course |
 | Course search over HTTP | `src/app/api/courses/route.ts` | `GET /api/courses?department=CS&q=32` → `200 CourseSuggestion[]`, or `400 { error }` without `department` | S4 [#21](https://github.com/jhdaws/study-buddy/issues/21) | Calls `searchCourses()` — not itself a stub | Should not need to change. If signed-out callers should get `401` rather than `[]`, check `getCurrentUser()` here; never make the proxy redirect `/api/*` |
 | Course search from the client | `src/lib/course-search.ts` | `fetchCourseSuggestions(departmentCode: string, query: string, options?: { signal?: AbortSignal }): Promise<CourseSuggestion[]>` | W4 — not a stub | Works as is | — |
 | Resolve a place | `src/lib/places.ts` | `resolvePlace(placeId: string, options?: { sessionToken?: string }): Promise<ResolvedPlace>`; throws `PlaceError` | M3 [#24](https://github.com/jhdaws/study-buddy/issues/24) | **Replaced by M3** (rules in `geo.ts` and `place-policy.ts`, unit tested; never yet run against Google or a database). Until M2: a fixture ID (`ChIJ-FAKE-…`) still returns its fixture location ID, with no Google call and no write — but only outside a production build, or while the deployment has no `GOOGLE_MAPS_SERVER_API_KEY`. A production build with the key refuses them as `unknown_place`. Any other ID, in a production build, is refused as `lookup_failed` before Google is called unless `getCurrentUser()` finds a signed-in user — so the real path stays closed in production until A4 | Place Details (New) with the server key; check distance from `CAMPUS_CENTER` and place type; upsert `locations` on `place_id` with Google's coordinates, using `SUPABASE_SECRET_KEY`; `PlaceError` for every refusal, never Google's or Postgres's text. M2 may pass its Autocomplete session token as `options.sessionToken` (a form field to add) |
@@ -253,5 +254,54 @@ Handler**:
   names and SQLSTATEs to the two tables; it should not need a new function.
 - **The display-name route** is `/login/name?next=…` (A4). `/auth/confirm`,
   `verifyCode()` and `requireUser()` send nameless students there.
-- **Joining, leaving, cancelling, chat** are later sprints. The note about
-  atomic joins is in `src/app/sessions/actions.ts`.
+- **Cancelling and chat** are later sprints.
+
+## Joining and leaving (S5), for S6 to wire up
+
+`src/app/sessions/actions.ts`:
+
+```ts
+export type SessionActionState = { error?: string };
+export async function joinSession(
+  sessionId: string,
+  prev: SessionActionState,
+  formData: FormData,
+): Promise<SessionActionState>;
+export async function leaveSession(
+  sessionId: string,
+  prev: SessionActionState,
+  formData: FormData,
+): Promise<SessionActionState>;
+```
+
+Both call `requireUser()` first (redirects a signed-out or nameless student),
+then `join_session(session_id)` / `leave_session(session_id)` over
+`supabase.rpc()` — the only way a row is ever written to or removed from
+`session_attendees` after a session is created. Neither redirects on
+success: they `revalidatePath()` the session's own path and `/sessions`, and
+return `{}`, so the caller's own page (not a different one) shows the fresh
+roster and seat count.
+
+**Bind the session id**, the way the
+[Next.js docs](https://nextjs.org/docs/app/getting-started/updating-data#passing-additional-arguments)
+describe for a Server Action that needs more than `(prevState, formData)`:
+
+```tsx
+const [state, action] = useActionState(joinSession.bind(null, session.id), {});
+// <form action={action}><button>Join</button></form>
+```
+
+**Errors.** `state.error` is set, never thrown, for every rule `join_session`/
+`leave_session` raise — `session_full`, `session_cancelled`, `session_ended`,
+`already_joined`, `not_joined`, `host_cannot_leave`, `session_not_found` —
+mapped to copy in `src/lib/errors.ts`. US-07 ("Session full" disables the
+button) and the cancellation notice (US-09, later) read off these, not off a
+separate status computed in the component: the database is still the
+authority on whether a join would succeed, because only it holds the lock
+that makes that answer correct under concurrency (US-07b).
+
+**Not this track's job:** disabling the Join button at capacity before the
+click (a UX nicety — the function refuses it either way), showing "You're
+hosting" instead of a button for the host, and the roster itself. All S6
+(`src/components/SessionRoster.tsx`, `src/app/sessions/[id]/page.tsx`), which
+has landed: `rosterAction()` in `src/lib/roster.ts` picks the button.

@@ -4,7 +4,7 @@
  *   /login                          the form
  *   /login?next=/sessions/new       ...and go there after signing in
  *   /login?error=link&next=...     /auth/confirm sent them back: the link
- *                                   had expired or was already used
+ *                                   did not work (expired, used, or opened on another device)
  *
  * A Server Component: it checks `next` (safeNextPath -- anything else is
  * dropped, never passed on) and maps `error` to our own message (any value
@@ -59,8 +59,9 @@ export default async function LoginPage({
       <main>
         {linkFailed ? (
           <p role="alert" className={`${FORM_ERROR_ON_DARK} mb-5`}>
-            That sign-in link has expired or was already used. Enter your email to get a new
-            code.
+            That sign-in link didn&apos;t work. It may have expired, been used already, or been
+            opened on a different device from the one you asked on. Enter your email to try
+            again.
           </p>
         ) : (
           reason && (

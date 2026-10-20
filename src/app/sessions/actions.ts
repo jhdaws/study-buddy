@@ -9,13 +9,10 @@
 // (Next's "Server Actions" guide): authenticate, validate, and authorise
 // inside the action every time.
 //
-// Later sprints, not stubbed yet: joinSession() (US-04), leaveSession()
-// (US-08), cancelSession() (US-09, host only), sendMessage() (US-05).
-// IMPORTANT for joinSession: it must not be a plain insert. The capacity check
-// and the insert have to happen atomically, or two students take the same last
-// seat -- route it through a database function holding a row lock (ADR 0008
-// rule 11, architecture.md section 3).
+// Later sprints, not stubbed yet: cancelSession() (US-09, host only),
+// sendMessage() (US-05).
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { databaseErrorMessage, type DatabaseErrorLike } from "@/lib/errors";
@@ -106,6 +103,67 @@ export async function createSession(
   }
 
   redirect("/sessions");
+}
+
+/**
+ * What joinSession()/leaveSession() hand back when they do not redirect --
+ * there is nothing to refill, only a message for S6's roster to show beside
+ * the button. Start from `{}`.
+ */
+export type SessionActionState = { error?: string };
+
+/**
+ * Join a session's roster (US-04). Bind the session id for a form action:
+ * `useActionState(joinSession.bind(null, sessionId), {})`, same pattern Next
+ * documents for passing extra arguments to a Server Action.
+ *
+ * `requireUser()` redirects anyone signed out or without a display name;
+ * join_session (S5) rechecks auth.uid() itself regardless, and holds the row
+ * lock that keeps two students from taking the same last seat
+ * (architecture.md section 3, US-07b) -- this action must never insert into
+ * session_attendees directly.
+ */
+export async function joinSession(
+  sessionId: string,
+  _prev: SessionActionState,
+  _formData: FormData,
+): Promise<SessionActionState> {
+  await requireUser();
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("join_session", { session_id: sessionId });
+  if (error) {
+    console.error("joinSession: join_session failed", { code: error.code, message: error.message });
+    return { error: databaseErrorMessage(error) };
+  }
+
+  revalidatePath(`/sessions/${sessionId}`);
+  revalidatePath("/sessions");
+  return {};
+}
+
+/**
+ * Leave a session's roster (US-08). Same binding pattern as joinSession().
+ * The host cannot leave -- leave_session (S5) refuses them with
+ * `host_cannot_leave`; they cancel instead (US-09, later).
+ */
+export async function leaveSession(
+  sessionId: string,
+  _prev: SessionActionState,
+  _formData: FormData,
+): Promise<SessionActionState> {
+  await requireUser();
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("leave_session", { session_id: sessionId });
+  if (error) {
+    console.error("leaveSession: leave_session failed", { code: error.code, message: error.message });
+    return { error: databaseErrorMessage(error) };
+  }
+
+  revalidatePath(`/sessions/${sessionId}`);
+  revalidatePath("/sessions");
+  return {};
 }
 
 /**

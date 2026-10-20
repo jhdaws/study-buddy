@@ -16,8 +16,14 @@
  * "Add to calendar" downloads the session as an .ics file from US-19's route
  * (src/app/sessions/[id]/calendar.ics/route.ts).
  *
- * Not a link to a detail page yet: /sessions/[id] is a later sprint.
+ * The whole row opens the session page (/sessions/[id], S6): the course
+ * heading is the link, and its ::after stretches over the row (which is
+ * `relative`), so the tap target is the row while the link's accessible name
+ * stays just the course. "Add to calendar" sits above that overlay (`z-10`),
+ * so it still downloads rather than opening the page.
  */
+
+import Link from "next/link";
 
 import Icon from "@/components/ui/Icon";
 import type { SessionListItem } from "@/lib/sessions";
@@ -100,10 +106,15 @@ export default function SessionCard({
       <div className="min-w-0">
         <div className="flex items-start justify-between gap-3">
           <Heading id={headingId} className="min-w-0 scroll-mt-20 truncate text-[15px] leading-snug">
-            <span className="font-bold text-ink">{formatCourseCode(session.course)}</span>
-            {session.course.title && (
-              <span className="font-medium text-ink-2"> {session.course.title}</span>
-            )}
+            <Link
+              href={`/sessions/${session.id}`}
+              className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-signal"
+            >
+              <span className="font-bold text-ink">{formatCourseCode(session.course)}</span>
+              {session.course.title && (
+                <span className="font-medium text-ink-2"> {session.course.title}</span>
+              )}
+            </Link>
           </Heading>
           <SeatsLabel seatsLeft={session.seatsLeft} />
         </div>
@@ -122,7 +133,7 @@ export default function SessionCard({
           <a
             href={`/sessions/${session.id}/calendar.ics`}
             download
-            className="-my-2 -mr-2 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 font-semibold text-signal hover:bg-paper"
+            className="relative z-10 -my-2 -mr-2 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center gap-1.5 rounded-lg px-2 font-semibold text-signal hover:bg-paper"
           >
             <Icon name="calendar" className="size-[18px]" />
             <span className="sr-only sm:not-sr-only">Add to calendar</span>

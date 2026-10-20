@@ -2,6 +2,8 @@
 
 import { expect, type Page } from "@playwright/test";
 
+import { loginPath } from "../../src/lib/safe-next";
+
 /** A fresh Vanderbilt address per run, so journeys never collide. */
 export function newStudentEmail(name: string): string {
   return `e2e.${name}.${Date.now()}@vanderbilt.edu`;
@@ -47,14 +49,17 @@ export async function signInAsNewStudent(
 ): Promise<void> {
   await page.goto(nextPath);
   // The proxy sends a signed-out visitor to /login, keeping where they were
-  // going -- except /sessions, the default, which needs no `next`.
-  await expect(page).toHaveURL(
-    nextPath === "/sessions" ? "/login" : `/login?next=${encodeURIComponent(nextPath)}`,
-  );
+  // going. Built with the app's own loginPath() rather than spelled out here,
+  // because it drops `next` when it is already the default landing path --
+  // so hard-coding `?next=` only works for some values of nextPath.
+  await expect(page).toHaveURL(loginPath(nextPath));
 
   await page.getByLabel("Vanderbilt email").fill(email);
   await page.getByRole("button", { name: "Send code" }).click();
-  // By role: Next's hidden route announcer repeats the heading's text.
+  // Matched by role, not by text: Next's route announcer briefly carries the
+  // same words in a <div role="alert">, so getByText finds two elements and
+  // fails strict mode -- intermittently, depending on how the announcer and
+  // the heading race.
   await expect(page.getByRole("heading", { name: "Check your inbox" })).toBeVisible();
 
   await page.getByLabel("Sign-in code").fill(await signInCodeFor(email));

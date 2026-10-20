@@ -131,7 +131,7 @@ describe("signIn", () => {
     });
     const state = await signIn({}, form({ email: "jane@vanderbilt.edu" }));
     expect(state.sentTo).toBeUndefined();
-    expect(state.formError).toMatch(/Wait a minute/);
+    expect(state.formError).toMatch(/Try again in a few minutes/);
     expect(state.formError).not.toMatch(/rate limit exceeded/);
     expect(state.values?.email).toBe("jane@vanderbilt.edu");
   });

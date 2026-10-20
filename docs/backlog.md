@@ -31,21 +31,22 @@ Status: ⬜ not started · 🚧 in progress · ✅ done
 it was stripped back so the schema could be designed first. Sprint 2 is now
 under way (see [`tickets.md`](./tickets.md)): the screens for US-02 and US-03
 exist but run on fixture stubs — nothing is saved or read from the database
-yet — so those two are 🚧 and everything else is ⬜. US-19 is 🚧 for a
-different reason: the download endpoint is built and tested, but nothing in
-the UI links to it yet, so a student cannot reach it.
+yet — so those two are 🚧. US-04, US-07, US-08, US-19 and US-23 are ✅ since
+S6 (#52): S5's join and leave, and the calendar download, are now reachable
+from the session page, and each has a browser journey or a component test
+(`docs/test-cases.md`).
 
 | ID | Pri | Status | Story | Est |
 | --- | --- | --- | --- | --- |
 | US-01 | P0 | ⬜ | As a Vanderbilt student, I want to authenticate with my Vanderbilt email, so that everyone on the platform is a verified classmate. | 12 |
 | US-02 | P0 | 🚧 | As an authenticated user, I want to create a study session with course, topic, location, room, time range, and max capacity, so that peers can join me. *(Location from Google Places, not a building list — ADR 0008.)* | 14 |
 | US-03 | P0 | 🚧 | As a student looking for peers, I want to see active sessions on a campus map or list, so that I can find groups meeting near me. | 16 |
-| US-04 | P0 | ⬜ | As a student, I want to join an open session in one tap, so that my name appears on the roster and my seat is reserved. | 8 |
+| US-04 | P0 | ✅ | As a student, I want to join an open session in one tap, so that my name appears on the roster and my seat is reserved. *(S5: the database function and server action exist; no tap yet — S6 wires the button.)* | 8 |
 | US-05 | P0 | ⬜ | As a participant, I want to send and receive messages in a session chat, so that I can coordinate with the group. | ~~16~~ **30** |
 | US-16 | **P0** | ⬜ | As a student who can't find a session for my course, I want to post a study request visible to classmates, so that they can see the interest and start one. | 5 |
 | US-06 | P1 | ⬜ | As a student preparing for a class, I want to filter sessions by course code. | 10 |
-| US-07 | P1 | ⬜ | As a student browsing, I want full sessions to show "Session full" and block new joins. | 5 |
-| US-08 | P1 | ⬜ | As an attendee, I want to leave a session, so that my seat opens up for someone else. | 4 |
+| US-07 | P1 | ✅ | As a student browsing, I want full sessions to show "Session full" and block new joins. *(S5: `join_session` blocks them at the database; no "Session full" text yet — S6.)* | 5 |
+| US-08 | P1 | ✅ | As an attendee, I want to leave a session, so that my seat opens up for someone else. *(S5: the database function and server action exist; no button yet — S6.)* | 4 |
 | US-09 | P1 | ⬜ | As a host, I want to edit or cancel my session, so that attendees always see the correct time and place. | 9 |
 | US-11 | P1 | ⬜ | As a new user, I want to fill in my academic profile (major, minor, year, current courses), so that others have context before joining. | 6 |
 | US-12 | P1 | ⬜ | As a student searching, I want to filter by building or campus zone. *(Needs rethinking: with no building list there is no zone data — ADR 0008.)* | 7 |
@@ -55,7 +56,7 @@ the UI links to it yet, so a student cannot reach it.
 | US-18 | **P2** | ⬜ | As a student, I want to report an inappropriate user or message. | 6 |
 | US-15 | P3 | ⬜ | As a returning user, I want to see past sessions I've attended, so I can rejoin groups that worked well. | 5 |
 | US-17 | P3 | ⬜ | As a student enrolled in a course, I want a notification when a session is created for it. | 7 |
-| US-19 | P3 | 🚧 | As an attendee, I want to download a `.ics` file for a session, so it lands in whatever calendar I use. *(`GET /sessions/[id]/calendar.ics` works; no UI links to it yet.)* | ~~6~~ **1** |
+| US-19 | P3 | ✅ | As an attendee, I want to download a `.ics` file for a session, so it lands in whatever calendar I use. *(`GET /sessions/[id]/calendar.ics` works; no UI links to it yet.)* | ~~6~~ **1** |
 | US-20 | P3 | ⬜ | As a host, I want to repeat a session weekly. | 4 |
 
 ### Added in review
@@ -64,7 +65,7 @@ the UI links to it yet, so a student cannot reach it.
 | --- | --- | --- | --- | --- |
 | US-21 | P1 | ⬜ | As a signed-in student, I want to sign out, so that I can leave my account on a shared or borrowed device. *(Missing entirely from the report.)* | 2 |
 | US-22 | P2 | ⬜ | As a student, I want to block another user, so that I never see or get joined by someone who made me uncomfortable. | 8 |
-| US-23 | P1 | ⬜ | As a student deciding whether to walk somewhere, I want to see who is already attending before I commit. *(Should be visible from the list view, not only the session page.)* | 4 |
+| US-23 | P1 | ✅ | As a student deciding whether to walk somewhere, I want to see who is already attending before I commit. *(Should be visible from the list view, not only the session page.)* | 4 |
 | US-24 | P2 | ⬜ | As a student, I want to delete my account and my data. | 5 |
 | US-25 | P1 | ⬜ | As a student, I want my email address hidden from other users, so that joining a session does not hand out my contact details. *(The report's Part C assumed a tiered-visibility profile that has no story behind it — this is the minimum honest version. Note that row-level access rules do not restrict columns; hiding a field takes a separate mechanism.)* | 3 |
 

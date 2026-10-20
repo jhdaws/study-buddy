@@ -71,6 +71,262 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+
+## 2026-10-19 · S6: the session page, roster and Join/Leave (built for the Sprint 3 deadline)
+
+**Branch:** `s6-us-23-session-page` · **Commits made:** this PR
+
+### What changed
+- S6 (#52) was Nate's ticket; Jack asked for it to be built tonight so join and leave are usable before the Sprint 3 deadline. Nate should know before he starts on it.
+- `/sessions/[id]`, `<SessionRoster>`, `rosterAction()` and `getSession()`, with cards and home links pointing at the page. The tickets, contracts, test cases and backlog are updated; see `docs/tickets.md`, S6.
+
+### Things the next agent should be careful about
+- **No realtime yet.** The roster refreshes on load and after the viewer's own join or leave, not while someone else joins. Adding it needs `session_attendees` in the `supabase_realtime` publication (a migration), and CI's `e2e` job starts the local stack **without** realtime (`-x realtime`), so a browser test of it would need that changed too.
+- **Journeys 3 and 4 share journey 2's session** through a module variable. On a CI retry Playwright starts a fresh worker, the variable is null, and they fail with "journey 2 did not get that far". That is a retry artefact, not the real failure: read the first attempt.
+- **Running e2e beside your own local stack:** set `project_id` to something else and shift the 543xx ports in `supabase/config.toml`, `supabase start`, run, `supabase stop --no-backup`, then `git checkout supabase/config.toml`. Never commit that change.
+
+## 2026-10-18 · M5: fixture locations for local dev, closing the gap W8 left
+
+**Branch:** `m5-us-02-local-locations`, from `main` · **Commits made:** one, pushed; no PR opened (no `gh` CLI here — compare link: `https://github.com/jhdaws/study-buddy/pull/new/m5-us-02-local-locations`).
+
+### What changed
+- W8 (#37) had already solved M5 for Playwright (`tests/e2e/global-setup.ts`
+  upserts `FIXTURE_LOCATIONS` into the local database before the journeys
+  run), but `docs/tickets.md` still showed M5 unchecked and `npm run dev`
+  against a local database had no such rows — the stub picker's fixture
+  place ids would still fail `create_session`'s foreign key.
+- `scripts/seed-local-locations.mts` (new) — does for `db:start`/`db:reset`
+  what `global-setup.ts` does for Playwright: upserts the three
+  `FIXTURE_LOCATIONS` rows by id, refusing any non-local host (same guard as
+  `tests/db/connection.ts`). Wired into both npm scripts.
+- `tsconfig.json` — added `allowImportingTsExtensions`. Node's own TypeScript
+  support requires the literal `.ts` extension in a relative import
+  (`../src/lib/fixtures.ts`); `tsc`'s default `bundler` resolution rejects
+  that extension unless this flag is on. Low blast radius: this project
+  already has `noEmit: true` (required to pair with the flag), and nothing
+  else in the repo uses an explicit extension that this would change the
+  meaning of.
+- Confirmed (by reading `supabase db push --help`/`db reset --help` and
+  `config.toml`) that `--include-seed` only ever reads
+  `[db.seed].sql_paths` — today just `seed.sql` — so a script that is never
+  referenced there, and never in a migration, cannot reach a hosted project
+  through any push path. The host check in the new script is belt-and-
+  suspenders, not the only guard.
+- `docs/tickets.md`, `docs/ai-usage-log.md`.
+
+### Verified versus assumed
+- **Verified:** `npm run lint`, `npm run typecheck` (only passes with the
+  tsconfig change above), `npm test` (391 passed), `npm run build`, the
+  seed-freshness check. The script's import chain was checked by running it
+  directly: it resolves `fixtures.ts` and fails only at the expected
+  `ECONNREFUSED` step.
+- **Not verified — no Docker in this environment:** never actually run
+  against a live local Supabase, so "does it insert the rows and does
+  `npm run dev` then let a session be created with a fixture place" is
+  unconfirmed. Everything after the import succeeds is the same shape as
+  `global-setup.ts`, which *has* passed in CI (W8's entry below), but that is
+  evidence, not proof.
+
+### Things the next agent should be careful about
+- If `allowImportingTsExtensions` ever causes friction elsewhere, the
+  alternative is renaming the import target or duplicating the three fixture
+  rows' literal values into a plain `.mjs` script (like `build-seed.mjs`
+  does) instead of importing `fixtures.ts` — more duplication, zero new
+  tsconfig surface.
+- `node scripts/seed-local-locations.mts` prints a Node warning
+  ("MODULE_TYPELESS_PACKAGE_JSON ... reparsing as ES module") because
+  `fixtures.ts` has no explicit module type. Harmless (not an error, doesn't
+  affect exit code) — left alone rather than adding `"type": "module"` to
+  `package.json`, which would be a much larger blast radius for a cosmetic
+  warning.
+
+### Update, same session: Jack approved, with a portability gap
+
+Jack approved PR #74. One real note: `scripts/seed-local-locations.mts`
+needs Node 22.18+ to strip TypeScript syntax on its own; on an older Node,
+`npm run db:start` would fail partway through, *after* Supabase had already
+started, with a confusing error.
+
+**Fixed:** added `scripts/seed-local-locations.mjs`, a plain-JS entry point
+every Node version can at least parse, which checks `process.versions.node`
+first and only then dynamically imports the `.mts` file. The version check
+could not live inside the `.mts` file itself — on a Node too old to load a
+`.mts` file, nothing in it runs, not even a check at the top.
+`db:seed:locations` in `package.json` now points at the wrapper.
+
+Also flagged, not yet acted on: **Jack's other note is a separate, real
+production bug (BUG-09), not something this PR touches.** Creating a session
+on the live site still fails on the foreign key — this PR was always scoped
+to local and CI only (that's the whole point of #36's "local and CI only"
+decision). Jack offered to insert the same three rows into the *hosted*
+`locations` table with his own access, as a stopgap until M2. That is a call
+for the user/team to make on GitHub, not something this session decided or
+implemented.
+## 2026-10-18 · S5: join and leave with a seat limit
+
+**Branch:** `s5-us-04-join-leave`, from `main` · **Commits made:** one, pushed; no PR opened yet (no `gh` CLI in this environment — the push printed the compare link, `https://github.com/jhdaws/study-buddy/pull/new/s5-us-04-join-leave`).
+
+### What changed
+- `supabase/migrations/20261018184357_join_leave_session.sql` (new) —
+  `join_session(session_id)` and `leave_session(session_id)`, SECURITY
+  DEFINER, same no-plain-write pattern as S1's `create_session`. `join_session`
+  locks the session row (`for update`) before counting the roster — the
+  mechanism US-07b exists to prove. Both get an explicit
+  `revoke execute ... from anon`, not just `from public`: BUG-08 already found
+  that the implicit grant alone leaves `anon` able to execute `create_session`.
+- `src/app/sessions/actions.ts` — `joinSession()`/`leaveSession()`, bound the
+  way Next's docs describe for a Server Action needing more than
+  `(prevState, formData)`: `joinSession.bind(null, sessionId)`. Neither
+  redirects; both `revalidatePath()` the session's own path and `/sessions`.
+- `src/lib/errors.ts` — seven new `RAISED_MESSAGES` entries for what the two
+  functions raise.
+- `tests/db/join-leave-session.test.ts` (new, 17 tests, including US-07b:
+  two connections racing `join_session()` for the last seat via
+  `Promise.allSettled`). **Deleted `tests/db/harness.test.ts`** per
+  CLAUDE.md's instruction, now that US-07b has a real replacement; removed
+  the matching paragraph from `CLAUDE.md` itself.
+- `src/app/sessions/actions.test.ts` (+7), `src/lib/errors.test.ts` (+1 block)
+  — mocked Supabase, same pattern as S3/W9's `createSession()` tests.
+- `docs/contracts.md` — new section documenting the `joinSession`/
+  `leaveSession` seam for S6 (signatures, the bind pattern, what error
+  strings mean, what is explicitly *not* this track's job: the button itself,
+  "You're hosting", the roster).
+- `docs/tickets.md`, `docs/test-cases.md`, `docs/backlog.md` — S5 ticked
+  except "seats left in the list reflect joins and leaves" (mechanically true
+  once S4 lands, not watchable before then); US-04/US-07/US-07b/US-08 moved
+  ⬜ → 🚧 with notes on exactly what is and is not covered.
+
+### Verified versus assumed
+- **Verified:** `npm run lint` (4 pre-existing-shape warnings — `_prev`/
+  `_formData` unused on both new actions, since neither needs the submitted
+  form; same reason `createSession`'s own `_prev` is unused, just now on two
+  trailing params instead of one, so eslint's "after-used" default flags
+  both — not fixed, it's a warning and matches how the codebase already
+  tolerates this), `npm run typecheck`, `npm test` (405 passed, 14 new),
+  `npm run build`, `npm run test:coverage` (82.9% branches / 93.7%
+  `src/lib`, both above the enforced threshold), and the seed-freshness
+  check.
+- **Not verified — no Docker in this environment, same gap every S1/S2/M3
+  session before this one hit:** the migration has never been applied to a
+  real Postgres, and `join-leave-session.test.ts` has only been checked for
+  shape (it parses, types check under `npm run test:db`, and fails at the
+  connection step exactly like every other file in `tests/db/` — not a
+  single assertion in it has actually run). **Run
+  `npm run db:start && npm run test:db` for real before trusting the lock
+  behaviour, the grants, or the RLS deny-by-default DELETE test.**
+  `src/lib/database.types.ts`'s two new function entries were hand-written to
+  match the generator's exact style (same thing S1/M3 each did without
+  Docker) — **not** produced by `supabase gen types`; CI's `db` job is the
+  real check.
+
+### Things the next agent should be careful about
+- **RLS denies DELETE differently from INSERT.** With no policy at all, an
+  INSERT's failing `WITH CHECK` always raises an error (S1's existing test);
+  a DELETE's failing `USING` just filters the target row out first, so the
+  statement succeeds with `rowCount: 0` — no exception. The DELETE test in
+  `join-leave-session.test.ts` asserts the row count, not a `.rejects`. Get
+  this backwards and you'll write a test that looks right and silently
+  verifies nothing.
+- **No UI exists for any of this.** S6 (`src/components/SessionRoster.tsx`,
+  `src/app/sessions/[id]/page.tsx`) is still comment-only. `docs/contracts.md`
+  has what it needs to wire the buttons; this session did not touch either
+  file.
+- The M5 branch (`m5-us-02-local-locations`, same session, separate PR) is
+  independent of this one — don't rebase one onto the other.
+
+### Update, same session: Jack's review caught exactly the predicted bug
+
+Jack reviewed PR #73 and requested changes: CI's `db` job failed, every
+`join_session`/`leave_session` call raised `column reference "session_id" is
+ambiguous` — all 9 new database tests. Root cause: the `session_id`
+parameter shares a name with `session_attendees.session_id`, so every
+unqualified reference inside the function body (the already-joined check,
+the seat count, the leave `DELETE`) could mean either. Same bug as BUG-03 on
+`get_or_create_course` — logged as **BUG-13**.
+
+This is precisely the thing the "Not verified" section above flagged as
+unverified and told the next session to check with real Docker. Jack's `db`
+job was that check; the no-Docker gap in this environment is real, not
+theoretical.
+
+**Fixed:** every ambiguous reference qualified with a table alias
+(`sa.session_id`) rather than renaming the parameter, so the
+`supabase.rpc("join_session", { session_id })` call sites didn't need to
+change. The migration hasn't merged or run on the hosted project, so editing
+it in place (rather than a new migration) was fine, per Jack's own note.
+
+Jack also caught that the "already ended" test tried to create a past
+session through `create_session`, which refuses a start more than 5 minutes
+in the past by design — the test could never have passed. Fixed by inserting
+that row directly as the database's own role (`reset role`, the same thing
+`session-text-limits.test.ts` does for its location row), the way Jack
+suggested. **While fixing that, found the same silent-failure trap already
+documented in `docs/bug_database.md`'s "Not a bug, but worth knowing"
+section applied to the "cancelled" status test too:** it updated
+`sessions.status` as `authenticated`, but there's no UPDATE policy on
+`sessions` either, so that update was silently affecting zero rows. Also
+moved onto the server role.
+
+**Still true, unchanged by this fix:** no Docker in this environment, so
+none of this has actually been run — only re-checked for shape the same way
+as before (lint, typecheck, 405 tests, build all pass). **The real
+confirmation is CI's `db` job on the next push**, not this session.
+## 2026-10-18 · S4: the three reads are real, and journey 3 runs
+
+**Branch:** `s4-us-03-real-lists` · **Commits made:** one on this branch.
+
+### What changed
+- `src/lib/sessions.ts` — `listSessions()`, `listDepartments()` and
+  `searchCourses()` now query Supabase. The W4 fixture helpers they used to
+  return are untouched, and `fixtures.test.ts` still holds them to the same
+  behaviour, which is what makes the two comparable.
+- `src/lib/sessions.test.ts` — new, 34 tests.
+- `tests/e2e/journeys.spec.ts` — journey 3 implemented; it was
+  `test.fixme("Needs S4 (#21)")`. Journey 2 now also asserts the host sees
+  their own session in the list, which is the thing S4 changed.
+- `tests/e2e/helpers.ts` — two pre-existing bugs, see below.
+- `docs/contracts.md`, `docs/tickets.md`, `docs/ai-usage-log.md`.
+
+### Things the next agent should be careful about
+- **`profiles!sessions_host_id_fkey`, never a plain `profiles`.** PostgREST
+  can reach a profile from a session two ways -- the `host_id` foreign key,
+  and a many-to-many hop through `session_attendees` -- and refuses to guess:
+  `PGRST201` at runtime, with every unit test still green, because a mock
+  cannot reproduce it. There is a test asserting the constraint name is in the
+  select string; it is the only thing standing between a refactor and a 500 on
+  the home page.
+- **A mocked Supabase client proves almost nothing about a query.** Both bugs
+  worth finding here -- that embed, and whether `ends_at=gt.now` parses at all
+  -- were found by running the real query against the local stack with curl
+  before writing any TypeScript. Do that first; it took ten minutes.
+- **Course suggestions are ranked in TypeScript, not SQL.** PostgREST cannot
+  `ORDER BY` an embedded aggregate, so the count cannot be sorted in the
+  query. That means a department's matching courses are all fetched before
+  being cut to 8. Fine for tens of courses; if a department ever grows past
+  that, replace it with a database function rather than adding a `.limit()`,
+  which would cut before ranking and silently return the wrong eight.
+- **The search needle reaches PostgREST as filter syntax.** `or=(…)` is a
+  string that is parsed, and it carries untrusted input from a public GET
+  endpoint, so the needle is reduced to letters, digits and spaces. A comma or
+  bracket would rewrite the filter; a `%` would match every course. The test
+  for this asserts the whole filter's *shape* -- an earlier version listed
+  forbidden characters but stripped `%` before looking, so the one wildcard
+  that matters could never fail it.
+
+### Two e2e helper bugs, both pre-existing and both now fixed
+- `getByText("Check your inbox")` matched two elements: the `<h1>` and Next's
+  route announcer `<div role="alert">`. Strict mode fails on that, but only
+  when the announcer and the heading race a certain way -- so it passed, then
+  failed, then passed again on the same code. Now matched by heading role.
+- `signInAsNewStudent(..., nextPath)` asserted `/login?next=<path>` always.
+  `loginPath()` deliberately drops `next` when it is already the default
+  landing path, so passing `/sessions` failed. The helper now builds the
+  expected URL with the app's own `loginPath()` instead of spelling it out.
+
+### Open questions for the user
+- S6 (#52) is the other ticket assigned to Nate and is now unblocked for its
+  read half. Its buttons still need S5 (#51), open as PR #73.
+
 ## 2026-10-18 · #55 updated from main; public demo account replaced by a gated test login
 
 ### What changed
