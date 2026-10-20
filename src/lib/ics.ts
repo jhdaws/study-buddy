@@ -159,3 +159,23 @@ export function icsFileName(session: SessionListItem): string {
 
   return `${slug || "session"}.ics`;
 }
+
+/**
+ * A Google Calendar "add event" link for a session, prefilled with the same
+ * details as the .ics file. Opens Google's own page; nothing is sent from
+ * here. Dates use the same UTC basic format as the .ics (`20261001T193000Z`).
+ */
+export function googleCalendarUrl(
+  session: Pick<SessionListItem, "course" | "topic" | "startsAt" | "endsAt" | "locationLabel" | "room">,
+  pageUrl?: string,
+): string {
+  const code = `${session.course.departmentCode} ${session.course.number}`;
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: `${code}: ${session.topic}`,
+    dates: `${toIcsUtc(session.startsAt)}/${toIcsUtc(session.endsAt)}`,
+    location: session.room ? `${session.locationLabel}, ${session.room}` : session.locationLabel,
+    details: pageUrl ? `Study Buddy session: ${pageUrl}` : "Study Buddy session",
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}

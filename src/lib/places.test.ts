@@ -24,8 +24,25 @@ vi.mock("@/lib/supabase/admin", () => ({
 }));
 
 const session = vi.hoisted(() => ({ user: { id: "u1" } as { id: string } | null }));
+// The cookie client, for campus places: records the place_id it was asked for.
+const userDb = vi.hoisted(() => ({
+  eq: vi.fn(),
+  result: { data: { id: "loc-campus" } as { id: string } | null, error: null as unknown } as
+    | { data: { id: string } | null; error: unknown }
+    | Promise<never>,
+}));
 vi.mock("@/lib/supabase/server", () => ({
   getCurrentUser: async () => session.user,
+  createClient: async () => ({
+    from: (table: string) => ({
+      select: (columns: string) => ({
+        eq: (column: string, value: string) => {
+          userDb.eq(table, columns, column, value);
+          return { maybeSingle: async () => userDb.result };
+        },
+      }),
+    }),
+  }),
 }));
 
 const PLACE_ID = "ChIJN1t_tDeuEmsRUsoyG83frY4";
@@ -56,6 +73,7 @@ beforeEach(() => {
   vi.spyOn(console, "error").mockImplementation(() => {});
   session.user = { id: "u1" };
   admin.result = { data: { id: "loc-1" }, error: null };
+  userDb.result = { data: { id: "loc-campus" }, error: null };
   admin.from.mockImplementation(() => ({ upsert: admin.upsert }));
   admin.upsert.mockImplementation(() => ({
     select: () => ({ single: async () => admin.result }),
@@ -69,6 +87,39 @@ afterEach(() => {
   fetchMock.mockReset();
   admin.from.mockReset();
   admin.upsert.mockReset();
+  userDb.eq.mockReset();
+});
+
+describe("resolvePlace: curated campus places", () => {
+  it("reads the place's own locations row as the signed-in user, without Google or the secret key", async () => {
+    await expect(resolvePlace("vu-featheringill-hall")).resolves.toEqual({ locationId: "loc-campus" });
+    expect(userDb.eq).toHaveBeenCalledWith("locations", "id", "place_id", "vu-featheringill-hall");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(admin.from).not.toHaveBeenCalled();
+  });
+
+  it.each(["vu-nowhere-hall", "vu-Featheringill-Hall", "vu-"])(
+    "refuses %j, which is not on the list, as unknown_place without reading",
+    async (id) => {
+      expect((await refusal(resolvePlace(id))).reason).toBe("unknown_place");
+      expect(userDb.eq).not.toHaveBeenCalled();
+    },
+  );
+
+  it("is lookup_failed when the row is missing (migration not applied, or nobody signed in)", async () => {
+    userDb.result = { data: null, error: null };
+    expect((await refusal(resolvePlace("vu-central-library"))).reason).toBe("lookup_failed");
+  });
+
+  it("never puts Postgres's text in the error, and survives a thrown read", async () => {
+    userDb.result = { data: null, error: { code: "42501", message: "permission denied for table locations" } };
+    const denied = await refusal(resolvePlace("vu-central-library"));
+    expect(denied.reason).toBe("lookup_failed");
+    expect(denied.message).not.toMatch(/permission|42501/);
+
+    userDb.result = Promise.reject(new TypeError("fetch failed"));
+    expect((await refusal(resolvePlace("vu-central-library"))).reason).toBe("lookup_failed");
+  });
 });
 
 describe("resolvePlace: a real place", () => {

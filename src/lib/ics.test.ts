@@ -261,3 +261,26 @@ describe("icsFileName", () => {
     expect(name).toBe("session.ics");
   });
 });
+
+describe("googleCalendarUrl", () => {
+  it("prefills Google's add-event page with the session, in UTC", async () => {
+    const { googleCalendarUrl } = await import("./ics");
+    const url = new URL(
+      googleCalendarUrl(
+        {
+          course: { departmentCode: "CS", number: "3251", title: null },
+          topic: "Design patterns",
+          startsAt: "2026-10-01T19:30:00.000Z",
+          endsAt: "2026-10-01T21:00:00.000Z",
+          locationLabel: "Featheringill Hall",
+          room: "Room 100",
+        },
+        "https://example.test/sessions/1",
+      ),
+    );
+    expect(url.origin + url.pathname).toBe("https://calendar.google.com/calendar/render");
+    expect(url.searchParams.get("text")).toBe("CS 3251: Design patterns");
+    expect(url.searchParams.get("dates")).toBe("20261001T193000Z/20261001T210000Z");
+    expect(url.searchParams.get("location")).toBe("Featheringill Hall, Room 100");
+  });
+});

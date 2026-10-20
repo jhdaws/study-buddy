@@ -223,3 +223,26 @@ client. The RLS guard test does not check views.
   encodes.
 - **Campus-zone filtering (US-12)** without a building list — later sprint.
 - **ADRs 0001–0003 are still Proposed.** This record does not ratify them.
+
+## Amendment, 2026-10-20 — rule 7 reversed for the picker (Track M, Moses)
+
+**Proposed, not yet agreed by the team (Jack to confirm).** The location
+picker now offers a curated list of public campus places,
+`data/campus_places.json`, built from Moses's Vanderbilt campus map with
+coordinates looked up once in OpenStreetMap, on a Leaflet + OpenStreetMap map
+-- the approach Pakita uses. Reasons: no M1 Google key exists, so the Google
+path has never run; the demo needs a working map now; OpenStreetMap needs no
+key and has no bill.
+
+What stays the same: the browser still submits only an id; `resolvePlace()`
+accepts only ids on the list (`vu-<slug>`) and attaches the session to that
+place's `locations` row, whose coordinates were committed by a migration
+(`*_campus_places.sql`) -- never ones a browser sent. Rule 12 is untouched:
+the campus branch reads through the user's own client under RLS and never
+uses the secret key. The Google branch of `resolvePlace()` is still there,
+unused by the picker.
+
+What changes: places not on the list cannot be picked (add them to the JSON,
+then a new migration via `scripts/campus-locations-sql.mjs`); someone has to
+keep the list accurate, which is the cost rule 7 avoided.
+

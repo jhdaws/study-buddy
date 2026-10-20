@@ -1,0 +1,509 @@
+{
+  "source": "OpenStreetMap Nominatim, looked up 2026-10-20 (data (c) OpenStreetMap contributors, ODbL)",
+  "places": [
+    {
+      "id": "vu-alumni-hall",
+      "name": "Alumni Hall",
+      "kind": "building",
+      "lat": 36.147966,
+      "lng": -86.80332,
+      "osm": "Alumni Hall"
+    },
+    {
+      "id": "vu-alumni-lawn",
+      "name": "Alumni Lawn",
+      "kind": "outdoor",
+      "lat": 36.147452,
+      "lng": -86.803954,
+      "osm": "Alumni Lawn"
+    },
+    {
+      "id": "vu-benson-hall",
+      "name": "Benson Hall",
+      "aliases": [
+        "Benson Old Central",
+        "Old Central"
+      ],
+      "kind": "building",
+      "lat": 36.147118,
+      "lng": -86.802049,
+      "osm": "Benson Science Hall"
+    },
+    {
+      "id": "vu-bishop-johnson-black-cultural-center",
+      "name": "Bishop Johnson Black Cultural Center",
+      "aliases": [
+        "Bishop Johnson Center",
+        "BCC"
+      ],
+      "kind": "building",
+      "lat": 36.145696,
+      "lng": -86.803149,
+      "osm": "Bishop Joseph Johnson Center"
+    },
+    {
+      "id": "vu-blair-school-of-music",
+      "name": "Blair School of Music",
+      "aliases": [
+        "Blair"
+      ],
+      "kind": "building",
+      "lat": 36.138632,
+      "lng": -86.806312,
+      "osm": "Blair School of Music"
+    },
+    {
+      "id": "vu-buttrick-hall",
+      "name": "Buttrick Hall",
+      "kind": "building",
+      "lat": 36.145812,
+      "lng": -86.80257,
+      "osm": "Buttrick Hall"
+    },
+    {
+      "id": "vu-calhoun-hall",
+      "name": "Calhoun Hall",
+      "kind": "building",
+      "lat": 36.147231,
+      "lng": -86.801419,
+      "osm": "Calhoun Hall"
+    },
+    {
+      "id": "vu-central-library",
+      "name": "Central Library",
+      "aliases": [
+        "Central & Divinity Libraries",
+        "Divinity Library",
+        "Jean and Alexander Heard Library"
+      ],
+      "kind": "library",
+      "lat": 36.145709,
+      "lng": -86.800203,
+      "osm": "Jean & Alexander Heard Library"
+    },
+    {
+      "id": "vu-cohen-memorial-hall",
+      "name": "Cohen Memorial Hall",
+      "aliases": [
+        "Cohen Memorial"
+      ],
+      "kind": "building",
+      "lat": 36.141566,
+      "lng": -86.799399,
+      "osm": "Cohen Memorial Hall"
+    },
+    {
+      "id": "vu-divinity-school",
+      "name": "Divinity School",
+      "aliases": [
+        "Divinity"
+      ],
+      "kind": "building",
+      "lat": 36.14649,
+      "lng": -86.800616,
+      "osm": "Divinity School"
+    },
+    {
+      "id": "vu-e-bronson-ingram-dining-hall",
+      "name": "E. Bronson Ingram Dining Hall",
+      "aliases": [
+        "EBI",
+        "EBI Dining Hall"
+      ],
+      "kind": "dining",
+      "lat": 36.148647,
+      "lng": -86.803378,
+      "osm": "E. Bronson Ingram College"
+    },
+    {
+      "id": "vu-eskind-biomedical-library",
+      "name": "Eskind Biomedical Library",
+      "aliases": [
+        "Eskind Library",
+        "Eskind"
+      ],
+      "kind": "library",
+      "lat": 36.143113,
+      "lng": -86.802445,
+      "osm": "Eskind Biomedical Library"
+    },
+    {
+      "id": "vu-featheringill-hall",
+      "name": "Featheringill Hall",
+      "aliases": [
+        "Featheringill-Jacobs Hall",
+        "Featheringill",
+        "Jacobs Hall"
+      ],
+      "kind": "building",
+      "lat": 36.144892,
+      "lng": -86.803358,
+      "osm": "Featheringill / Jacobs Hall"
+    },
+    {
+      "id": "vu-furman-hall",
+      "name": "Furman Hall",
+      "kind": "building",
+      "lat": 36.147947,
+      "lng": -86.801328,
+      "osm": "Furman Hall"
+    },
+    {
+      "id": "vu-garland-hall",
+      "name": "Garland Hall",
+      "kind": "building",
+      "lat": 36.146529,
+      "lng": -86.80145,
+      "osm": "Garland Hall"
+    },
+    {
+      "id": "vu-godchaux-hall",
+      "name": "Godchaux Hall",
+      "aliases": [
+        "School of Nursing"
+      ],
+      "kind": "building",
+      "lat": 36.144976,
+      "lng": -86.800419,
+      "osm": "Godchaux Nursing Annex"
+    },
+    {
+      "id": "vu-hill-student-center",
+      "name": "Hill Student Center",
+      "aliases": [
+        "Hill Center",
+        "Peabody Hill Center"
+      ],
+      "kind": "building",
+      "lat": 36.141732,
+      "lng": -86.796524,
+      "osm": "Hill Center"
+    },
+    {
+      "id": "vu-hobbs-hall",
+      "name": "Hobbs Hall",
+      "aliases": [
+        "Hobbs"
+      ],
+      "kind": "building",
+      "lat": 36.141401,
+      "lng": -86.797796,
+      "osm": "Hobbs Laboratory"
+    },
+    {
+      "id": "vu-jesup-hall",
+      "name": "Jesup Hall",
+      "aliases": [
+        "Jesup Psychology",
+        "Psychology"
+      ],
+      "kind": "building",
+      "lat": 36.141445,
+      "lng": -86.798263,
+      "osm": "Jesup Psychology Building"
+    },
+    {
+      "id": "vu-k-c-potter-center",
+      "name": "K.C. Potter Center",
+      "aliases": [
+        "KC Potter Center"
+      ],
+      "kind": "building",
+      "lat": 36.147216,
+      "lng": -86.804872,
+      "osm": "K.C. Potter Center"
+    },
+    {
+      "id": "vu-kirkland-hall",
+      "name": "Kirkland Hall",
+      "aliases": [
+        "Kirkland"
+      ],
+      "kind": "building",
+      "lat": 36.148246,
+      "lng": -86.802754,
+      "osm": "Kirkland Hall"
+    },
+    {
+      "id": "vu-light-hall",
+      "name": "Light Hall",
+      "kind": "building",
+      "lat": 36.142181,
+      "lng": -86.802437,
+      "osm": "Light Hall"
+    },
+    {
+      "id": "vu-mayborn-building",
+      "name": "Mayborn Building",
+      "aliases": [
+        "Mayborn"
+      ],
+      "kind": "building",
+      "lat": 36.142589,
+      "lng": -86.797628,
+      "osm": "Mayborn Building"
+    },
+    {
+      "id": "vu-neely-auditorium",
+      "name": "Neely Auditorium",
+      "kind": "building",
+      "lat": 36.147397,
+      "lng": -86.803028,
+      "osm": "Neely Auditorium"
+    },
+    {
+      "id": "vu-olin-hall",
+      "name": "Olin Hall",
+      "kind": "building",
+      "lat": 36.142948,
+      "lng": -86.805284,
+      "osm": "Olin Hall"
+    },
+    {
+      "id": "vu-owen-graduate-school-of-management",
+      "name": "Owen Graduate School of Management",
+      "aliases": [
+        "Owen",
+        "Management Hall",
+        "Owen Grad Mgmt"
+      ],
+      "kind": "building",
+      "lat": 36.147189,
+      "lng": -86.79978,
+      "osm": "Owen Graduate School of Management"
+    },
+    {
+      "id": "vu-payne-hall",
+      "name": "Payne Hall",
+      "aliases": [
+        "Payne"
+      ],
+      "kind": "building",
+      "lat": 36.142386,
+      "lng": -86.798195,
+      "osm": "Payne Building"
+    },
+    {
+      "id": "vu-peabody-library",
+      "name": "Peabody Library",
+      "aliases": [
+        "Peabody Education Library"
+      ],
+      "kind": "library",
+      "lat": 36.142483,
+      "lng": -86.799198,
+      "osm": "Peabody Library"
+    },
+    {
+      "id": "vu-rand-dining-center",
+      "name": "Rand Dining Center",
+      "aliases": [
+        "Rand",
+        "Rand Hall"
+      ],
+      "kind": "dining",
+      "lat": 36.14647,
+      "lng": -86.803091,
+      "osm": "Rand Hall"
+    },
+    {
+      "id": "vu-sarratt-student-center",
+      "name": "Sarratt Student Center",
+      "aliases": [
+        "Sarratt"
+      ],
+      "kind": "building",
+      "lat": 36.146426,
+      "lng": -86.803545,
+      "osm": "Sarratt Student Center"
+    },
+    {
+      "id": "vu-stevenson-center-mathematics",
+      "name": "Stevenson Center Mathematics",
+      "aliases": [
+        "SC Math",
+        "Stevenson Math"
+      ],
+      "kind": "building",
+      "lat": 36.145274,
+      "lng": -86.801536,
+      "osm": "Stevenson Center for Mathematics"
+    },
+    {
+      "id": "vu-stevenson-center-molecular-biology",
+      "name": "Stevenson Center Molecular Biology",
+      "aliases": [
+        "SC Molecular Biology"
+      ],
+      "kind": "building",
+      "lat": 36.145061,
+      "lng": -86.801071,
+      "osm": "Molecular Biology"
+    },
+    {
+      "id": "vu-stevenson-center",
+      "name": "Stevenson Center",
+      "aliases": [
+        "SC Chemistry",
+        "SC Lecture",
+        "SC Library",
+        "SC Physics",
+        "SC Science & Engineering",
+        "Sci-Eng Library",
+        "Stevenson Center Chemistry",
+        "Stevenson Center Lecture Halls",
+        "Stevenson Center Physics and Astronomy",
+        "Stevenson Center Science and Engineering",
+        "Stevenson Library",
+        "Stevenson Science and Engineering Library"
+      ],
+      "kind": "building",
+      "lat": 36.144107,
+      "lng": -86.802262,
+      "osm": "Stevenson Center Lane"
+    },
+    {
+      "id": "vu-student-life-center",
+      "name": "Student Life Center",
+      "aliases": [
+        "Student Life",
+        "SLC"
+      ],
+      "kind": "building",
+      "lat": 36.144407,
+      "lng": -86.805849,
+      "osm": "Student Life Center"
+    },
+    {
+      "id": "vu-student-recreation-center",
+      "name": "Student Recreation Center",
+      "aliases": [
+        "Rec Center",
+        "Student Rec",
+        "the Rec"
+      ],
+      "kind": "building",
+      "lat": 36.14025,
+      "lng": -86.808486,
+      "osm": "Vanderbilt Recreation and Wellness Center"
+    },
+    {
+      "id": "vu-the-commons-center",
+      "name": "The Commons Center",
+      "aliases": [
+        "Commons",
+        "Commons Dining"
+      ],
+      "kind": "dining",
+      "lat": 36.141785,
+      "lng": -86.797117,
+      "osm": "Commons Center"
+    },
+    {
+      "id": "vu-vanderbilt-law-school",
+      "name": "Vanderbilt Law School",
+      "aliases": [
+        "Law School"
+      ],
+      "kind": "building",
+      "lat": 36.147933,
+      "lng": -86.800274,
+      "osm": "Vanderbilt Law School"
+    },
+    {
+      "id": "vu-vanderbilt-university-bookstore",
+      "name": "Vanderbilt University Bookstore",
+      "aliases": [
+        "Bookstore",
+        "Barnes & Noble"
+      ],
+      "kind": "cafe",
+      "lat": 36.14648,
+      "lng": -86.808391,
+      "osm": "Vanderbilt Bookstore"
+    },
+    {
+      "id": "vu-wilson-hall",
+      "name": "Wilson Hall",
+      "kind": "building",
+      "lat": 36.148942,
+      "lng": -86.800705,
+      "osm": "Wilson Hall"
+    },
+    {
+      "id": "vu-wyatt-center",
+      "name": "Wyatt Center",
+      "kind": "building",
+      "lat": 36.140004,
+      "lng": -86.799009,
+      "osm": "Wyatt Center"
+    },
+    {
+      "id": "vu-kissam-munchie-mart",
+      "name": "Kissam Munchie Mart",
+      "aliases": [
+        "Kissam Munchie",
+        "Munchie"
+      ],
+      "kind": "dining",
+      "lat": 36.149462,
+      "lng": -86.801743,
+      "osm": "Kissam Center"
+    },
+    {
+      "id": "vu-starbucks-21st-ave",
+      "name": "Starbucks (21st Ave)",
+      "aliases": [
+        "Starbucks"
+      ],
+      "kind": "cafe",
+      "lat": 36.146887,
+      "lng": -86.799122,
+      "osm": "Starbucks"
+    },
+    {
+      "id": "vu-jenis-splendid-ice-creams",
+      "name": "Jeni's Splendid Ice Creams",
+      "aliases": [
+        "Jeni's"
+      ],
+      "kind": "cafe",
+      "lat": 36.135763,
+      "lng": -86.801134,
+      "osm": "Jeni's Splendid Ice Creams"
+    },
+    {
+      "id": "vu-dunkin-21st-ave",
+      "name": "Dunkin' (21st Ave)",
+      "aliases": [
+        "Dunkin"
+      ],
+      "kind": "cafe",
+      "lat": 36.139359,
+      "lng": -86.800268,
+      "osm": "Dunkin'"
+    },
+    {
+      "id": "vu-hopdoddy-burger-bar",
+      "name": "Hopdoddy Burger Bar",
+      "aliases": [
+        "Hopdoddy"
+      ],
+      "kind": "cafe",
+      "lat": 36.136257,
+      "lng": -86.801092,
+      "osm": "Hopdoddy Burger Bar"
+    },
+    {
+      "id": "vu-sarabhas-creamery",
+      "name": "Sarabha's Creamery",
+      "aliases": [
+        "Sarabhas"
+      ],
+      "kind": "cafe",
+      "lat": 36.147267,
+      "lng": -86.798867,
+      "osm": "Sarabha's Creamery"
+    }
+  ]
+}

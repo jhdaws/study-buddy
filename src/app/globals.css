@@ -16,19 +16,32 @@
  */
 
 @theme {
-  --font-sans: "Manrope Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
 
-  /* App surfaces (2026-10-11 calm pass): flat white on a cool off-white,
-     navy for the brand, one blue for links and focus. Measured on white
-     and on paper: ink 16:1, ink-2 6.4:1, signal 5.3:1, seat 4.9:1. */
-  --color-paper: #f4f7fb;
-  --color-line: #dce3ee;
-  --color-field: #7d8ca7; /* control borders, 3:1 on white */
-  --color-ink: #0e1b33;
-  --color-ink-2: #4a5b78;
-  --color-brand: #13294b;
-  --color-signal: #2563c9;
+  /* The 2026-10-20 redesign (Claude Design, "Study Buddy Redesign"): white
+     cards and frosted glass on a soft mist, one blue accent, pastel status
+     pills. Text is dark on light everywhere: ink 17:1 on white, ink-2 4.8:1,
+     accent 5.2:1. */
+  --color-page: #f7f8fa;
+  --color-line: #e6e8ec;
+  --color-line-strong: #d1d5db;
+  --color-column: #f1f2f4;
+  --color-ink: #111827;
+  --color-ink-body: #4b5563;
+  --color-ink-2: #6b7280;
+  --color-ink-3: #9ca3af;
+  --color-accent: #2f5bea;
+  --color-accent-hover: #2449c4;
+  --color-error: #c2352b;
   --color-seat: #1f7a50;
+  --color-dark: #111827;
+
+  /* Older names, remapped so anything not yet redrawn still matches. */
+  --color-paper: #f7f8fa;
+  --color-field: #d1d5db;
+  --color-brand: #2f5bea;
+  --color-signal: #2f5bea;
 
   --color-navy-950: #050e20;
   --color-navy-900: #0a1a36;
@@ -70,9 +83,25 @@
   }
 }
 
-/* The app's background: plain paper. */
+/* The app's background: the design's soft mist, washed toward white. */
 @utility app-backdrop {
-  background-color: var(--color-paper);
+  background-color: #f3f4f7;
+  background-image: linear-gradient(rgba(247, 248, 250, 0.5), rgba(247, 248, 250, 0.5)),
+    url("/bg/bg-mist.webp");
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  @media (width >= 64rem) {
+    background-image: linear-gradient(rgba(247, 248, 250, 0.5), rgba(247, 248, 250, 0.5)),
+      url("/bg/bg-mist-wide.webp");
+  }
+}
+
+/* Frosted glass over the mist: top bar, tab rows, board columns. */
+@utility glass {
+  background-color: rgb(255 255 255 / 0.62);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
 }
 
 @layer base {
@@ -82,14 +111,17 @@
 
   body {
     color: var(--color-ink);
+    font-size: 14px;
+    line-height: 1.4;
+    -webkit-font-smoothing: antialiased;
     font-family: var(--font-sans);
     font-feature-settings: "tnum" 0;
   }
 
   /* One visible focus style everywhere, keyboard only (spec page 5). */
   :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
-    outline: 2px solid var(--color-signal);
-    outline-offset: 3px;
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 }
 
@@ -101,4 +133,22 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* The campus map's pin (src/components/CampusMap.tsx): a dark dot with a
+   white ring, like the design's selected-place marker. Leaflet positions the
+   element; this only draws it. */
+.campus-pin {
+  border-radius: 9999px;
+  background: var(--color-dark);
+  border: 3px solid #fff;
+  box-shadow: 0 4px 12px rgb(17 24 39 / 0.35);
+}
+
+/* Leaflet's controls in the app's type, and its credit line kept small. */
+.leaflet-container {
+  font-family: inherit;
+}
+.leaflet-control-attribution {
+  font-size: 10px;
 }

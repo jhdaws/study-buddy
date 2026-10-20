@@ -25,6 +25,10 @@ export type SessionFilters = {
   when: WhenFilter;
   /** Only sessions with at least one seat left. */
   hasSeats: boolean;
+  /** One course, as its code ("CS 3251"); empty or absent for any. */
+  course?: string;
+  /** One place, as its location label; empty or absent for any. */
+  place?: string;
 };
 
 export const NO_FILTERS: SessionFilters = { query: "", when: "all", hasSeats: false };
@@ -78,13 +82,37 @@ export function filterSessions(
   return sessions.filter(
     (session) =>
       (!filters.hasSeats || session.seatsLeft > 0) &&
+      (!filters.course || formatCourseCode(session.course) === filters.course) &&
+      (!filters.place || session.locationLabel === filters.place) &&
       matchesWhen(session, filters.when, now) &&
       (words.length === 0 || words.every((word) => haystack(session).includes(word))),
   );
 }
 
 export function isFiltered(filters: SessionFilters): boolean {
-  return filters.query.trim() !== "" || filters.when !== "all" || filters.hasSeats;
+  return (
+    filters.query.trim() !== "" ||
+    filters.when !== "all" ||
+    filters.hasSeats ||
+    Boolean(filters.course) ||
+    Boolean(filters.place)
+  );
+}
+
+/** How many filters the Filter popover holds (course, place) -- its button's count. */
+export function popoverFilterCount(filters: SessionFilters): number {
+  return Number(Boolean(filters.course)) + Number(Boolean(filters.place));
+}
+
+/** The distinct courses and places in a list, sorted, for the Filter popover. */
+export function filterOptions(sessions: SessionListItem[]): { courses: string[]; places: string[] } {
+  const courses = new Set<string>();
+  const places = new Set<string>();
+  for (const s of sessions) {
+    courses.add(formatCourseCode(s.course));
+    places.add(s.locationLabel);
+  }
+  return { courses: [...courses].sort(), places: [...places].sort() };
 }
 
 export type DayGroup = { label: string; sessions: SessionListItem[] };
