@@ -71,6 +71,83 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-10-18 · M5: fixture locations for local dev, closing the gap W8 left
+
+**Branch:** `m5-us-02-local-locations`, from `main` · **Commits made:** one, pushed; no PR opened (no `gh` CLI here — compare link: `https://github.com/jhdaws/study-buddy/pull/new/m5-us-02-local-locations`).
+
+### What changed
+- W8 (#37) had already solved M5 for Playwright (`tests/e2e/global-setup.ts`
+  upserts `FIXTURE_LOCATIONS` into the local database before the journeys
+  run), but `docs/tickets.md` still showed M5 unchecked and `npm run dev`
+  against a local database had no such rows — the stub picker's fixture
+  place ids would still fail `create_session`'s foreign key.
+- `scripts/seed-local-locations.mts` (new) — does for `db:start`/`db:reset`
+  what `global-setup.ts` does for Playwright: upserts the three
+  `FIXTURE_LOCATIONS` rows by id, refusing any non-local host (same guard as
+  `tests/db/connection.ts`). Wired into both npm scripts.
+- `tsconfig.json` — added `allowImportingTsExtensions`. Node's own TypeScript
+  support requires the literal `.ts` extension in a relative import
+  (`../src/lib/fixtures.ts`); `tsc`'s default `bundler` resolution rejects
+  that extension unless this flag is on. Low blast radius: this project
+  already has `noEmit: true` (required to pair with the flag), and nothing
+  else in the repo uses an explicit extension that this would change the
+  meaning of.
+- Confirmed (by reading `supabase db push --help`/`db reset --help` and
+  `config.toml`) that `--include-seed` only ever reads
+  `[db.seed].sql_paths` — today just `seed.sql` — so a script that is never
+  referenced there, and never in a migration, cannot reach a hosted project
+  through any push path. The host check in the new script is belt-and-
+  suspenders, not the only guard.
+- `docs/tickets.md`, `docs/ai-usage-log.md`.
+
+### Verified versus assumed
+- **Verified:** `npm run lint`, `npm run typecheck` (only passes with the
+  tsconfig change above), `npm test` (391 passed), `npm run build`, the
+  seed-freshness check. The script's import chain was checked by running it
+  directly: it resolves `fixtures.ts` and fails only at the expected
+  `ECONNREFUSED` step.
+- **Not verified — no Docker in this environment:** never actually run
+  against a live local Supabase, so "does it insert the rows and does
+  `npm run dev` then let a session be created with a fixture place" is
+  unconfirmed. Everything after the import succeeds is the same shape as
+  `global-setup.ts`, which *has* passed in CI (W8's entry below), but that is
+  evidence, not proof.
+
+### Things the next agent should be careful about
+- If `allowImportingTsExtensions` ever causes friction elsewhere, the
+  alternative is renaming the import target or duplicating the three fixture
+  rows' literal values into a plain `.mjs` script (like `build-seed.mjs`
+  does) instead of importing `fixtures.ts` — more duplication, zero new
+  tsconfig surface.
+- `node scripts/seed-local-locations.mts` prints a Node warning
+  ("MODULE_TYPELESS_PACKAGE_JSON ... reparsing as ES module") because
+  `fixtures.ts` has no explicit module type. Harmless (not an error, doesn't
+  affect exit code) — left alone rather than adding `"type": "module"` to
+  `package.json`, which would be a much larger blast radius for a cosmetic
+  warning.
+
+### Update, same session: Jack approved, with a portability gap
+
+Jack approved PR #74. One real note: `scripts/seed-local-locations.mts`
+needs Node 22.18+ to strip TypeScript syntax on its own; on an older Node,
+`npm run db:start` would fail partway through, *after* Supabase had already
+started, with a confusing error.
+
+**Fixed:** added `scripts/seed-local-locations.mjs`, a plain-JS entry point
+every Node version can at least parse, which checks `process.versions.node`
+first and only then dynamically imports the `.mts` file. The version check
+could not live inside the `.mts` file itself — on a Node too old to load a
+`.mts` file, nothing in it runs, not even a check at the top.
+`db:seed:locations` in `package.json` now points at the wrapper.
+
+Also flagged, not yet acted on: **Jack's other note is a separate, real
+production bug (BUG-09), not something this PR touches.** Creating a session
+on the live site still fails on the foreign key — this PR was always scoped
+to local and CI only (that's the whole point of #36's "local and CI only"
+decision). Jack offered to insert the same three rows into the *hosted*
+`locations` table with his own access, as a stopgap until M2. That is a call
+for the user/team to make on GitHub, not something this session decided or
+implemented.
 ## 2026-10-18 · S5: join and leave with a seat limit
 
 **Branch:** `s5-us-04-join-leave`, from `main` · **Commits made:** one, pushed; no PR opened yet (no `gh` CLI in this environment — the push printed the compare link, `https://github.com/jhdaws/study-buddy/pull/new/s5-us-04-join-leave`).
