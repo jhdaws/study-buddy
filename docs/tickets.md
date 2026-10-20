@@ -280,21 +280,23 @@ Per #33, Supabase's built-in sender reaches only members of the Supabase organiz
       `listSessions()` is still S4's stub, reading fixtures, not the database
 
 #### S4 · Lists and typeahead for real
-**M · US-03 · after S1 · Nate; Tapan reviews**
-- [ ] `listSessions()`: ended and cancelled sessions excluded, seats left derived from the roster (never stored), soonest first
-- [ ] `listDepartments()`; `searchCourses()` ordered by how many sessions used each course
-- [ ] `hostDisplayName` on each item needs A2's profiles read policy — until A2 lands, return null (shown as "Deleted user") or coordinate with A2
+**M · US-03 · after S1 · Nate; Tapan reviews · DONE**
+- [x] `listSessions()`: ended and cancelled sessions excluded, seats left derived from the roster (never stored), soonest first — one query; `ends_at=gt.now` so "ended" is decided by the **database's** clock, and `session_attendees (count)` so Postgres counts the roster rather than this process fetching it
+- [x] `listDepartments()`; `searchCourses()` ordered by how many sessions used each course — the ranking happens in TypeScript because the count is an embedded aggregate and PostgREST cannot `ORDER BY` one; the needle is reduced to letters, digits and spaces first, since it reaches `or=(…)` as filter *syntax*
+- [x] `hostDisplayName` on each item needs A2's profiles read policy — A2 has since landed, so this is the real name, through `profiles!sessions_host_id_fkey`. The foreign key has to be named: a plain `profiles` embed is ambiguous and fails with `PGRST201`
+- [x] W8's journey 3, parked on this ticket (`test.fixme("Needs S4")`), now runs: a second student signs in and sees another's session with the right seats left
 
 #### S5 · Join and leave with a seat limit
-**L · US-04, US-07, US-08 · Sprint 3 · Tapan**
+**L · US-04, US-07, US-08 · Sprint 3 · Tapan · 🚧**
 
 The other half of the core loop: a student can host and browse, but not yet join. Design in `architecture.md` §3: join and leave go through database functions holding a row lock, never a plain `INSERT` from app code.
-- [ ] `join_session(session_id)`: SECURITY DEFINER, locks the session row (`for update`); refuses when full, cancelled, ended, already joined, signed out, or without a display name, each with a short raised message; inserts into `session_attendees`
-- [ ] `leave_session(session_id)`: removes the caller; the host cannot leave (they cancel, US-09, later)
-- [ ] No client INSERT or DELETE on `session_attendees`; `anon` gets no EXECUTE on either function
-- [ ] `joinSession()` and `leaveSession()` server actions, errors mapped in `databaseErrorMessage()`
-- [ ] Database tests for every refusal, and **US-07b**: two concurrent joins for the last seat, exactly one succeeds. Then delete `tests/db/harness.test.ts` (CLAUDE.md)
-- [ ] Seats left in the list reflect joins and leaves
+- [x] `join_session(session_id)`: SECURITY DEFINER, locks the session row (`for update`); refuses when full, cancelled, ended, already joined, signed out, or without a display name, each with a short raised message; inserts into `session_attendees` (`*_join_leave_session.sql`)
+- [x] `leave_session(session_id)`: removes the caller; the host cannot leave (they cancel, US-09, later)
+- [x] No client INSERT or DELETE on `session_attendees`; `anon` gets no EXECUTE on either function — including the explicit `revoke ... from anon` BUG-08 found necessary on `create_session` (`revoke all from public` alone leaves Supabase's default grant to `anon` standing)
+- [x] `joinSession()` and `leaveSession()` server actions (`src/app/sessions/actions.ts`), errors mapped in `databaseErrorMessage()`; bound to a session id the way Next documents for extra Server Action arguments (`joinSession.bind(null, sessionId)`), for S6 to wire up
+- [x] Database tests for every refusal, and **US-07b**: two concurrent joins for the last seat, exactly one succeeds (`tests/db/join-leave-session.test.ts`) — **not yet run against a real database, no Docker here** (see HANDOFF.md); `tests/db/harness.test.ts` deleted now that US-07b has a real replacement
+- [x] 7 unit tests on the server actions (`src/app/sessions/actions.test.ts`), mocked the way S3's `createSession()` tests are
+- [ ] Seats left in the list reflect joins and leaves — mechanically true once S4's `listSessions()` reads the real roster (these functions are the only writers to it), but not watchable end to end until S4 lands
 
 #### S6 · Session page with roster
 **M · US-04, US-23 · Sprint 3 · after S4 · Nate**
@@ -349,12 +351,12 @@ M2 and the map (M4) wait on these keys, and Sprint 3 ends Oct 20. If billing can
 - [ ] List / map toggle on `/sessions`; one marker per session, distinct when full; loads client-side only
 
 #### M5 · A location sessions can use before M2
-**S · US-02 · Sprint 3 · Tapan** — W8 needs a location sessions can use in CI
+**S · US-02 · Sprint 3 · Tapan · ✅** — W8 needs a location sessions can use in CI
 
 Once #31 and #32 merge, the stub picker's fixture place ids resolve to `20000000-…` location ids that are not rows, so `create_session` fails its foreign key and the student sees "Something went wrong saving that" (checked 2026-10-06 with #31–#33 merged locally). Until M1 and M2 land, nothing can be created anywhere — which blocks W6's demo and W8.
-- [ ] Decide: wait for M1 and M2, or put the three fixture locations into local and CI databases only — never the hosted project
-- [ ] If seeding: check how `supabase db push --include-seed` picks seed files, so they cannot reach the hosted project; production keeps refusing fixture ids once the server key is set (#31 already does)
-- [ ] W6 can create a session locally
+- [x] Decided: local and CI databases only, never the hosted project (option B) — W8 (#37) already did this for Playwright, in `tests/e2e/global-setup.ts`
+- [x] Checked how `supabase db push --include-seed` picks seed files: only `[db.seed].sql_paths` in `supabase/config.toml` (today just `./seed.sql`). The fixture rows are not in that file, in any migration, or in the config — no push, hosted or staging, can ever carry them. The host check in `scripts/seed-local-locations.mts` (same as `tests/db/connection.ts`) is belt-and-suspenders, not the only guard
+- [x] W6/local dev closed the remaining gap: `scripts/seed-local-locations.mts` (new) does for `npm run db:start`/`db:reset` what the e2e global setup already did for Playwright — upserts the three `FIXTURE_LOCATIONS` rows by id, refusing any non-local host. Wired into both scripts in `package.json`. **Not run in this session — no Docker here** (see HANDOFF); logic verified by running the script directly and confirming it reaches the connection-refused stage past a clean import, and by code review against the proven `global-setup.ts` pattern
 
 #### M6 · Refresh stored coordinates
 **S · Sprint 4 (moved 2026-10-12, to make room for S5 and S6) · after M1, M3 · Moses**
