@@ -14,6 +14,8 @@ import CreateSessionForm from "./CreateSessionForm";
 // be driven in jsdom.
 vi.mock("@/app/sessions/actions", () => ({ createSession: vi.fn() }));
 vi.mock("@/lib/course-search", () => ({ fetchCourseSuggestions: vi.fn() }));
+// Leaflet needs a real browser; CampusMap.test.tsx covers the map.
+vi.mock("@/components/CampusMap", () => ({ default: () => null }));
 
 const createSessionMock = vi.mocked(createSession);
 const fetchSuggestionsMock = vi.mocked(fetchCourseSuggestions);
@@ -143,7 +145,7 @@ describe("<CreateSessionForm> errors and values", () => {
         courseNumber: "2410",
         topic: "",
         room: "Group study room 3",
-        placeId: "ChIJ-FAKE-central-library",
+        placeId: "vu-central-library",
         locationLabel: "Library, 3rd floor",
         startsAt: "2026-10-01T19:30:00.000Z",
         endsAt: "2026-10-01T21:00:00.000Z",
@@ -165,7 +167,7 @@ describe("<CreateSessionForm> errors and values", () => {
 
     const data = submitted();
     expect(data.get("departmentCode")).toBe("MATH");
-    expect(data.get("placeId")).toBe("ChIJ-FAKE-central-library");
+    expect(data.get("placeId")).toBe("vu-central-library");
     expect(data.get("startsAt")).toBe("2026-10-01T19:30:00.000Z");
     expect(data.get("endsAt")).toBe("2026-10-01T21:00:00.000Z");
   });
@@ -193,7 +195,7 @@ describe("<CreateSessionForm> errors and values", () => {
       courseNumber: "3251",
       topic: "",
       room: "Room 204",
-      placeId: "ChIJ-FAKE-central-library",
+      placeId: "vu-central-library",
       locationLabel: "Central Library",
       startsAt: "2026-10-01T19:30:00.000Z",
       endsAt: "2026-10-01T21:30:00.000Z",
@@ -267,8 +269,8 @@ describe("<CreateSessionForm> fields", () => {
     // Emptying it hands it back to the picker.
     change(label, "");
     await pickPlace("Central Library");
-    await pickPlace("Hillsboro Village café");
-    expect(label.value).toBe("Hillsboro Village café");
+    await pickPlace("Sarratt Student Center");
+    expect(label.value).toBe("Sarratt Student Center");
   });
 
   it("submits a day, a start and a length as two ISO instants, never the raw picks", () => {

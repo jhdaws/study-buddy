@@ -2,59 +2,47 @@
 
 /**
  * Location picker for creating a session (US-02). Owner: Track M -- M2 (#23).
- * Replaced W4's <select> stub on 2026-10-19; the props contract is unchanged.
+ * Replaced W4's <select> stub on 2026-10-19; since 2026-10-20 it offers the
+ * curated campus list (src/lib/campus-places.ts) on an OpenStreetMap map, the
+ * way Pakita's host dashboard does -- no Google key needed. The props
+ * contract is unchanged.
  *
  * THE CONTRACT (fixed by W4, #11):
- *   - It submits a Google Places **place ID** as a form field named `name`
- *     (default `placeId`, createSessionSchema's key). Never coordinates, never
- *     a name: the server looks the place up itself (resolvePlace, M3 #24).
+ *   - It submits a **place id** as a form field named `name` (default
+ *     `placeId`, createSessionSchema's key): a campus id, `vu-<slug>`. Never
+ *     coordinates, never a name: the server looks the place up itself
+ *     (resolvePlace, M3 #24).
  *   - When the host picks a place it calls `onSelect({ placeId, label })`,
- *     where `label` is the name Google suggests. The form prefills its own
+ *     where `label` is the place's name. The form prefills its own
  *     `locationLabel` input from it (ADR 0008 rule 14). `onSelect(null)`
  *     means the selection was cleared.
  *   - It keeps its selection across a failed submit, when React resets the
- *     form after the action (LocationPicker.test.tsx). The place ID lives in
+ *     form after the action (LocationPicker.test.tsx). The place id lives in
  *     a controlled hidden input, which survives a reset.
  *
  * WHAT IT IS: a search box (an ARIA combobox over a listbox), the chosen
- * place shown in the box with a clear button, and a campus map beneath with a
- * pin on the choice. Two suggestion sources, chosen by whether the browser
- * Maps key exists (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, M1):
- *   - Google: Places Autocomplete (New), restricted to the campus circle
- *     (`locationRestriction`, a hard filter -- not `locationBias`), with
- *     `includedPrimaryTypes` and a session token per typing session, closed
- *     by the one fetchFields() that gets the pin's coordinates. Both the
- *     request shape and the types list are in src/lib/place-search.ts.
- *   - Fixtures (no key: local dev, CI, today's production): the three
- *     FIXTURE_PLACES, matched by word prefix, with a placeholder where the
- *     map would be. resolvePlace() accepts their ids only without a server
- *     key; W6 deletes them once M1 lands.
+ * place shown in the box with a clear button, and a campus map (Leaflet,
+ * <CampusMap>) with a pin on the choice. Search is Pakita's name-and-nickname
+ * scoring, in the browser, instantly: the list is small and shipped with the
+ * page. Before anything is typed it offers a few starter places.
  *
  * SECURITY: none of the above is a control. It shapes what the picker
- * offers; a direct POST can carry any place ID. resolvePlace() re-checks the
- * radius and place type on the server before anything is stored.
+ * offers; a direct POST can carry any id. resolvePlace() accepts only ids on
+ * the list and uses the coordinates committed for them.
  */
 
-import { APIProvider, useMapsLibrary } from "@vis.gl/react-google-maps";
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useId, useRef, useState } from "react";
 
-import LocationMap, { MapPlaceholder } from "@/components/LocationMap";
+import CampusMap from "@/components/CampusMap";
 import Icon from "@/components/ui/Icon";
-import {
-  AUTOCOMPLETE_PRIMARY_TYPES,
-  AUTOCOMPLETE_RESTRICTION,
-  MAX_SUGGESTIONS,
-  MIN_QUERY_LENGTH,
-  SEARCH_DEBOUNCE_MS,
-  matchFixturePlaces,
-  type PlaceSuggestion,
-} from "@/lib/place-search";
+import { KIND_LABEL, searchCampusPlaces } from "@/lib/campus-places";
+import { MAX_SUGGESTIONS, type PlaceSuggestion } from "@/lib/place-search";
 
 /** What the picker reports when the host picks a place. */
 export type PickedPlace = {
-  /** Google Places place ID -- the value the form submits. */
+  /** The place id -- the value the form submits. */
   placeId: string;
-  /** The name Google suggests, for prefilling the form's `locationLabel`. */
+  /** The place's name, for prefilling the form's `locationLabel`. */
   label: string;
 };
 
@@ -86,98 +74,21 @@ export type LocationPickerProps = {
 
 type LatLng = { lat: number; lng: number };
 
-/** A suggestion source: search, and find a chosen place's coordinates for the pin. */
-type Source = {
-  search: (query: string, signal: AbortSignal) => Promise<PlaceSuggestion[]>;
-  locate: (place: PlaceSuggestion) => Promise<LatLng | null>;
-  /** Whether a real map can be drawn (needs Google). */
-  hasMap: boolean;
-};
-
-// NEXT_PUBLIC_ values are inlined at build time, so this is a constant per build.
-const BROWSER_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-
-export default function LocationPicker(props: LocationPickerProps) {
-  if (BROWSER_KEY) {
-    return (
-      <APIProvider apiKey={BROWSER_KEY} libraries={["places", "marker"]}>
-        <GooglePicker {...props} />
-      </APIProvider>
-    );
-  }
-  return <FixturePicker {...props} />;
-}
-
-// ---------------------------------------------------------------------------
-// Sources
-// ---------------------------------------------------------------------------
-
-const FIXTURE_SOURCE: Source = {
-  search: async (query) => matchFixturePlaces(query),
-  locate: async (place) => place.location ?? null,
-  hasMap: false,
-};
-
-function FixturePicker(props: LocationPickerProps) {
-  return <Picker {...props} source={FIXTURE_SOURCE} />;
-}
-
-function GooglePicker(props: LocationPickerProps) {
-  const places = useMapsLibrary("places");
-  // One token per typing session: created on the first search after a
-  // selection (or on mount), handed to every fetchAutocompleteSuggestions,
-  // and spent by the fetchFields() that gets the chosen place's location.
-  const token = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
-
-  const source = useMemo<Source>(() => {
-    if (!places) {
-      // Still loading Google: offer nothing rather than fixtures, so a real
-      // deployment never submits a fake id.
-      return { search: async () => [], locate: async () => null, hasMap: true };
-    }
-    return {
-      hasMap: true,
-      async search(query, signal) {
-        token.current ??= new places.AutocompleteSessionToken();
-        const { suggestions } = await places.AutocompleteSuggestion.fetchAutocompleteSuggestions({
-          input: query,
-          sessionToken: token.current,
-          locationRestriction: AUTOCOMPLETE_RESTRICTION,
-          includedPrimaryTypes: [...AUTOCOMPLETE_PRIMARY_TYPES],
-          region: "us",
-        });
-        if (signal.aborted) return [];
-        return suggestions
-          .flatMap((s) => (s.placePrediction ? [s.placePrediction] : []))
-          .slice(0, MAX_SUGGESTIONS)
-          .map((p) => ({
-            placeId: p.placeId,
-            mainText: p.mainText?.text ?? p.text.text,
-            secondaryText: p.secondaryText?.text ?? "",
-            prediction: p,
-          }));
-      },
-      async locate(place) {
-        const prediction = (place as PlaceSuggestion & { prediction?: google.maps.places.PlacePrediction })
-          .prediction;
-        const target = prediction ? prediction.toPlace() : new places.Place({ id: place.placeId });
-        // Essentials field only; this call also closes the billing session.
-        const { place: fetched } = await target.fetchFields({ fields: ["location"] });
-        token.current = null;
-        const loc = fetched.location;
-        return loc ? { lat: loc.lat(), lng: loc.lng() } : null;
-      },
-    };
-  }, [places]);
-
-  return <Picker {...props} source={source} loading={!places} />;
+/** The campus list as picker rows, with their committed coordinates. */
+export function campusSuggestions(query: string): PlaceSuggestion[] {
+  return searchCampusPlaces(query, MAX_SUGGESTIONS).map((place) => ({
+    placeId: place.id,
+    mainText: place.name,
+    secondaryText: KIND_LABEL[place.kind],
+    location: { lat: place.lat, lng: place.lng },
+  }));
 }
 
 // ---------------------------------------------------------------------------
 // The picker itself: a combobox, the chosen place, and the map
 // ---------------------------------------------------------------------------
 
-function Picker({
+export default function LocationPicker({
   name = "placeId",
   id,
   defaultValue,
@@ -189,9 +100,7 @@ function Picker({
   mapLayout = "below",
   header,
   beside,
-  source,
-  loading = false,
-}: LocationPickerProps & { source: Source; loading?: boolean }) {
+}: LocationPickerProps) {
   const reactId = useId();
   const inputId = id ?? `${reactId}-place`;
   const listId = `${reactId}-options`;
@@ -199,65 +108,33 @@ function Picker({
 
   const [selected, setSelected] = useState<PickedPlace | null>(defaultValue ?? null);
   const [query, setQuery] = useState(defaultValue?.label ?? "");
-  const [options, setOptions] = useState<PlaceSuggestion[]>([]);
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(-1);
-  const [searching, setSearching] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [active, setActive] = useState(0);
   const [pin, setPin] = useState<LatLng | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const abortRef = useRef<AbortController | null>(null);
 
-  // Search as the host types, after a short quiet period. Fixtures answer
-  // instantly for any query (including ""); Google waits for MIN_QUERY_LENGTH.
-  useEffect(() => {
-    if (selected || !open) return;
-    const trimmed = query.trim();
-    const controller = new AbortController();
-    abortRef.current?.abort();
-    abortRef.current = controller;
-    const timer = setTimeout(async () => {
-      if (source.hasMap && trimmed.length < MIN_QUERY_LENGTH) {
-        setOptions([]);
-        return;
-      }
-      setSearching(true);
-      try {
-        const found = await source.search(trimmed, controller.signal);
-        if (controller.signal.aborted) return;
-        setOptions(found);
-        setActive(found.length ? 0 : -1);
-        setFailed(false);
-      } catch {
-        if (controller.signal.aborted) return;
-        setOptions([]);
-        setFailed(true);
-      } finally {
-        if (!controller.signal.aborted) setSearching(false);
-      }
-    }, source.hasMap ? SEARCH_DEBOUNCE_MS : 0);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [query, open, selected, source]);
+  // Search as the host types. The list is local and small, so it is simply
+  // searched on every render; an empty box offers the starter places.
+  const options = open && !selected ? campusSuggestions(query) : [];
+  // A new query highlights its first row (adjusting state during render,
+  // not in an effect).
+  const [activeFor, setActiveFor] = useState(query);
+  if (activeFor !== query) {
+    setActiveFor(query);
+    setActive(0);
+  }
 
   const choose = useCallback(
-    async (place: PlaceSuggestion) => {
+    (place: PlaceSuggestion) => {
       const picked = { placeId: place.placeId, label: place.mainText };
       setSelected(picked);
       setQuery(place.mainText);
       setOpen(false);
-      setOptions([]);
+      setPin(place.location ?? null);
       onSelect?.(picked);
-      try {
-        setPin(await source.locate(place));
-      } catch {
-        setPin(null);
-      }
     },
-    [onSelect, source],
+    [onSelect],
   );
 
   function clear() {
@@ -279,7 +156,7 @@ function Picker({
     } else if (event.key === "Enter") {
       if (open && active >= 0 && options[active]) {
         event.preventDefault();
-        void choose(options[active]);
+        choose(options[active]);
       }
     } else if (event.key === "Escape") {
       if (open) {
@@ -289,7 +166,7 @@ function Picker({
     }
   }
 
-  const showList = open && !selected && (options.length > 0 || searching || failed);
+  const showList = open && !selected;
   const describedBy = [ariaDescribedBy, statusId].filter(Boolean).join(" ") || undefined;
 
   const side = mapLayout === "side";
@@ -321,8 +198,8 @@ function Picker({
             aria-describedby={describedBy}
             aria-required={required}
             autoComplete="off"
-            placeholder={loading ? "Loading places…" : "Search a building, library or café"}
-            disabled={disabled || loading}
+            placeholder="Search a building, library or café"
+            disabled={disabled}
             value={query}
             onChange={(event) => {
               setQuery(event.target.value);
@@ -368,7 +245,7 @@ function Picker({
               aria-selected={i === active}
               onMouseDown={(event) => event.preventDefault()}
               onMouseEnter={() => setActive(i)}
-              onClick={() => void choose(place)}
+              onClick={() => choose(place)}
               className={
                 "flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 " +
                 (i === active ? "bg-column" : "")
@@ -387,7 +264,7 @@ function Picker({
           ))}
           {options.length === 0 && (
             <li role="presentation" className="px-3 py-2.5 text-[13px] text-ink-2">
-              {failed ? "Couldn't search places just now. Try again." : searching ? "Searching…" : "No places found near campus."}
+              No campus places match. Try a building name, like “Sarratt”.
             </li>
           )}
         </ul>
@@ -400,12 +277,17 @@ function Picker({
     </p>
   );
 
-  // The map: Google's, or the plain stand-in until M1's key exists.
+  // The map: OpenStreetMap through Leaflet, centred on campus until a pick.
   const map = (
-    <div className={`relative overflow-hidden rounded-xl border border-line ${side ? "h-56 lg:h-full lg:min-h-[220px]" : "h-56 sm:h-60"}`}>
-      {source.hasMap ? <LocationMap pin={pin} title={selected?.label} /> : <MapPlaceholder pin={pin} label={selected?.label} />}
+    <div
+      className={`relative isolate overflow-hidden rounded-xl border border-line ${side ? "h-56 lg:h-full lg:min-h-[220px]" : "h-56 sm:h-60"} ${
+        // Lift Leaflet's credit line above the caption strip.
+        selected ? "[&_.leaflet-bottom]:mb-9" : ""
+      }`}
+    >
+      <CampusMap pin={pin} label={selected?.label} />
       {selected && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-2 border-t border-line bg-white px-3 py-2 text-[13px]">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[500] flex items-center gap-2 border-t border-line bg-white px-3 py-2 text-[13px]">
           <span className="text-ink-2">
             <Icon name="pin" size={14} />
           </span>

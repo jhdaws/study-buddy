@@ -1,4 +1,5 @@
-// Server-side place resolution: a Google Places id in, a `locations` row id out.
+// Server-side place resolution: a curated campus id (`vu-...`, the picker's
+// source since 2026-10-20) or a Google Places id in, a `locations` row id out.
 // Owner: Track M -- M3 (#24). Called by createSession() (S3, #20).
 //
 // SERVER ONLY. `import "server-only"` makes importing this from a Client
@@ -16,6 +17,7 @@
 
 import "server-only";
 
+import { CAMPUS_PLACE_PREFIX, findCampusPlace, isCampusPlaceId } from "@/lib/campus-places";
 import { googleMapsServerKey } from "@/lib/env";
 import { FIXTURE_LOCATIONS } from "@/lib/fixtures";
 import type { LatLng } from "@/lib/geo";
@@ -29,7 +31,7 @@ import {
   type PlaceDetails,
 } from "@/lib/place-policy";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getCurrentUser } from "@/lib/supabase/server";
+import { createClient, getCurrentUser } from "@/lib/supabase/server";
 
 export type ResolvedPlace = {
   /** `locations.id` -- what `sessions.location_id` references */
@@ -153,6 +155,11 @@ export async function resolvePlace(
   placeId: string,
   options: ResolvePlaceOptions = {},
 ): Promise<ResolvedPlace> {
+  // A curated campus place: see CAMPUS PLACES below. Never sent to Google.
+  if (placeId.startsWith(CAMPUS_PLACE_PREFIX)) {
+    return { locationId: await campusLocation(placeId) };
+  }
+
   // fixtures.ts promises a fake id is never sent to Google, whatever happens.
   if (placeId.startsWith(FIXTURE_ID_PREFIX)) {
     const fixture = FIXTURE_LOCATIONS.find((row) => row.place_id === placeId);
@@ -179,6 +186,51 @@ export async function resolvePlace(
   }
 
   return { locationId: await storeLocation(placeId, place.location) };
+}
+
+// ===========================================================================
+// CAMPUS PLACES (2026-10-20, Track M). The picker now offers the curated list
+// in src/lib/campus-places.ts (Pakita's approach; reverses ADR 0008 rule 7).
+// Their `locations` rows -- coordinates looked up once in OpenStreetMap -- are
+// written by a migration (supabase/migrations/*_campus_places.sql), so this
+// branch only READS: no Google call, no secret key, no write. It still never
+// trusts the browser: an id that is not on the list is `unknown_place`, and
+// the coordinates are the ones we committed, not anything the form sent.
+// The read goes through the caller's own client, so RLS applies: nobody
+// signed in sees no rows, which ends as `lookup_failed` like every other
+// unauthenticated lookup. A listed place with no row means the migration has
+// not been applied to this database -- logged, and `lookup_failed`.
+// ===========================================================================
+
+/** The `locations.id` of a curated campus place. Throws PlaceError. */
+async function campusLocation(placeId: string): Promise<string> {
+  if (!isCampusPlaceId(placeId) || !findCampusPlace(placeId)) {
+    throw new PlaceError("unknown_place", placeId);
+  }
+  const supabase = await createClient();
+  try {
+    const { data, error } = await supabase
+      .from("locations")
+      .select("id")
+      .eq("place_id", placeId)
+      .maybeSingle();
+    if (error || !data) {
+      console.error("resolvePlace: no locations row for a campus place", {
+        placeId,
+        code: error?.code,
+        message: error?.message,
+      });
+      throw new PlaceError("lookup_failed", placeId);
+    }
+    return data.id;
+  } catch (error) {
+    if (error instanceof PlaceError) throw error;
+    console.error("resolvePlace: reading a campus place failed", {
+      placeId,
+      error: error instanceof Error ? error.name : "unknown",
+    });
+    throw new PlaceError("lookup_failed", placeId);
+  }
 }
 
 /** See THE FIXTURE IDS above. Checked per request, so adding the key needs no rebuild. */

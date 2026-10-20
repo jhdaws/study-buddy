@@ -8,6 +8,7 @@ Starter data for the database. Decided in
 | --- | --- |
 | `departments.json` | 10 departments: `code` and `name` |
 | `courses.json` | 27 courses, 2–4 per department: `department_code`, `number`, and `title` |
+| `campus_places.json` | The places the location picker offers: `id` (`vu-<slug>`), `name`, `aliases`, `kind`, `lat`, `lng`, `osm` (OpenStreetMap's name for the point). Not in `seed.sql`; see below |
 
 **These files are the source of truth; `supabase/seed.sql` is generated from
 them.** To change the starter data:
@@ -130,3 +131,27 @@ control.
 This platform sends students to meet people they do not know, in person.
 Arbitrary address input means someone can post a session at a private
 residence. Related: US-18, US-22, US-23.
+
+## Campus places — `campus_places.json`
+
+What the location picker offers since 2026-10-20 (ADR 0008, amendment of that
+date). Started from Moses's Vanderbilt campus map (names and addresses only);
+kept to public study spots -- academic buildings, libraries, student centres,
+dining, and cafés on 21st Ave. Dorms, Greek houses, hospitals and garages were
+left out on purpose.
+
+**Coordinates** were looked up once on 2026-10-20 with OpenStreetMap's
+Nominatim (data © OpenStreetMap contributors, ODbL) and checked by hand
+against the name OSM returned (`osm`). Dropped because OSM had no good match:
+Curb Center (matched Belmont's), Bronson Ingram Studio Arts (matched the
+residential college), Roma Pizza, Sitar, V Modern Italian, Wasabi. Stevenson
+Center's chemistry, physics, lecture-hall and library entries had no separate
+OSM points, so they are nicknames of one "Stevenson Center" entry, pinned on
+Stevenson Center Lane. Godchaux Hall is pinned on the Godchaux Nursing Annex.
+
+**Changing the list:** edit the JSON, then
+`npx supabase migration new campus_places_<what>` and
+`node scripts/campus-locations-sql.mjs > supabase/migrations/<that file>`.
+`src/lib/campus-places.test.ts` fails on a duplicate or malformed id, or a
+place outside the campus circle.
+
