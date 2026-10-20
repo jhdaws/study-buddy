@@ -73,6 +73,28 @@ spends its first hour rediscovering the same dead end.
 
 
 
+## 2026-10-20 · M2 location picker with a map, on m2-us-02-location-picker
+
+### What changed
+
+`LocationPicker` is now a search combobox over a listbox, with the chosen
+place shown in the box, and `LocationMap` beneath (Google basemap, one pin)
+inside `APIProvider` when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` exists. Without
+the key it searches `FIXTURE_PLACES` (`matchFixturePlaces`) and shows a
+placeholder panel that says the map turns on once Google is connected. The
+props contract is unchanged; the picker, form and e2e tests pick a place by
+typing then clicking the option.
+
+### Things the next agent should be careful about
+
+Nothing here has touched Google: M1 has no key yet. Two findings from the
+typings: the JS `locationRestriction` only takes bounds (`campusBounds()` in
+place-search.ts; the server still checks the circle), and
+`includedPrimaryTypes` allows five. Whether Featheringill and Stevenson
+appear under `university` is unverified. `AdvancedMarker` needs a Map ID:
+`NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID`, falling back to Google's `DEMO_MAP_ID`
+(watermarked). Add both to M1's checklist.
+
 ## 2026-10-19 · A6: email + password sign-in; BUG-15 department select
 
 **Branch:** `a6-us-01-password-sign-in` · **Commits made:** this PR (BUG-15 merged separately in #81)
@@ -89,7 +111,6 @@ spends its first hour rediscovering the same dead end.
 ### Things the next agent should be careful about
 - Every e2e student now chooses `E2E_PASSWORD` after the name step (`tests/e2e/helpers.ts`). A journey that needs a student WITHOUT a password has to be built differently.
 - `selectOption()` hides a whole class of bug (BUG-15): pick `<select>` options with `chooseByKeyboard()`.
-
 ## 2026-10-19 · S6: the session page, roster and Join/Leave (built for the Sprint 3 deadline)
 
 **Branch:** `s6-us-23-session-page` · **Commits made:** this PR

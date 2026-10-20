@@ -43,7 +43,9 @@ test("journey 2: a signed-in student hosts a session, and it is saved with them 
   await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
   await page.getByLabel("Course number").fill("3251");
   await page.getByLabel("What are you studying?").fill(topic);
-  await chooseByKeyboard(page.getByLabel("Place"), "Feath", "ChIJ-FAKE-featheringill-hall");
+  await // The picker is a search box now: type, then take the suggestion by keyboard.
+  await page.getByLabel("Place").fill("Feath");
+  await page.getByLabel("Place").press("Enter");
   await page.getByLabel("Starts").fill(campusTime(2));
   await page.getByLabel("Ends").fill(campusTime(4));
   await page.getByLabel("How many people, including you?").fill("4");
