@@ -17,9 +17,13 @@
  * not carry (and showing who is going is US-23, a later sprint). The seats
  * bar shows the same thing honestly: how many are going, out of how many.
  *
- * Not a link yet: the detail page (/sessions/[id]) is a later sprint. When it
- * lands, wrap the course heading in a <Link href={`/sessions/${session.id}`}>.
+ * The whole card opens the session page (/sessions/[id], S6): the course
+ * heading is the link, and its ::after stretches over the card (which is
+ * `relative`), so the tap target is the card while the link's accessible
+ * name stays just the course.
  */
+
+import Link from "next/link";
 
 import Icon from "@/components/ui/Icon";
 import type { SessionListItem } from "@/lib/sessions";
@@ -130,13 +134,18 @@ export default function SessionCard({
   );
 
   const heading = (
-    // scroll-mt clears the sticky top bar when the home page's "View" links
-    // jump to /sessions#session-<id>.
+    // The id labels the article; scroll-mt keeps the heading clear of the
+    // sticky top bar if anything links to /sessions#session-<id>.
     <Heading id={headingId} className="scroll-mt-24 text-base leading-snug">
-      <span className="font-extrabold">{formatCourseCode(session.course)}</span>
-      {session.course.title && (
-        <span className="font-medium text-white/72"> · {session.course.title}</span>
-      )}
+      <Link
+        href={`/sessions/${session.id}`}
+        className="rounded-sm after:absolute after:inset-0 after:rounded-card after:content-[''] focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-blue-300"
+      >
+        <span className="font-extrabold">{formatCourseCode(session.course)}</span>
+        {session.course.title && (
+          <span className="font-medium text-white/72"> · {session.course.title}</span>
+        )}
+      </Link>
     </Heading>
   );
 

@@ -71,6 +71,20 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+
+## 2026-10-19 · S6: the session page, roster and Join/Leave (built for the Sprint 3 deadline)
+
+**Branch:** `s6-us-23-session-page` · **Commits made:** this PR
+
+### What changed
+- S6 (#52) was Nate's ticket; Jack asked for it to be built tonight so join and leave are usable before the Sprint 3 deadline. Nate should know before he starts on it.
+- `/sessions/[id]`, `<SessionRoster>`, `rosterAction()` and `getSession()`, with cards and home links pointing at the page. The tickets, contracts, test cases and backlog are updated; see `docs/tickets.md`, S6.
+
+### Things the next agent should be careful about
+- **No realtime yet.** The roster refreshes on load and after the viewer's own join or leave, not while someone else joins. Adding it needs `session_attendees` in the `supabase_realtime` publication (a migration), and CI's `e2e` job starts the local stack **without** realtime (`-x realtime`), so a browser test of it would need that changed too.
+- **Journeys 3 and 4 share journey 2's session** through a module variable. On a CI retry Playwright starts a fresh worker, the variable is null, and they fail with "journey 2 did not get that far". That is a retry artefact, not the real failure: read the first attempt.
+- **Running e2e beside your own local stack:** set `project_id` to something else and shift the 543xx ports in `supabase/config.toml`, `supabase start`, run, `supabase stop --no-backup`, then `git checkout supabase/config.toml`. Never commit that change.
+
 ## 2026-10-18 · M5: fixture locations for local dev, closing the gap W8 left
 
 **Branch:** `m5-us-02-local-locations`, from `main` · **Commits made:** one, pushed; no PR opened (no `gh` CLI here — compare link: `https://github.com/jhdaws/study-buddy/pull/new/m5-us-02-local-locations`).

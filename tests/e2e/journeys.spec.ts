@@ -91,6 +91,45 @@ test("journey 3: another student sees the session in the list with the right sea
   await expect(card).toContainText("1 of 4 going");
 });
 
+test("journey 4: another student opens the session, joins it, and leaves again (US-04, US-08, US-23)", async ({
+  page,
+}) => {
+  if (hostedTopic === null) {
+    throw new Error("Journey 4 joins the session journey 2 hosts; journey 2 did not get that far.");
+  }
+  const topic = hostedTopic;
+
+  await signInAsNewStudent(page, newStudentEmail("journey4"), "Jordan Joiner", "/sessions");
+
+  // The whole card links to the session page (S6).
+  const openSession = async () => {
+    await page.locator("article").filter({ hasText: topic }).getByRole("link").click();
+    await expect(page).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+  };
+  await openSession();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(topic);
+
+  // Before joining, the student can already see who is going (US-23).
+  const roster = page.getByRole("region", { name: "Who's going" });
+  await expect(roster).toContainText("Harper Host");
+  await expect(roster).toContainText("1 of 4 going");
+
+  await roster.getByRole("button", { name: "Join session" }).click();
+  await expect(roster.getByText("You're going.")).toBeVisible();
+  await expect(roster).toContainText("Jordan Joiner (you)");
+  await expect(roster).toContainText("2 of 4 going");
+
+  // The list counts the same roster: seats left is derived on every read.
+  await page.goto("/sessions");
+  await expect(page.locator("article").filter({ hasText: topic })).toContainText("2 seats left");
+
+  await openSession();
+  await roster.getByRole("button", { name: "Leave session" }).click();
+  await expect(roster.getByRole("button", { name: "Join session" })).toBeVisible();
+  await expect(roster).toContainText("1 of 4 going");
+  await expect(roster).not.toContainText("Jordan Joiner");
+});
+
 test("sign-out (US-21): the session ends, and private pages send the student back to sign in", async ({
   page,
 }) => {
