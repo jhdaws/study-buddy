@@ -45,6 +45,17 @@
  * select that must agree after every submit.) CreateSessionForm.test.tsx
  * submits twice and checks nothing is lost, and fails without the mirror.
  *
+ * BOTH SELECTS UPDATE ON `input`, NOT ONLY `change` (BUG-15). When a person
+ * picks an option, the browser fires `input`, then `change`, as separate
+ * events. The form's own onInput refreshes the preview, which re-renders --
+ * and a re-render puts a controlled <select> back on its `value` prop. If
+ * the select's state only changed on `change`, that re-render lands between
+ * the two events with the OLD value, so the pick is undone before React
+ * hears about it: the department could never be chosen. Handling `input`
+ * too updates the state in the same render. Playwright's selectOption()
+ * fires both events from one script call, which hides this; the journeys
+ * choose by keyboard instead (tests/e2e/helpers.ts, chooseByKeyboard).
+ *
  * `noValidate`: the browser's own validation bubbles are skipped so every
  * message comes from createSessionSchema, worded once. `required`, `min` and
  * `maxLength` stay on the inputs for assistive technology and to stop
@@ -54,7 +65,7 @@
  * `text-base` on every input so iOS Safari does not zoom on focus.
  */
 
-import { useActionState, useEffect, useId, useRef, useState } from "react";
+import { type FormEvent, useActionState, useEffect, useId, useRef, useState } from "react";
 
 import { createSession, type CreateSessionState } from "@/app/sessions/actions";
 import CourseNumberInput from "@/components/CourseNumberInput";
@@ -127,6 +138,9 @@ export default function CreateSessionForm({
   );
   const adding = departmentChoice === ADD_DEPARTMENT;
   const departmentCode = adding ? newDepartment : departmentChoice;
+  // On `input` as well as `change`: see BUG-15 at the top of this file.
+  const chooseDepartment = (event: FormEvent<HTMLSelectElement>) =>
+    setDepartmentChoice(event.currentTarget.value);
 
   // Survive React's post-action form reset: see the top of this file.
   const departmentSelect = useRef<HTMLSelectElement>(null);
@@ -254,7 +268,8 @@ export default function CreateSessionForm({
               // While adding, the text input below submits departmentCode.
               name={adding ? undefined : "departmentCode"}
               value={departmentChoice}
-              onChange={(event) => setDepartmentChoice(event.target.value)}
+              onInput={chooseDepartment}
+              onChange={chooseDepartment}
               required
               {...(adding ? {} : a11y("departmentCode"))}
               className={SELECT}

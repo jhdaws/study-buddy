@@ -41,7 +41,7 @@
  * (`ChIJ-FAKE-...`) and resolve only against the fixture locations.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { SELECT } from "@/components/ui/styles";
 import { FIXTURE_PLACES } from "@/lib/fixtures";
@@ -98,6 +98,18 @@ export default function LocationPicker({
     }
   }, [placeId]);
 
+  // On `input` as well as `change` (BUG-15): a pick fires `input` first, and
+  // a re-render before `change` -- the create form re-renders on every input
+  // to refresh its preview -- would put a controlled select back on its old
+  // value. The `change` that follows is then a no-op, hence the early return.
+  const choosePlace = (event: FormEvent<HTMLSelectElement>) => {
+    const value = event.currentTarget.value;
+    if (value === placeId) return;
+    const place = FIXTURE_PLACES.find((candidate) => candidate.placeId === value);
+    setPlaceId(place?.placeId ?? "");
+    onSelect?.(place ? { placeId: place.placeId, label: place.label } : null);
+  };
+
   return (
     <select
       ref={selectRef}
@@ -108,13 +120,8 @@ export default function LocationPicker({
       disabled={disabled}
       aria-invalid={ariaInvalid}
       aria-describedby={ariaDescribedBy}
-      onChange={(event) => {
-        const place = FIXTURE_PLACES.find(
-          (candidate) => candidate.placeId === event.target.value,
-        );
-        setPlaceId(place?.placeId ?? "");
-        onSelect?.(place ? { placeId: place.placeId, label: place.label } : null);
-      }}
+      onInput={choosePlace}
+      onChange={choosePlace}
       className={SELECT}
     >
       <option value="">Choose a location</option>
