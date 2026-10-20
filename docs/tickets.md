@@ -280,10 +280,11 @@ Per #33, Supabase's built-in sender reaches only members of the Supabase organiz
       `listSessions()` is still S4's stub, reading fixtures, not the database
 
 #### S4 · Lists and typeahead for real
-**M · US-03 · after S1 · Nate; Tapan reviews**
-- [ ] `listSessions()`: ended and cancelled sessions excluded, seats left derived from the roster (never stored), soonest first
-- [ ] `listDepartments()`; `searchCourses()` ordered by how many sessions used each course
-- [ ] `hostDisplayName` on each item needs A2's profiles read policy — until A2 lands, return null (shown as "Deleted user") or coordinate with A2
+**M · US-03 · after S1 · Nate; Tapan reviews · DONE**
+- [x] `listSessions()`: ended and cancelled sessions excluded, seats left derived from the roster (never stored), soonest first — one query; `ends_at=gt.now` so "ended" is decided by the **database's** clock, and `session_attendees (count)` so Postgres counts the roster rather than this process fetching it
+- [x] `listDepartments()`; `searchCourses()` ordered by how many sessions used each course — the ranking happens in TypeScript because the count is an embedded aggregate and PostgREST cannot `ORDER BY` one; the needle is reduced to letters, digits and spaces first, since it reaches `or=(…)` as filter *syntax*
+- [x] `hostDisplayName` on each item needs A2's profiles read policy — A2 has since landed, so this is the real name, through `profiles!sessions_host_id_fkey`. The foreign key has to be named: a plain `profiles` embed is ambiguous and fails with `PGRST201`
+- [x] W8's journey 3, parked on this ticket (`test.fixme("Needs S4")`), now runs: a second student signs in and sees another's session with the right seats left
 
 #### S5 · Join and leave with a seat limit
 **L · US-04, US-07, US-08 · Sprint 3 · Tapan · 🚧**
