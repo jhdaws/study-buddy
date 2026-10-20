@@ -5,7 +5,7 @@
 import { expect, test } from "@playwright/test";
 
 import { connect } from "../db/connection";
-import { campusTime, newStudentEmail, signInAsNewStudent } from "./helpers";
+import { campusTime, chooseByKeyboard, newStudentEmail, signInAsNewStudent } from "./helpers";
 
 test("journey 1: a new student signs in with a code, names themselves, and lands where they were going", async ({
   page,
@@ -32,13 +32,16 @@ test("journey 2: a signed-in student hosts a session, and it is saved with them 
 
   const topic = `E2E host journey ${Date.now()}`;
   hostedTopic = topic;
-  await page.getByLabel("Department").selectOption("CS");
+  // By keyboard, as a person picks: selectOption() hid BUG-15.
+  await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
   await page.getByLabel("Course number").fill("3251");
   await page.getByLabel("What are you studying?").fill(topic);
-  await page.getByLabel("Place").selectOption({ label: "Featheringill Hall" });
+  await chooseByKeyboard(page.getByLabel("Place"), "Feath", "ChIJ-FAKE-featheringill-hall");
   await page.getByLabel("Starts").fill(campusTime(2));
   await page.getByLabel("Ends").fill(campusTime(4));
   await page.getByLabel("How many people, including you?").fill("4");
+  // Typing in later fields re-renders the form; the department must survive.
+  await expect(page.getByLabel("Department")).toHaveValue("CS");
   await page.getByRole("button", { name: "Create session" }).click();
 
   await expect(page).toHaveURL("/sessions");
