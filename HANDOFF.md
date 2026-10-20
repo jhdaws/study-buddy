@@ -71,6 +71,64 @@ spends its first hour rediscovering the same dead end.
 
 ---
 
+## 2026-10-18 · S4: the three reads are real, and journey 3 runs
+
+**Branch:** `s4-us-03-real-lists` · **Commits made:** one on this branch.
+
+### What changed
+- `src/lib/sessions.ts` — `listSessions()`, `listDepartments()` and
+  `searchCourses()` now query Supabase. The W4 fixture helpers they used to
+  return are untouched, and `fixtures.test.ts` still holds them to the same
+  behaviour, which is what makes the two comparable.
+- `src/lib/sessions.test.ts` — new, 34 tests.
+- `tests/e2e/journeys.spec.ts` — journey 3 implemented; it was
+  `test.fixme("Needs S4 (#21)")`. Journey 2 now also asserts the host sees
+  their own session in the list, which is the thing S4 changed.
+- `tests/e2e/helpers.ts` — two pre-existing bugs, see below.
+- `docs/contracts.md`, `docs/tickets.md`, `docs/ai-usage-log.md`.
+
+### Things the next agent should be careful about
+- **`profiles!sessions_host_id_fkey`, never a plain `profiles`.** PostgREST
+  can reach a profile from a session two ways -- the `host_id` foreign key,
+  and a many-to-many hop through `session_attendees` -- and refuses to guess:
+  `PGRST201` at runtime, with every unit test still green, because a mock
+  cannot reproduce it. There is a test asserting the constraint name is in the
+  select string; it is the only thing standing between a refactor and a 500 on
+  the home page.
+- **A mocked Supabase client proves almost nothing about a query.** Both bugs
+  worth finding here -- that embed, and whether `ends_at=gt.now` parses at all
+  -- were found by running the real query against the local stack with curl
+  before writing any TypeScript. Do that first; it took ten minutes.
+- **Course suggestions are ranked in TypeScript, not SQL.** PostgREST cannot
+  `ORDER BY` an embedded aggregate, so the count cannot be sorted in the
+  query. That means a department's matching courses are all fetched before
+  being cut to 8. Fine for tens of courses; if a department ever grows past
+  that, replace it with a database function rather than adding a `.limit()`,
+  which would cut before ranking and silently return the wrong eight.
+- **The search needle reaches PostgREST as filter syntax.** `or=(…)` is a
+  string that is parsed, and it carries untrusted input from a public GET
+  endpoint, so the needle is reduced to letters, digits and spaces. A comma or
+  bracket would rewrite the filter; a `%` would match every course. The test
+  for this asserts the whole filter's *shape* -- an earlier version listed
+  forbidden characters but stripped `%` before looking, so the one wildcard
+  that matters could never fail it.
+
+### Two e2e helper bugs, both pre-existing and both now fixed
+- `getByText("Check your inbox")` matched two elements: the `<h1>` and Next's
+  route announcer `<div role="alert">`. Strict mode fails on that, but only
+  when the announcer and the heading race a certain way -- so it passed, then
+  failed, then passed again on the same code. Now matched by heading role.
+- `signInAsNewStudent(..., nextPath)` asserted `/login?next=<path>` always.
+  `loginPath()` deliberately drops `next` when it is already the default
+  landing path, so passing `/sessions` failed. The helper now builds the
+  expected URL with the app's own `loginPath()` instead of spelling it out.
+
+### Open questions for the user
+- S6 (#52) is the other ticket assigned to Nate and is now unblocked for its
+  read half. Its buttons still need S5 (#51), open as PR #73.
+
+---
+
 ## 2026-10-11 · Rebuilt Track A by mistake, then shipped US-19 instead
 
 **Branch:** `us-19-calendar-download` · **Commits made:** one on this branch.

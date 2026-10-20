@@ -16,16 +16,15 @@
 //     fetchCourseSuggestions() in @/lib/course-search. Why a Route Handler and
 //     not a Server Function: see src/app/api/courses/route.ts.
 //
-// Every function below is a W4 stub (#11) returning fixtures. S4 replaces the
-// bodies and keeps the signatures -- see docs/contracts.md.
+// S4 (#21) replaced the W4 stub bodies here with real queries; the signatures
+// are unchanged -- see docs/contracts.md. The fixtures they used to return
+// still exist, and fixtures.test.ts still holds them to the same behaviour
+// these queries implement, which is what makes the two comparable.
 
 import "server-only";
 
-import {
-  fixtureCourseSuggestions,
-  fixtureDepartments,
-  fixtureSessionList,
-} from "@/lib/fixtures";
+import { createClient } from "@/lib/supabase/server";
+import { normalizeCourseNumber, normalizeDepartmentCode } from "@/lib/validation";
 
 // ---------------------------------------------------------------------------
 // Types -- what the UI reads. Deliberately not database rows: camelCase,
@@ -101,59 +100,144 @@ export type CourseSuggestion = CourseLabel & {
 export const COURSE_SUGGESTION_LIMIT = 8;
 
 // ===========================================================================
-// STUB (W4, #11) -- replaced by S4 (#21). Keep the signature.
+// listSessions (S4, #21)
 //
-// Fixture sessions, filtered and derived the way the real query must be.
+// Four things in this query are less obvious than they look:
 //
-// The real body must:
-//   - read sessions with their course, host display name and roster count,
-//     through the cookie-bound client, so RLS applies (S1 adds the policies);
-//   - exclude cancelled sessions (`status = 'cancelled'`) and ended ones
-//     (`ends_at <= now()`, using the DATABASE's clock). In-progress sessions
-//     stay in;
-//   - derive attendeeCount from session_attendees -- never a stored counter
-//     (ADR 0008 rule 9). If you use a view, create it `with
-//     (security_invoker = true)`: a plain view bypasses RLS (ADR 0008, "Watch");
-//   - order by starts_at ascending, soonest first;
-//   - map a null host_id (deleted account) to hostDisplayName: null.
+//   - `profiles!sessions_host_id_fkey`. Plain `profiles` is AMBIGUOUS and
+//     fails at runtime with PGRST201: PostgREST finds two ways to get from a
+//     session to a profile -- the host_id foreign key, and a many-to-many hop
+//     through session_attendees. Only the first is wanted. Naming the
+//     constraint is the documented fix, and it is the reason this is not
+//     simply `profiles(display_name)`.
+//
+//   - `ends_at=gt.now`. `now` is a Postgres special timestamp literal, so the
+//     comparison happens with the DATABASE's clock, as the stub required. If
+//     this passed an ISO string from the server instead, a laptop with a
+//     skewed clock would hide or show sessions that are not actually over.
+//
+//   - `session_attendees(count)` makes Postgres count the roster, rather than
+//     this process fetching every attendee row and measuring the array.
+//     attendeeCount is never read from a stored counter (ADR 0008 rule 9).
+//     PostgREST returns the aggregate as `[{ count: n }]`.
+//
+//   - No view, so no `security_invoker` question to get wrong (ADR 0008,
+//     "Watch"). The query runs through the cookie-bound client, so S1's
+//     policies apply as the signed-in user; signed out it returns nothing,
+//     which is checked in tests/db/session-lists.test.ts.
 // ===========================================================================
 
 /** Open sessions that have not ended, soonest first (US-03). */
 export async function listSessions(): Promise<SessionListItem[]> {
-  return fixtureSessionList(new Date());
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("sessions")
+    .select(
+      `id, topic, location_label, room, starts_at, ends_at, capacity,
+       courses!inner (department_code, number, title),
+       profiles!sessions_host_id_fkey (display_name),
+       session_attendees (count)`,
+    )
+    .eq("status", "open")
+    .gt("ends_at", "now")
+    .order("starts_at", { ascending: true });
+
+  if (error) {
+    throw new Error(`Could not load the session list: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => {
+    const attendeeCount = row.session_attendees[0]?.count ?? 0;
+
+    return {
+      id: row.id,
+      course: {
+        departmentCode: row.courses.department_code,
+        number: row.courses.number,
+        title: row.courses.title,
+      },
+      topic: row.topic,
+      locationLabel: row.location_label,
+      room: row.room,
+      startsAt: row.starts_at,
+      endsAt: row.ends_at,
+      capacity: row.capacity,
+      attendeeCount,
+      seatsLeft: Math.max(0, row.capacity - attendeeCount),
+      // A deleted account leaves host_id null, so the embed yields null and
+      // the card shows "Deleted user".
+      hostDisplayName: row.profiles?.display_name ?? null,
+    };
+  });
 }
 
 // ===========================================================================
-// STUB (W4, #11) -- replaced by S4 (#21). Keep the signature.
+// listDepartments (S4, #21)
 //
-// The real body must read `departments` (S2 adds the read policy), leave out
-// merged ones (`merged_into is not null`), and order by code.
+// A merged department is one a student added as a duplicate and an admin has
+// since pointed at the real one (ADR 0008 rule 8). It still exists, because
+// courses reference it, but offering it in the picker would let the duplicate
+// keep growing.
 // ===========================================================================
 
 /** Every department a host can pick, ordered by code. */
 export async function listDepartments(): Promise<Department[]> {
-  return fixtureDepartments();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("departments")
+    .select("code, name")
+    .is("merged_into", null)
+    .order("code", { ascending: true });
+
+  if (error) {
+    throw new Error(`Could not load the department list: ${error.message}`);
+  }
+
+  return data ?? [];
+}
+
+/**
+ * The longest query this will look for. The Route Handler already caps what
+ * it forwards; this is here so a direct caller cannot send a pasted essay
+ * either.
+ */
+const MAX_QUERY_LENGTH = 50;
+
+/**
+ * The query, reduced to something safe to put in a PostgREST `or=(...)`
+ * filter.
+ *
+ * That filter is a STRING, parsed as filter syntax -- so a comma, bracket or
+ * quote inside it would be read as structure rather than as text, which is a
+ * filter injection from a public GET endpoint. `%` and `_` matter too: they
+ * are LIKE wildcards, and a bare `%` would quietly match every course.
+ * Keeping only letters, digits and single spaces makes all of that
+ * impossible, and costs nothing -- course titles are words, and the
+ * punctuation a student types is not what distinguishes one course from
+ * another.
+ */
+function titleNeedle(query: string): string {
+  return query
+    .slice(0, MAX_QUERY_LENGTH)
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
 }
 
 // ===========================================================================
-// STUB (W4, #11) -- replaced by S4 (#21). Keep the signature.
+// searchCourses (S4, #21)
 //
-// Matches fixture courses in the department whose number starts with the
-// query, or whose title contains it. Counts come from the fixture sessions.
+// Why the ranking happens here and not in SQL: the session count is an
+// embedded aggregate, and PostgREST cannot ORDER BY one. So the matching rows
+// come back unordered and are ranked below. The set is bounded by a single
+// department, which is tens of courses, not thousands -- but if a department
+// ever grows past that, this is the line to replace with a database function.
 //
-// The real body must:
-//   - normalise both arguments with S2's (#19) normalisers first, so `cs`
-//     finds `CS` and `3251w` finds `3251W`. This is untrusted input straight
-//     from the Route Handler;
-//   - leave out merged courses (`merged_into is not null`);
-//   - count sessions per course (all of them, ended and cancelled included --
-//     it is a measure of use) and order by that count, descending, then by
-//     number;
-//   - return at most COURSE_SUGGESTION_LIMIT rows;
-//   - return [] for an unknown department, never throw for one: the host may
-//     be about to add it.
-// An empty query returns the department's most-used courses, for showing
-// suggestions as soon as the field is focused.
+// Both arguments are untrusted -- they arrive from GET /api/courses -- and are
+// normalised with S2's (#19) normalisers, the TypeScript twins of the SQL ones
+// in s2_course_normalization.sql. The two must agree, or a course the form
+// thinks is new collides with one the database already has.
 // ===========================================================================
 
 /**
@@ -164,5 +248,48 @@ export async function searchCourses(
   departmentCode: string,
   query: string,
 ): Promise<CourseSuggestion[]> {
-  return fixtureCourseSuggestions(departmentCode, query, COURSE_SUGGESTION_LIMIT);
+  const department = normalizeDepartmentCode(departmentCode);
+
+  // An unknown or unusable department is an empty list, never an error: the
+  // host may be halfway through typing one that does not exist yet.
+  if (department === "") return [];
+
+  const supabase = await createClient();
+
+  let courses = supabase
+    .from("courses")
+    .select("id, department_code, number, title, sessions (count)")
+    .eq("department_code", department)
+    .is("merged_into", null);
+
+  // An empty query is not a wildcard search: it means "show me this
+  // department's most-used courses", which is every course, ranked. Adding a
+  // filter for it would only risk `ilike.%` behaving differently from no
+  // filter at all -- a course with a null title does not match `title.ilike`.
+  const needle = titleNeedle(query);
+  if (needle !== "") {
+    courses = courses.or(
+      `number.ilike.${normalizeCourseNumber(needle)}%,title.ilike.%${needle}%`,
+    );
+  }
+
+  const { data, error } = await courses;
+
+  if (error) {
+    throw new Error(`Could not search courses: ${error.message}`);
+  }
+
+  return (data ?? [])
+    .map((row) => ({
+      id: row.id,
+      departmentCode: row.department_code,
+      number: row.number,
+      title: row.title,
+      // Every session counts, ended and cancelled included: this measures how
+      // used a course is, which is what floats the real course above a
+      // typo'd duplicate (ADR 0008).
+      sessionCount: row.sessions[0]?.count ?? 0,
+    }))
+    .sort((a, b) => b.sessionCount - a.sessionCount || a.number.localeCompare(b.number))
+    .slice(0, COURSE_SUGGESTION_LIMIT);
 }
