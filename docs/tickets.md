@@ -247,6 +247,18 @@ Per #33, Supabase's built-in sender reaches only members of the Supabase organiz
 - [ ] Rate limit enough for the demo: four testers, a few retries each
 - [ ] A real sign-in email to an `@vanderbilt.edu` address: does Outlook's link scanning spend the token before the student does (the code then fails too)? If so, the fix in `supabase/README.md`, "Mail scanners" (#33)
 
+#### A6 · Email and password for returning students
+**M · US-01 · Sprint 3 · Jack · in review**
+
+Supabase's email limits made every sign-in a scarce resource. A returning student now signs in with their Vanderbilt email and a password, and no email is sent; the emailed code is for signing up and for a forgotten password, after which the student chooses a password.
+- [x] `/login` opens on email + password (`signInWithPassword()`); "Get a sign-in code by email" switches to A3's code flow
+- [x] `/login/password` and `setPassword()`: after every code sign-in (new, or forgot), and wherever `requireUser()` finds a student without one — so students who signed up before passwords are asked once
+- [x] Errors in our words, never saying whether an account exists; passwords never echoed back to the browser
+- [x] Minimum length 8 in the form, `config.toml`, and (a person must set it) the hosted dashboard — `supabase/README.md`, step 7
+- [x] The test login (`TEST_LOGIN_EMAIL`, #55) removed: a test account is now just a user with a password
+- [x] Tests: actions, schemas, errors, both forms, `requireUser()`/`pathAfterSignIn()`, and a browser journey that signs out, back in with a password, and checks no email went out
+- [ ] Hosted: minimum password length 8, "Confirm email" on, and custom SMTP so anyone outside the Supabase organization can get their first code (A5)
+
 ---
 
 ## Track S · Sessions API

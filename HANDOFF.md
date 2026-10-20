@@ -72,6 +72,24 @@ spends its first hour rediscovering the same dead end.
 ---
 
 
+
+## 2026-10-19 · A6: email + password sign-in; BUG-15 department select
+
+**Branch:** `a6-us-01-password-sign-in` · **Commits made:** this PR (BUG-15 merged separately in #81)
+
+### What changed
+- `/login` opens on email + password; the emailed code is for sign-up and "forgot", and is always followed by `/login/password`. `requireUser()` sends a signed-in student without a password there, so existing teammates are asked once. Details: `docs/tickets.md`, A6.
+- Whether a student has a password is a `has_password` flag in their `user_metadata`, set by `setPassword()` (and by `signInWithPassword()` for an account given a password in the dashboard). Supabase does not expose this to clients. The flag only decides whether the app *asks*; it is not a security boundary.
+- Removed #55's test login (`TEST_LOGIN_EMAIL`): a dashboard user with a password does the same job with no special code path.
+
+### Open questions for the user
+- Custom SMTP is still needed for anyone outside the Supabase organization to receive their first code (Jack chose a real email sender; not set up as of this entry). Until then, `npm run auth:link` signs a person in once, then they choose a password.
+- The hosted "Minimum password length" should be set to 8 (`supabase/README.md`, step 7).
+
+### Things the next agent should be careful about
+- Every e2e student now chooses `E2E_PASSWORD` after the name step (`tests/e2e/helpers.ts`). A journey that needs a student WITHOUT a password has to be built differently.
+- `selectOption()` hides a whole class of bug (BUG-15): pick `<select>` options with `chooseByKeyboard()`.
+
 ## 2026-10-19 · S6: the session page, roster and Join/Leave (built for the Sprint 3 deadline)
 
 **Branch:** `s6-us-23-session-page` · **Commits made:** this PR

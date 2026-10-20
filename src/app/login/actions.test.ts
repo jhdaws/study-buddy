@@ -4,7 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { safeNext } from "@/lib/safe-next";
 
-import { saveDisplayName, signIn, signOut, verifyCode } from "./actions";
+import {
+  saveDisplayName,
+  setPassword,
+  signIn,
+  signInWithPassword,
+  signOut,
+  verifyCode,
+} from "./actions";
 
 // Everything the actions reach outside themselves is replaced: the request
 // headers, redirect(), and the cookie-bound Supabase client.
@@ -29,6 +36,7 @@ const auth = vi.hoisted(() => ({
   signInWithOtp: vi.fn(),
   signInWithPassword: vi.fn(),
   verifyOtp: vi.fn(),
+  updateUser: vi.fn(),
   signOut: vi.fn(),
 }));
 const server = vi.hoisted(() => ({
@@ -36,7 +44,7 @@ const server = vi.hoisted(() => ({
   update: vi.fn(),
   eq: vi.fn(),
   select: vi.fn(),
-  user: null as { id: string } | null,
+  user: null as { id: string; user_metadata?: Record<string, unknown> } | null,
   pathAfterSignIn: vi.fn(),
 }));
 vi.mock("@/lib/supabase/server", () => {
@@ -53,6 +61,9 @@ vi.mock("@/lib/supabase/server", () => {
     createClient: async () => client,
     getCurrentUser: async () => server.user,
     pathAfterSignIn: (...args: unknown[]) => server.pathAfterSignIn(...args),
+    HAS_PASSWORD: "has_password",
+    hasPassword: (user: { user_metadata?: Record<string, unknown> }) =>
+      user.user_metadata?.has_password === true,
   };
 });
 
@@ -135,21 +146,6 @@ describe("signIn", () => {
     expect(state.formError).not.toMatch(/rate limit exceeded/);
     expect(state.values?.email).toBe("jane@vanderbilt.edu");
   });
-
-  it("sends no email for the test login's address and goes straight to the code step", async () => {
-    vi.stubEnv("TEST_LOGIN_EMAIL", "group4@vanderbilt.edu");
-    const state = await signIn({}, form({ email: " GROUP4@vanderbilt.edu " }));
-    expect(state).toEqual({ sentTo: "group4@vanderbilt.edu", testLogin: true });
-    expect(auth.signInWithOtp).not.toHaveBeenCalled();
-  });
-
-  it("emails the test address like anyone else on production", async () => {
-    vi.stubEnv("TEST_LOGIN_EMAIL", "group4@vanderbilt.edu");
-    vi.stubEnv("VERCEL_ENV", "production");
-    auth.signInWithOtp.mockResolvedValue({ data: {}, error: null });
-    await signIn({}, form({ email: "group4@vanderbilt.edu" }));
-    expect(auth.signInWithOtp).toHaveBeenCalled();
-  });
 });
 
 describe("verifyCode", () => {
@@ -175,7 +171,12 @@ describe("verifyCode", () => {
     const path = await redirectOf(
       verifyCode({}, form({ email: "jane@vanderbilt.edu", code: "123456", next: "/sessions/new" })),
     );
-    expect(server.pathAfterSignIn).toHaveBeenCalledWith(expect.anything(), "u1", "/sessions/new");
+    expect(server.pathAfterSignIn).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: "u1" },
+      "/sessions/new",
+      { choosePassword: true },
+    );
     expect(path).toBe("/login/name?next=%2Fsessions%2Fnew");
   });
 
@@ -203,36 +204,142 @@ describe("verifyCode", () => {
     expect(state.formError).not.toMatch(/Token/);
     expect(state.values?.code).toBe("123456");
   });
+});
 
-  it("signs the test login in with its code as the password", async () => {
-    vi.stubEnv("TEST_LOGIN_EMAIL", "group4@vanderbilt.edu");
-    auth.signInWithPassword.mockResolvedValue({ data: { user: { id: "u-test" } }, error: null });
+describe("signInWithPassword", () => {
+  const signedIn = (metadata: Record<string, unknown> = { has_password: true }) => ({
+    data: { user: { id: "u1", user_metadata: metadata } },
+    error: null,
+  });
+
+  it("signs in with the address and password, and goes on to next -- no email", async () => {
+    auth.signInWithPassword.mockResolvedValue(signedIn());
     const path = await redirectOf(
-      verifyCode({}, form({ email: "group4@vanderbilt.edu", code: "4815162342", next: "/sessions/new" })),
+      signInWithPassword(
+        {},
+        form({ email: " Jane@Vanderbilt.EDU ", password: "correct horse", next: "/sessions/new" }),
+      ),
     );
     expect(auth.signInWithPassword).toHaveBeenCalledWith({
-      email: "group4@vanderbilt.edu",
-      password: "4815162342",
+      email: "jane@vanderbilt.edu",
+      password: "correct horse",
     });
-    expect(auth.verifyOtp).not.toHaveBeenCalled();
+    expect(auth.signInWithOtp).not.toHaveBeenCalled();
+    expect(auth.updateUser).not.toHaveBeenCalled();
     expect(path).toBe("/sessions/new");
   });
 
-  it("tells the tester to check the Supabase user when the test code is refused", async () => {
-    vi.stubEnv("TEST_LOGIN_EMAIL", "group4@vanderbilt.edu");
+  it("does not trim the password: a space is part of it", async () => {
+    auth.signInWithPassword.mockResolvedValue(signedIn());
+    await redirectOf(signInWithPassword({}, form({ email: "jane@vanderbilt.edu", password: " pw " })));
+    expect(auth.signInWithPassword.mock.calls[0][0].password).toBe(" pw ");
+  });
+
+  it("records the password for an account given one outside the app", async () => {
+    auth.signInWithPassword.mockResolvedValue(signedIn({}));
+    auth.updateUser.mockResolvedValue({
+      data: { user: { id: "u1", user_metadata: { has_password: true } } },
+      error: null,
+    });
+    await redirectOf(signInWithPassword({}, form({ email: "jane@vanderbilt.edu", password: "pw" })));
+    expect(auth.updateUser).toHaveBeenCalledWith({ data: { has_password: true } });
+    expect(server.pathAfterSignIn).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: "u1", user_metadata: { has_password: true } },
+      null,
+    );
+  });
+
+  it("maps a wrong password to our own message, without saying whether the account exists", async () => {
     auth.signInWithPassword.mockResolvedValue({
       data: { user: null, session: null },
       error: { code: "invalid_credentials", status: 400, message: "Invalid login credentials" },
     });
-    const state = await verifyCode({}, form({ email: "group4@vanderbilt.edu", code: "000000" }));
-    expect(state.formError).toMatch(/No test user with that code/);
+    const state = await signInWithPassword(
+      {},
+      form({ email: "jane@vanderbilt.edu", password: "wrong" }),
+    );
+    expect(state.formError).toMatch(/don't match/);
     expect(state.formError).not.toMatch(/Invalid login/);
+    expect(state.values).toEqual({ email: "jane@vanderbilt.edu" });
+  });
+
+  it("refuses another domain, and an empty password, before calling Supabase", async () => {
+    const state = await signInWithPassword({}, form({ email: "jane@gmail.com", password: "" }));
+    expect(state.fieldErrors?.email).toEqual(["Use your @vanderbilt.edu email address."]);
+    expect(state.fieldErrors?.password).toEqual(["Enter your password."]);
+    expect(auth.signInWithPassword).not.toHaveBeenCalled();
+  });
+
+  it("never sends the password back to the browser", async () => {
+    const state = await signInWithPassword({}, form({ email: "jane@gmail.com", password: "secret" }));
+    expect(state.values).toEqual({ email: "jane@gmail.com" });
+  });
+});
+
+describe("setPassword", () => {
+  beforeEach(() => {
+    server.user = { id: "u1", user_metadata: {} };
+  });
+
+  it("sets the password and the flag together, then goes on to next", async () => {
+    auth.updateUser.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    const path = await redirectOf(
+      setPassword(
+        {},
+        form({ password: "a long one", confirmPassword: "a long one", next: "/sessions/new" }),
+      ),
+    );
+    expect(auth.updateUser).toHaveBeenCalledWith({
+      password: "a long one",
+      data: { has_password: true },
+    });
+    expect(path).toBe("/sessions/new");
+  });
+
+  it("refuses a short password, or two that differ, without calling Supabase or echoing them", async () => {
+    let state = await setPassword({}, form({ password: "short", confirmPassword: "short" }));
+    expect(state.fieldErrors?.password).toEqual(["Use at least 8 characters."]);
+    expect(state.values?.password).toBeUndefined();
+
+    state = await setPassword({}, form({ password: "a long one", confirmPassword: "a long two" }));
+    expect(state.fieldErrors?.confirmPassword).toEqual(["The two passwords don't match."]);
+    expect(state.values).toEqual({});
+    expect(auth.updateUser).not.toHaveBeenCalled();
+  });
+
+  it("maps Supabase's refusal to our own message", async () => {
+    auth.updateUser.mockResolvedValue({
+      data: { user: null },
+      error: { code: "same_password", status: 422, message: "New password should be different" },
+    });
+    const state = await setPassword({}, form({ password: "a long one", confirmPassword: "a long one" }));
+    expect(state.formError).toMatch(/already your password/);
+    expect(state.formError).not.toMatch(/should be different/);
+  });
+
+  it("sends a signed-out caller to /login", async () => {
+    server.user = null;
+    const path = await redirectOf(
+      setPassword({}, form({ password: "a long one", confirmPassword: "a long one", next: "/sessions/new" })),
+    );
+    expect(path).toBe("/login?next=%2Fsessions%2Fnew");
+    expect(auth.updateUser).not.toHaveBeenCalled();
   });
 });
 
 describe("saveDisplayName", () => {
   beforeEach(() => {
-    server.user = { id: "u1" };
+    server.user = { id: "u1", user_metadata: { has_password: true } };
+  });
+
+  it("goes on to the password step for a student who has no password yet (A6)", async () => {
+    server.user = { id: "u1", user_metadata: {} };
+    server.select.mockResolvedValue({ data: [{ id: "u1" }], error: null });
+    const path = await redirectOf(
+      saveDisplayName({}, form({ displayName: "Priya", next: "/sessions/new" })),
+    );
+    expect(path).toBe("/login/password?next=%2Fsessions%2Fnew");
   });
 
   it("saves the trimmed name on the caller's own row, then goes on to next", async () => {

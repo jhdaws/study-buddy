@@ -9,6 +9,21 @@ export function newStudentEmail(name: string): string {
   return `e2e.${name}.${Date.now()}@vanderbilt.edu`;
 }
 
+/** The password every e2e student chooses at sign-up (A6). Local only. */
+export const E2E_PASSWORD = "study-buddy-e2e";
+
+/** How many emails the local Mailpit inbox holds for `email`. */
+export async function emailsTo(email: string): Promise<number> {
+  const mailpit = process.env.MAILPIT_URL;
+  if (!mailpit) throw new Error("MAILPIT_URL is not set; see playwright.config.ts.");
+  const list = (await (await fetch(`${mailpit}/api/v1/messages?limit=200`)).json()) as {
+    messages?: { To: { Address: string }[] }[];
+  };
+  return (list.messages ?? []).filter((item) =>
+    item.To.some((to) => to.Address.toLowerCase() === email.toLowerCase()),
+  ).length;
+}
+
 /**
  * The sign-in code from the newest email to `email` in the local Mailpit
  * inbox (MAILPIT_URL, set by playwright.config.ts). Polls: the email arrives
@@ -38,8 +53,9 @@ export async function signInCodeFor(email: string): Promise<string> {
 }
 
 /**
- * Journey 1's steps: ask for a code, type it, choose a display name. Starts
- * at `nextPath` signed out and ends back there, signed in.
+ * Journey 1's steps: ask for a code, type it, choose a display name, choose
+ * a password (E2E_PASSWORD). Starts at `nextPath` signed out and ends back
+ * there, signed in.
  */
 export async function signInAsNewStudent(
   page: Page,
@@ -54,6 +70,8 @@ export async function signInAsNewStudent(
   // so hard-coding `?next=` only works for some values of nextPath.
   await expect(page).toHaveURL(loginPath(nextPath));
 
+  // /login opens on email + password (A6); a new student asks for a code.
+  await page.getByRole("button", { name: "Get a sign-in code by email" }).click();
   await page.getByLabel("Vanderbilt email").fill(email);
   await page.getByRole("button", { name: "Send code" }).click();
   // Matched by role, not by text: Next's route announcer briefly carries the
@@ -69,6 +87,12 @@ export async function signInAsNewStudent(
   await expect(page).toHaveURL(/\/login\/name/);
   await page.getByLabel("Display name").fill(displayName);
   await page.getByRole("button", { name: "Continue" }).click();
+
+  // Then a password, so they never need another email (A6).
+  await expect(page).toHaveURL(/\/login\/password/);
+  await page.getByLabel("New password").fill(E2E_PASSWORD);
+  await page.getByLabel("Type it again").fill(E2E_PASSWORD);
+  await page.getByRole("button", { name: "Save password" }).click();
   await expect(page).toHaveURL(nextPath);
 }
 

@@ -180,9 +180,6 @@ const VERIFY_CODE_MESSAGES: Record<string, string> = {
   // ("Token has expired or is invalid"), so the message covers both.
   otp_expired: CODE_REJECTED_MESSAGE,
   validation_failed: CODE_REJECTED_MESSAGE,
-  // The test login signs in with its code as a password
-  // (src/lib/test-login.ts); a wrong one is just a wrong code.
-  invalid_credentials: CODE_REJECTED_MESSAGE,
   // Verifications are rate limited per IP (30 per 5 minutes by default),
   // which is also what makes guessing a code impractical.
   over_request_rate_limit: CODE_RATE_LIMITED_MESSAGE,
@@ -198,5 +195,55 @@ export function verifyCodeErrorMessage(error: AuthErrorLike | null | undefined):
   if (error.status === 429) return CODE_RATE_LIMITED_MESSAGE;
   // A 403 without a code we know is still a refused token.
   if (error.status === 403) return CODE_REJECTED_MESSAGE;
+  return GENERIC_ERROR_MESSAGE;
+}
+
+// ---------------------------------------------------------------------------
+// Passwords (A6): signInWithPassword() and updateUser({ password }).
+// ---------------------------------------------------------------------------
+
+export const PASSWORD_REJECTED_MESSAGE =
+  "That email and password don't match. New here, or forgot it? Get a code by email instead.";
+
+const PASSWORD_SIGN_IN_MESSAGES: Record<string, string> = {
+  // Supabase gives the same answer for an unknown address and a wrong
+  // password, so this never says whether the address has an account.
+  invalid_credentials: PASSWORD_REJECTED_MESSAGE,
+  // An account still waiting for its first code: the code is the way in.
+  email_not_confirmed:
+    "Finish signing up first: get a code by email, then choose a password.",
+  over_request_rate_limit: CODE_RATE_LIMITED_MESSAGE,
+  email_provider_disabled: "Sign-in is switched off right now. Try again later.",
+};
+
+/** A message for an error from signInWithPassword(), safe to show. */
+export function passwordSignInErrorMessage(error: AuthErrorLike | null | undefined): string {
+  if (!error) return GENERIC_ERROR_MESSAGE;
+  if (error.code && error.code in PASSWORD_SIGN_IN_MESSAGES) {
+    return PASSWORD_SIGN_IN_MESSAGES[error.code];
+  }
+  if (error.status === 429) return CODE_RATE_LIMITED_MESSAGE;
+  // Older Supabase servers answer a wrong password with a bare 400.
+  if (error.status === 400) return PASSWORD_REJECTED_MESSAGE;
+  return GENERIC_ERROR_MESSAGE;
+}
+
+const SET_PASSWORD_MESSAGES: Record<string, string> = {
+  // The hosted project's own rules (length, character mix) are stricter than
+  // the form's only if someone changed them in the dashboard.
+  weak_password: "Supabase wants a stronger password. Make it longer, or add numbers and symbols.",
+  same_password: "That's already your password. Choose a different one, or carry on without changing it.",
+  // "Secure password change" on, and the sign-in is too old to change it.
+  reauthentication_needed: "For your security, sign in again with a code, then choose your password.",
+  over_request_rate_limit: CODE_RATE_LIMITED_MESSAGE,
+};
+
+/** A message for an error from updateUser({ password }), safe to show. */
+export function setPasswordErrorMessage(error: AuthErrorLike | null | undefined): string {
+  if (!error) return GENERIC_ERROR_MESSAGE;
+  if (error.code && error.code in SET_PASSWORD_MESSAGES) {
+    return SET_PASSWORD_MESSAGES[error.code];
+  }
+  if (error.status === 429) return CODE_RATE_LIMITED_MESSAGE;
   return GENERIC_ERROR_MESSAGE;
 }

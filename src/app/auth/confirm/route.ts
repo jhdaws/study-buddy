@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
     if (error || !data.user) {
       return redirectTo(request, loginWithError(next));
     }
-    return redirectTo(request, await pathAfterSignIn(supabase, data.user.id, next));
+    return redirectTo(request, await pathAfterSignIn(supabase, data.user, next));
   }
 
   if (!tokenHash || !type || !ACCEPTED_TYPES.has(type)) {
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     return redirectTo(request, loginWithError(next));
   }
 
-  return redirectTo(request, await pathAfterSignIn(supabase, data.user.id, next));
+  return redirectTo(request, await pathAfterSignIn(supabase, data.user, next));
 }
 
 function loginWithError(next: string): string {

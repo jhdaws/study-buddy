@@ -22,6 +22,16 @@
 export const OTP_CODE_MIN_LENGTH = 6;
 export const OTP_CODE_MAX_LENGTH = 10;
 
+/**
+ * Passwords (A6): what the set-password form asks for. The real enforcement
+ * is Supabase Auth's "Minimum password length" -- `auth.minimum_password_length`
+ * in config.toml, and a dashboard setting on the hosted project
+ * (supabase/README.md). Keep all three at 8. 72 is bcrypt's limit: Supabase
+ * would silently ignore anything past it.
+ */
+export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MAX_LENGTH = 72;
+
 /** A2/A4: mirror as a CHECK on profiles.display_name (1..50 after trimming). */
 export const DISPLAY_NAME_MAX_LENGTH = 50;
 

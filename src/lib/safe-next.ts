@@ -88,6 +88,14 @@ export function displayNamePath(next?: unknown): string {
   return withNext("/login/name", next);
 }
 
+/**
+ * The choose-a-password step (A6), carrying `next` the same way: after a
+ * student's first sign-in by code, and after "forgot my password".
+ */
+export function passwordPath(next?: unknown): string {
+  return withNext("/login/password", next);
+}
+
 function withNext(path: string, next: unknown): string {
   const safe = safeNextPath(next);
   if (!safe || safe === DEFAULT_NEXT_PATH) return path;

@@ -1,16 +1,21 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { signIn, verifyCode } from "@/app/login/actions";
+import { signIn, signInWithPassword, verifyCode } from "@/app/login/actions";
 
 import SignInForm, { RESEND_AFTER_SECONDS } from "./SignInForm";
 
 // The real actions are a "use server" module that talks to Supabase; they
 // are replaced so the form can be driven in jsdom.
-vi.mock("@/app/login/actions", () => ({ signIn: vi.fn(), verifyCode: vi.fn() }));
+vi.mock("@/app/login/actions", () => ({
+  signIn: vi.fn(),
+  signInWithPassword: vi.fn(),
+  verifyCode: vi.fn(),
+}));
 
 const signInMock = vi.mocked(signIn);
 const verifyCodeMock = vi.mocked(verifyCode);
+const passwordMock = vi.mocked(signInWithPassword);
 
 afterEach(() => {
   cleanup();
@@ -37,9 +42,64 @@ function expectFieldError(input: HTMLElement, message: string) {
   expect(input.getAttribute("aria-describedby")?.split(" ")).toContain(alert!.id);
 }
 
+describe("<SignInForm> password step", () => {
+  it("opens on email and password, with the browser's sign-in autofill hints", () => {
+    render(<SignInForm next="/sessions/new" />);
+    expect(screen.getByRole("heading", { name: "Sign in" })).toBeTruthy();
+    const email = screen.getByLabelText("Vanderbilt email") as HTMLInputElement;
+    const password = screen.getByLabelText("Password") as HTMLInputElement;
+
+    expect(email.getAttribute("autocomplete")).toBe("username");
+    expect(password.type).toBe("password");
+    expect(password.getAttribute("autocomplete")).toBe("current-password");
+    expect(password.className).toContain("text-base");
+    expect(hidden("next")?.value).toBe("/sessions/new");
+  });
+
+  it("submits email, password and next to signInWithPassword", async () => {
+    passwordMock.mockResolvedValue({});
+    render(<SignInForm next="/sessions/new" />);
+    fireEvent.change(screen.getByLabelText("Vanderbilt email"), {
+      target: { value: "jane@vanderbilt.edu" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "correct horse" } });
+    await click(/^sign in$/i);
+
+    const submitted = passwordMock.mock.calls[0][1] as FormData;
+    expect(submitted.get("email")).toBe("jane@vanderbilt.edu");
+    expect(submitted.get("password")).toBe("correct horse");
+    expect(submitted.get("next")).toBe("/sessions/new");
+    expect(signInMock).not.toHaveBeenCalled();
+  });
+
+  it("shows a refused password as an alert, keeping the address", async () => {
+    passwordMock.mockResolvedValue({
+      formError: "That email and password don't match.",
+      values: { email: "jane@vanderbilt.edu" },
+    });
+    render(<SignInForm />);
+    await click(/^sign in$/i);
+
+    expect(screen.getByRole("alert").textContent).toBe("That email and password don't match.");
+    expect((screen.getByLabelText("Vanderbilt email") as HTMLInputElement).value).toBe(
+      "jane@vanderbilt.edu",
+    );
+  });
+
+  it("switches to a code by email for a new or forgetful student, and back", async () => {
+    render(<SignInForm />);
+    await click(/get a sign-in code by email/i);
+    expect(screen.getByRole("heading", { name: "Get a sign-in code" })).toBeTruthy();
+    expect(screen.queryByLabelText("Password")).toBeNull();
+
+    await click(/i have a password/i);
+    expect(screen.getByLabelText("Password")).toBeTruthy();
+  });
+});
+
 describe("<SignInForm> email step", () => {
   it("asks for a Vanderbilt address, mobile-sized, with a hint", () => {
-    render(<SignInForm />);
+    render(<SignInForm initialMode="code" />);
     const email = screen.getByLabelText("Vanderbilt email") as HTMLInputElement;
 
     expect(email.name).toBe("email");
@@ -53,13 +113,14 @@ describe("<SignInForm> email step", () => {
   });
 
   it("carries a next path in a hidden field", () => {
-    render(<SignInForm next="/sessions/new" />);
+    render(<SignInForm initialMode="code" next="/sessions/new" />);
     expect(hidden("next")?.value).toBe("/sessions/new");
   });
 
   it("shows a field error and a form error as alerts, keeping what was typed", () => {
     render(
       <SignInForm
+        initialMode="code"
         initialState={{
           fieldErrors: { email: ["Use your @vanderbilt.edu email address."] },
           formError: "Something went wrong on our side. Try again in a moment.",
@@ -77,7 +138,7 @@ describe("<SignInForm> email step", () => {
 
   it("submits to signIn, then moves to the code step for that address", async () => {
     signInMock.mockResolvedValue({ sentTo: "jane@vanderbilt.edu" });
-    render(<SignInForm next="/sessions/new" />);
+    render(<SignInForm initialMode="code" next="/sessions/new" />);
 
     fireEvent.change(screen.getByLabelText("Vanderbilt email"), {
       target: { value: "Jane@Vanderbilt.edu" },
@@ -101,7 +162,7 @@ describe("<SignInForm> code step", () => {
     vi.useFakeTimers();
     try {
       signInMock.mockResolvedValue({ sentTo: "jane@vanderbilt.edu" });
-      render(<SignInForm next="/sessions/new" initialState={sent} />);
+      render(<SignInForm initialMode="code" next="/sessions/new" initialState={sent} />);
       expect(screen.getByText(/Resend in 1:00/)).toBeTruthy();
       expect(screen.queryByRole("button", { name: /resend code/i })).toBeNull();
 
@@ -122,14 +183,8 @@ describe("<SignInForm> code step", () => {
     }
   });
 
-  it("says plainly when it is the test login and no email went out", () => {
-    render(<SignInForm initialState={{ sentTo: "group4@vanderbilt.edu", testLogin: true }} />);
-    expect(screen.getByRole("heading", { name: "Test login" })).toBeTruthy();
-    expect(screen.getByRole("status").textContent).toMatch(/No email was sent/);
-  });
-
   it("draws one box per digit, at least six, over a single real input", () => {
-    render(<SignInForm initialState={sent} />);
+    render(<SignInForm initialMode="code" initialState={sent} />);
     const code = screen.getByLabelText("Sign-in code") as HTMLInputElement;
     const boxes = () => code.parentElement!.querySelectorAll("[aria-hidden] > span");
     expect(boxes()).toHaveLength(6);
@@ -139,7 +194,7 @@ describe("<SignInForm> code step", () => {
   });
 
   it("asks for the code with a numeric, one-time-code input", () => {
-    render(<SignInForm next="/sessions/new" initialState={sent} />);
+    render(<SignInForm initialMode="code" next="/sessions/new" initialState={sent} />);
     const code = screen.getByLabelText("Sign-in code") as HTMLInputElement;
 
     expect(code.name).toBe("code");
@@ -155,7 +210,7 @@ describe("<SignInForm> code step", () => {
 
   it("submits email, code and next to verifyCode", async () => {
     verifyCodeMock.mockResolvedValue({});
-    render(<SignInForm next="/sessions/new" initialState={sent} />);
+    render(<SignInForm initialMode="code" next="/sessions/new" initialState={sent} />);
 
     fireEvent.change(screen.getByLabelText("Sign-in code"), { target: { value: "123456" } });
     await click(/^sign in$/i);
@@ -172,7 +227,7 @@ describe("<SignInForm> code step", () => {
       fieldErrors: { code: ["Enter the code from the email — digits only."] },
       values: { email: "jane@vanderbilt.edu", code: "12a456" },
     });
-    render(<SignInForm initialState={sent} />);
+    render(<SignInForm initialMode="code" initialState={sent} />);
 
     fireEvent.change(screen.getByLabelText("Sign-in code"), { target: { value: "12a456" } });
     await click(/^sign in$/i);
@@ -187,7 +242,7 @@ describe("<SignInForm> code step", () => {
       formError: "That code didn't work.",
       values: { email: "jane@vanderbilt.edu", code: "123456" },
     });
-    render(<SignInForm initialState={sent} />);
+    render(<SignInForm initialMode="code" initialState={sent} />);
     await click(/^sign in$/i);
     expect(screen.getAllByRole("alert").map((a) => a.textContent)).toContain(
       "That code didn't work.",
@@ -195,7 +250,7 @@ describe("<SignInForm> code step", () => {
   });
 
   it("goes back to the email step, prefilled, with 'Use a different email'", async () => {
-    render(<SignInForm initialState={sent} />);
+    render(<SignInForm initialMode="code" initialState={sent} />);
     await click(/use a different email/i);
 
     const email = screen.getByLabelText("Vanderbilt email") as HTMLInputElement;
@@ -205,7 +260,7 @@ describe("<SignInForm> code step", () => {
 
   it("shows the code step again after a new email is sent", async () => {
     signInMock.mockResolvedValue({ sentTo: "other@vanderbilt.edu" });
-    render(<SignInForm initialState={sent} />);
+    render(<SignInForm initialMode="code" initialState={sent} />);
     await click(/use a different email/i);
 
     fireEvent.change(screen.getByLabelText("Vanderbilt email"), {
