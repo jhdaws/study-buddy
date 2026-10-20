@@ -1,180 +1,279 @@
 "use client";
 
 /**
- * Attendee roster, seat count, and the join/leave button (US-04, US-07,
- * US-08, US-23). S6 (#52), on the session page.
+ * The session page's two interactive parts (US-04, US-07, US-08, US-23), from
+ * the 2026-10-20 redesign:
  *
- * The page decides which button to offer (rosterAction(), src/lib/roster.ts)
- * and passes the roster in as props; this component only renders them and
- * runs S5's actions. Both actions revalidate this page on success, so the
- * fresh roster arrives as new props -- nothing here edits the list by hand,
- * so it cannot drift from the database, which is the entire point of showing
- * a seat count.
+ *   <SessionActions>  the row directly under the details and map: Join
+ *                     session (blue), Leave session (red text), a disabled
+ *                     "You're hosting" or "Session is full", and Add to
+ *                     calendar (Google Calendar, or an .ics for Apple and
+ *                     Outlook). A toast confirms a join: "You're in. See you
+ *                     at Featheringill Hall."
+ *   <WhosGoing>       the side card: seats taken, faces with empty seats
+ *                     drawn in, and the roster by display name, host marked.
  *
- * Errors are the database's refusals, mapped to copy in src/lib/errors.ts
- * ("This session is full.", ...). A refusal means this page was out of date
- * -- most often, the last seat went while it was open -- so it refreshes the
- * roster too, and the button then matches the message.
- *
- * Not yet: a realtime subscription, so the roster also changes while you
- * watch it. It needs session_attendees added to the supabase_realtime
- * publication (a migration), and when it lands it should call
- * router.refresh() on any change rather than apply the payload itself.
+ * The page decides which action applies (rosterAction(), src/lib/roster.ts).
+ * S5's actions revalidate the page on success, so the fresh roster arrives
+ * as new props; nothing here edits the list by hand. A refusal ("This
+ * session is full.") means the page was stale, so it refreshes too.
  */
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useId, useRef, useState } from "react";
 
 import { joinSession, leaveSession, type SessionActionState } from "@/app/sessions/actions";
-import { SeatsLabel } from "@/components/SessionCard";
-import {
-  BUTTON_PRIMARY,
-  BUTTON_SECONDARY,
-  FORM_ERROR,
-  PANEL,
-  SECTION_TITLE,
-} from "@/components/ui/styles";
-import { formatInitial } from "@/lib/format";
+import Icon from "@/components/ui/Icon";
+import { BUTTON_DANGER, BUTTON_PRIMARY, BUTTON_SECONDARY, FORM_ERROR } from "@/components/ui/styles";
+import { googleCalendarUrl } from "@/lib/ics";
 import type { RosterAction } from "@/lib/roster";
-import type { Attendee } from "@/lib/sessions";
-
-export type SessionRosterProps = {
-  sessionId: string;
-  capacity: number;
-  seatsLeft: number;
-  /** The host first, then in the order people joined (getSession()). */
-  attendees: Attendee[];
-  /** The signed-in student, to mark them "(you)". */
-  viewerId: string;
-  action: RosterAction;
-};
+import { avatarColour, initialsOf } from "@/lib/session-view";
+import type { Attendee, SessionListItem } from "@/lib/sessions";
 
 const NOTHING_YET: SessionActionState = {};
 
-const NOTE = "rounded-xl bg-paper px-4 py-3 text-[15px] font-semibold text-ink";
+export type SessionActionsProps = {
+  sessionId: string;
+  action: RosterAction;
+  /** For the toast and the calendar link. */
+  session: Pick<SessionListItem, "course" | "topic" | "startsAt" | "endsAt" | "locationLabel" | "room">;
+  /** Whether "Add to calendar" applies (upcoming sessions only). */
+  canAddToCalendar: boolean;
+};
 
-export default function SessionRoster({
-  sessionId,
-  capacity,
-  seatsLeft,
-  attendees,
-  viewerId,
-  action,
-}: SessionRosterProps) {
+export default function SessionActions({ sessionId, action, session, canAddToCalendar }: SessionActionsProps) {
   const router = useRouter();
-  const [joinState, join, joining] = useActionState(
-    joinSession.bind(null, sessionId),
-    NOTHING_YET,
-  );
-  const [leaveState, leave, leaving] = useActionState(
-    leaveSession.bind(null, sessionId),
-    NOTHING_YET,
-  );
+  const [joinState, join, joining] = useActionState(joinSession.bind(null, sessionId), NOTHING_YET);
+  const [leaveState, leave, leaving] = useActionState(leaveSession.bind(null, sessionId), NOTHING_YET);
+  const [toast, setToast] = useState<string | null>(null);
 
+  // A refusal means this page was stale: refresh the roster.
   useEffect(() => {
-    if (joinState.error) router.refresh();
-  }, [joinState, router]);
-  useEffect(() => {
-    if (leaveState.error) router.refresh();
-  }, [leaveState, router]);
+    if (joinState.error || leaveState.error) router.refresh();
+  }, [joinState, leaveState, router]);
 
-  // Only the message for the button on screen: after a refused join has
-  // refreshed the page into "You're going", "already on the roster" is noise.
+  // A success gets a toast. Adjusting state while rendering, keyed on the
+  // action's new state, rather than setting it from an effect.
+  const [seen, setSeen] = useState({ joinState, leaveState });
+  if (seen.joinState !== joinState || seen.leaveState !== leaveState) {
+    setSeen({ joinState, leaveState });
+    if (seen.joinState !== joinState && joinState !== NOTHING_YET && !joinState.error) {
+      setToast(`You're in. See you at ${session.locationLabel}.`);
+    } else if (seen.leaveState !== leaveState && leaveState !== NOTHING_YET && !leaveState.error) {
+      setToast("You left the session.");
+    }
+  }
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  // Only the message for the button on screen.
   const error =
-    action === "leave"
-      ? leaveState.error
-      : action === "join" || action === "full"
-        ? joinState.error
-        : undefined;
+    action === "leave" ? leaveState.error : action === "join" || action === "full" ? joinState.error : undefined;
 
   return (
-    <section aria-labelledby="roster-heading" className={`${PANEL} px-4 py-5 sm:px-6`}>
-      <div className="flex items-center justify-between gap-3">
-        <h2 id="roster-heading" className={SECTION_TITLE}>
-          Who&apos;s going
-        </h2>
-        <SeatsLabel seatsLeft={seatsLeft} />
-      </div>
-      <p className="mt-0.5 text-sm text-ink-2">
-        {attendees.length} of {capacity} going
-      </p>
-
-      <ul className="mt-3 divide-y divide-line">
-        {attendees.map((attendee) => (
-          <li key={attendee.userId} className="flex min-h-12 items-center gap-3 py-2">
-            <span
-              aria-hidden
-              className="grid size-9 shrink-0 place-items-center rounded-full bg-paper text-sm font-bold text-ink"
-            >
-              {formatInitial(attendee.displayName)}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink">
-              {attendee.displayName ?? "A student"}
-              {attendee.userId === viewerId && (
-                <span className="font-normal text-ink-2"> (you)</span>
-              )}
-            </span>
-            {attendee.isHost && (
-              <span className="shrink-0 rounded-md bg-paper px-2 py-0.5 text-xs font-semibold text-ink-2">
-                Host
-              </span>
-            )}
-          </li>
-        ))}
-      </ul>
-
-      <div className="mt-4 flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {action === "join" && (
           <form action={join}>
-            <button type="submit" disabled={joining} className={`${BUTTON_PRIMARY} w-full`}>
+            <button type="submit" disabled={joining} className={BUTTON_PRIMARY}>
               {joining ? "Joining…" : "Join session"}
             </button>
           </form>
         )}
-
-        {action === "full" && (
-          <>
-            <button
-              type="button"
-              disabled
-              aria-describedby={error ? undefined : "roster-full-reason"}
-              className={`${BUTTON_PRIMARY} w-full`}
-            >
-              Session full
-            </button>
-            {!error && (
-              <p id="roster-full-reason" className="text-sm text-ink-2">
-                Every seat is taken. If someone leaves, their seat opens up here.
-              </p>
-            )}
-          </>
-        )}
-
         {action === "leave" && (
-          <>
-            <p className={NOTE}>You&apos;re going.</p>
-            <form action={leave}>
-              <button type="submit" disabled={leaving} className={`${BUTTON_SECONDARY} w-full`}>
-                {leaving ? "Leaving…" : "Leave session"}
-              </button>
-            </form>
-          </>
+          <form action={leave}>
+            <button type="submit" disabled={leaving} className={BUTTON_DANGER}>
+              {leaving ? "Leaving…" : "Leave session"}
+            </button>
+          </form>
         )}
-
-        {action === "hosting" && <p className={NOTE}>You&apos;re hosting this session.</p>}
+        {action === "full" && (
+          <button
+            type="button"
+            disabled
+            aria-describedby={error ? undefined : "roster-full-reason"}
+            className={`${BUTTON_SECONDARY} !opacity-100 bg-column text-ink-2`}
+          >
+            Session is full
+          </button>
+        )}
+        {action === "hosting" && (
+          <span className="inline-flex h-11 items-center px-1 text-sm font-medium text-ink-2 lg:h-9">
+            You&apos;re hosting
+          </span>
+        )}
         {action === "cancelled" && (
-          <p role="status" className={NOTE}>
+          <p role="status" className="text-sm font-medium text-ink-2">
             The host cancelled this session.
           </p>
         )}
-        {action === "ended" && <p className={NOTE}>This session has ended.</p>}
+        {action === "ended" && <p className="text-sm font-medium text-ink-2">This session has ended.</p>}
 
-        {error && (
-          <p role="alert" className={FORM_ERROR}>
-            {error}
-          </p>
-        )}
+        {canAddToCalendar && <CalendarMenu sessionId={sessionId} session={session} />}
       </div>
+
+      {action === "full" && !error && (
+        <p id="roster-full-reason" className="text-[13px] text-ink-2">
+          Every seat is taken. If someone leaves, their seat opens up here.
+        </p>
+      )}
+      {error && (
+        <p role="alert" className={FORM_ERROR}>
+          {error}
+        </p>
+      )}
+
+      {toast && (
+        <div
+          role="status"
+          className="fixed bottom-4 left-1/2 z-[60] flex h-12 max-w-[calc(100%-32px)] -translate-x-1/2 items-center gap-2.5 rounded-xl border border-line bg-white px-4 text-sm text-ink shadow-[0_12px_32px_rgba(17,24,39,0.12)] lg:bottom-6"
+        >
+          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-seat text-white">
+            <Icon name="check" size={12} />
+          </span>
+          <span className="truncate">{toast}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CalendarMenu({ sessionId, session }: { sessionId: string; session: SessionActionsProps["session"] }) {
+  const [open, setOpen] = useState(false);
+  const menuId = useId();
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (event: MouseEvent) => {
+      if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const ics = `/sessions/${sessionId}/calendar.ics`;
+  const google = googleCalendarUrl(session, typeof window === "undefined" ? undefined : window.location.href);
+  const item = "flex w-full items-start gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-column";
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? menuId : undefined}
+        onClick={() => setOpen((v) => !v)}
+        className={BUTTON_SECONDARY}
+      >
+        <Icon name="calendar" />
+        Add to calendar
+        <Icon name="chevDown" size={14} />
+      </button>
+      {open && (
+        <div
+          id={menuId}
+          role="menu"
+          className="absolute top-[calc(100%+6px)] left-0 z-30 w-[240px] rounded-xl border border-line bg-white p-1 shadow-[0_12px_32px_rgba(17,24,39,0.10)]"
+        >
+          <a role="menuitem" href={google} target="_blank" rel="noreferrer" className={item} onClick={() => setOpen(false)}>
+            <span className="pt-0.5 text-ink-2">
+              <Icon name="external" />
+            </span>
+            <span className="flex flex-col">
+              <span className="text-sm text-ink">Google Calendar</span>
+              <span className="text-xs text-ink-2">Opens in a new tab</span>
+            </span>
+          </a>
+          <a role="menuitem" href={ics} download className={item} onClick={() => setOpen(false)}>
+            <span className="pt-0.5 text-ink-2">
+              <Icon name="download" />
+            </span>
+            <span className="flex flex-col">
+              <span className="text-sm text-ink">Apple Calendar or Outlook</span>
+              <span className="text-xs text-ink-2">Downloads an .ics file</span>
+            </span>
+          </a>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Seats taken, faces with the empty seats drawn in, and the roster. */
+export function WhosGoing({
+  capacity,
+  attendees,
+  viewerId,
+  title = "Who's going",
+}: {
+  capacity: number;
+  attendees: Attendee[];
+  viewerId: string;
+  title?: string;
+}) {
+  const empty = Math.max(0, Math.min(capacity, 12) - attendees.length);
+  return (
+    <section aria-labelledby="roster-heading" className="rounded-xl border border-[rgba(17,24,39,0.06)] bg-white/80 p-4 backdrop-blur-[16px]">
+      <h2 id="roster-heading" className="text-[15px] font-semibold text-ink">
+        {title}
+      </h2>
+      <p className="mt-2 flex items-baseline gap-1.5">
+        <span className="text-[26px] leading-none font-bold text-ink">{attendees.length}</span>
+        <span className="text-[13px] text-ink-2">of {capacity} seats taken</span>
+      </p>
+
+      <div aria-hidden className="mt-3 flex flex-wrap gap-1.5">
+        {attendees.map((a) => {
+          const colour = avatarColour(a.userId);
+          const you = a.userId === viewerId;
+          return (
+            <span
+              key={a.userId}
+              className="relative flex size-8 items-center justify-center rounded-full text-[11px] font-semibold"
+              style={{
+                background: colour.bg,
+                color: colour.fg,
+                boxShadow: you ? "0 0 0 2px #2F5BEA" : undefined,
+              }}
+            >
+              {you ? "You" : initialsOf(a.displayName)}
+              {a.isHost && <span className="absolute -right-0.5 -bottom-0.5 size-2.5 rounded-full border-2 border-white bg-dark" />}
+            </span>
+          );
+        })}
+        {Array.from({ length: empty }, (_, i) => (
+          <span key={`empty-${i}`} className="size-8 rounded-full border border-dashed border-line-strong" />
+        ))}
+      </div>
+
+      <ul className="mt-3 divide-y divide-line border-t border-line">
+        {attendees.map((attendee) => (
+          <li key={attendee.userId} className="flex min-h-11 items-center gap-2.5 py-1.5">
+            <span
+              aria-hidden
+              className="flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
+              style={{ background: avatarColour(attendee.userId).bg, color: avatarColour(attendee.userId).fg }}
+            >
+              {initialsOf(attendee.displayName)}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-sm text-ink">
+              {attendee.displayName ?? "A student"}
+              {attendee.userId === viewerId && <span className="text-ink-2"> (you)</span>}
+            </span>
+            {attendee.isHost && (
+              <span className="shrink-0 rounded-lg bg-[#F0EBFE] px-2 py-0.5 text-xs font-medium text-[#6D4AE8]">Host</span>
+            )}
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

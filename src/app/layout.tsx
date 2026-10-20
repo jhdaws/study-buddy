@@ -1,11 +1,9 @@
 import type { Metadata } from "next";
-import "@fontsource-variable/manrope";
+import "@fontsource-variable/inter";
 import "./globals.css";
 
 import AppShell from "@/components/AppShell";
-import SiteHeader from "@/components/SiteHeader";
-import SiteSidebar from "@/components/SiteSidebar";
-import TabBar from "@/components/TabBar";
+import SiteSidebar, { PhoneAccount } from "@/components/SiteSidebar";
 
 export const metadata: Metadata = {
   // Pages set a plain `title`; the template adds the app name after it.
@@ -24,15 +22,15 @@ export const viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#0a1a36",
+  themeColor: "#f7f8fa",
 };
 
 // Typed explicitly rather than with Next's generated `LayoutProps<"/">`, so
 // `npm run typecheck` works on a clean checkout without a build first.
 //
-// The shell: <AppShell> wraps every page in the top bar and phone tab bar
-// (one centred column, ADR 0004), or from lg up the desktop sidebar --
-// except sign-in, which is a full-screen scene. Manrope is self-hosted from npm (@fontsource-variable),
+// The shell: <AppShell> wraps every page in the sidebar and top bar
+// (2026-10-20 redesign; on phones the sidebar is a drawer) --
+// except sign-in, which is a full-screen scene. Inter is self-hosted from npm (@fontsource-variable),
 // so builds do not need to reach Google Fonts. Pages render their own <main>.
 export default function RootLayout({
   children,
@@ -41,8 +39,8 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className="min-h-full bg-paper">
-        <AppShell header={<SiteHeader />} sidebar={<SiteSidebar />} tabBar={<TabBar />}>
+      <body className="min-h-full bg-page">
+        <AppShell sidebar={<SiteSidebar />} phoneAccount={<PhoneAccount />}>
           {children}
         </AppShell>
       </body>

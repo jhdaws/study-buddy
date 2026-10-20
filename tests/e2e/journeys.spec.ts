@@ -6,7 +6,6 @@ import { expect, test } from "@playwright/test";
 
 import { connect } from "../db/connection";
 import {
-  campusTime,
   chooseByKeyboard,
   E2E_PASSWORD,
   emailsTo,
@@ -43,12 +42,14 @@ test("journey 2: a signed-in student hosts a session, and it is saved with them 
   await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
   await page.getByLabel("Course number").fill("3251");
   await page.getByLabel("What are you studying?").fill(topic);
-  await // The picker is a search box now: type, then take the suggestion by keyboard.
+  // The picker is a search box (M2): type, wait for the suggestion, take it by keyboard.
   await page.getByLabel("Place").fill("Feath");
+  await expect(page.getByRole("option", { name: /Featheringill Hall/ })).toBeVisible();
   await page.getByLabel("Place").press("Enter");
-  await page.getByLabel("Starts").fill(campusTime(2));
-  await page.getByLabel("Ends").fill(campusTime(4));
-  await page.getByLabel("How many people, including you?").fill("4");
+  // When (2026-10-20 redesign): tomorrow, 7 PM, the default two hours.
+  await page.getByRole("radiogroup", { name: /Day/ }).getByRole("radio").nth(1).click();
+  await page.getByLabel("Starts").fill("19:00");
+  await page.getByLabel("People").fill("4");
   // Typing in later fields re-renders the form; the department must survive.
   await expect(page.getByLabel("Department")).toHaveValue("CS");
   await page.getByRole("button", { name: "Create session" }).click();
@@ -57,7 +58,8 @@ test("journey 2: a signed-in student hosts a session, and it is saved with them 
 
   // Since S4 (#21) the list is read from the database, so the host sees the
   // session they just created rather than a fixture that resembles it.
-  await expect(page.locator("article").filter({ hasText: topic })).toBeVisible();
+  // Each card is one link, named by its topic.
+  await expect(page.getByRole("link", { name: topic })).toBeVisible();
 
   // The roster is still worth checking in the database: the list shows a seat
   // count, but only the table shows that the host was seated in the same
@@ -90,16 +92,16 @@ test("journey 3: another student sees the session in the list with the right sea
 
   // Found by its topic rather than by position: the list is every open
   // session on this database, so the one journey 2 made is not the only one.
-  const card = page.locator("article").filter({ hasText: hostedTopic });
+  const card = page.getByRole("link", { name: hostedTopic });
   await expect(card).toBeVisible();
 
   await expect(card).toContainText("CS 3251");
-  // The host's display name comes from profiles through A2's read policy --
-  // the part of the card a signed-out or policy-less reader cannot get.
-  await expect(card).toContainText("Harper Host");
+  // The host's initials come from profiles through A2's read policy -- the
+  // part of the card a signed-out or policy-less reader cannot get.
+  await expect(card).toContainText("HH");
   // Capacity 4 with only the host on the roster. Derived from
   // session_attendees on every read, never stored (ADR 0008 rule 9).
-  await expect(card).toContainText("3 seats left");
+  await expect(card).toContainText("1 of 4 seats");
 });
 
 test("journey 4: another student opens the session, joins it, and leaves again (US-04, US-08, US-23)", async ({
@@ -112,14 +114,9 @@ test("journey 4: another student opens the session, joins it, and leaves again (
 
   await signInAsNewStudent(page, newStudentEmail("journey4"), "Jordan Joiner", "/sessions");
 
-  // The whole card links to the session page (S6); the course is the link's
-  // name. (The card's other link is "Add to calendar".)
+  // The whole card links to the session page (S6), named by its topic.
   const openSession = async () => {
-    await page
-      .locator("article")
-      .filter({ hasText: topic })
-      .getByRole("link", { name: /^CS 3251/ })
-      .click();
+    await page.getByRole("link", { name: topic }).click();
     await expect(page).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
   };
   await openSession();
@@ -128,21 +125,22 @@ test("journey 4: another student opens the session, joins it, and leaves again (
   // Before joining, the student can already see who is going (US-23).
   const roster = page.getByRole("region", { name: "Who's going" });
   await expect(roster).toContainText("Harper Host");
-  await expect(roster).toContainText("1 of 4 going");
+  await expect(roster).toContainText(/1\s*of 4 seats taken/);
 
-  await roster.getByRole("button", { name: "Join session" }).click();
-  await expect(roster.getByText("You're going.")).toBeVisible();
+  // Join sits under the details, beside Add to calendar (2026-10-20 redesign).
+  await page.getByRole("button", { name: "Join session" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "You're in." })).toBeVisible();
   await expect(roster).toContainText("Jordan Joiner (you)");
-  await expect(roster).toContainText("2 of 4 going");
+  await expect(roster).toContainText(/2\s*of 4 seats taken/);
 
-  // The list counts the same roster: seats left is derived on every read.
+  // The list counts the same roster: seats are derived on every read.
   await page.goto("/sessions");
-  await expect(page.locator("article").filter({ hasText: topic })).toContainText("2 seats left");
+  await expect(page.getByRole("link", { name: topic })).toContainText("2 of 4 seats");
 
   await openSession();
-  await roster.getByRole("button", { name: "Leave session" }).click();
-  await expect(roster.getByRole("button", { name: "Join session" })).toBeVisible();
-  await expect(roster).toContainText("1 of 4 going");
+  await page.getByRole("button", { name: "Leave session" }).click();
+  await expect(page.getByRole("button", { name: "Join session" })).toBeVisible();
+  await expect(roster).toContainText(/1\s*of 4 seats taken/);
   await expect(roster).not.toContainText("Jordan Joiner");
 });
 
@@ -152,7 +150,7 @@ test("returning student (A6): signs back in with email and password, and no emai
   const email = newStudentEmail("password");
   await signInAsNewStudent(page, email, "Pat Password");
   await page.getByRole("button", { name: "Account" }).click();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL("/");
   const emailsBefore = await emailsTo(email);
 
@@ -180,7 +178,7 @@ test("sign-out (US-21): the session ends, and private pages send the student bac
   await signInAsNewStudent(page, newStudentEmail("signout"), "Sam Signout");
 
   await page.getByRole("button", { name: "Account" }).click();
-  await page.getByRole("button", { name: "Sign out" }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL("/");
 
   // The proxy no longer sees a session: /sessions redirects to sign-in.

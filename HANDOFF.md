@@ -73,6 +73,41 @@ spends its first hour rediscovering the same dead end.
 
 
 
+## 2026-10-20 · The Claude Design redesign of every signed-in page (branch ui-redesign-us-03)
+
+### What changed
+
+Branch `ui-redesign-us-03`, built on `m2-us-02-location-picker` (M2's picker
+is included; merge M2 first or with it). Implements the Claude Design file
+"Study Buddy Redesign" (Moses attached it 2026-10-20): the sidebar and
+frosted top bar with breadcrumbs, the department-coloured session card, Home
+(Your sessions, Next on campus), Sessions with List, Board and Calendar, the
+session page (details, map, actions under them, Who's going), the host form
+in three steps with a day and length picker, and a new My sessions page at
+`/my`. Sign-in screens are unchanged except for the Inter font.
+
+New data: `listMySessions()` (roster embedded twice: an inner `mine` filter
+and the full `roster`), `going`/`hostId` on list items, `location` on the
+session detail. New pure modules, all tested: `departments.ts`,
+`session-view.ts`, `when-picker.ts`.
+
+### Decided in conversation, not yet written down
+
+The host form picks a day (today plus six, or "Later" for any date), a
+start time and a length of 1, 1.5, 2 or 3 hours. Moses chose this over two
+date-time fields. Sessions longer than 3 hours can no longer be created from
+the form; say so if anyone needs them.
+
+### Things the next agent should be careful about
+
+The e2e journeys were edited for the new labels (`People`, the Day radios, a
+time input, links instead of `article`, Sign out as a menu item) but never
+run: Docker images cannot be pulled here. Run `npm run test:e2e` locally or
+watch CI's `e2e` job. The card has no Edit/Cancel menu (no cancel action
+exists yet, US-09), and "Report a problem" opens a GitHub issue rather than
+the design's dialog. Old components removed: SiteHeader, TabBar, NavLinks,
+AccountSheet, SessionPreview.
+
 ## 2026-10-20 · M2 location picker with a map, on m2-us-02-location-picker
 
 ### What changed

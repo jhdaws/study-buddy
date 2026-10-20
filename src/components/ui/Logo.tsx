@@ -1,38 +1,39 @@
 /**
- * The Study Buddy mark and wordmark (spec page 1): two overlapping discs --
- * two people, one session -- in a rounded blue tile. Original artwork; no
- * Vanderbilt marks anywhere in the app.
+ * The Study Buddy mark and wordmark, from the 2026-10-20 redesign: a dark
+ * rounded square holding a small white outlined square. Drawn with CSS, so it
+ * can appear more than once on a page. Original artwork; no Vanderbilt marks.
  */
 
-export function LogoMark({ className = "size-8" }: { className?: string }) {
-  // A flat navy tile, drawn with CSS so the logo can appear twice on a page
-  // (top bar and sidebar) without SVG id collisions.
+export function LogoMark({ size = 28 }: { size?: number }) {
   return (
     <span
       aria-hidden
-      className={`inline-grid shrink-0 place-items-center rounded-lg bg-brand ${className}`}
+      className="inline-flex shrink-0 items-center justify-center bg-dark"
+      style={{ width: size, height: size, borderRadius: size * 0.29 }}
     >
-      <svg viewBox="0 0 40 40" className="size-full" focusable="false">
-        <circle cx="16" cy="20" r="7" fill="#ffffff" />
-        <circle cx="24" cy="20" r="7" fill="#7fb0f2" fillOpacity="0.9" />
-      </svg>
+      <span
+        className="block border-2 border-white"
+        style={{ width: size * 0.36, height: size * 0.36, borderRadius: size * 0.1 }}
+      />
     </span>
   );
 }
 
 export default function Logo({
   tone = "dark",
+  size = 28,
   className = "",
 }: {
-  /** "dark" = navy text for sky surfaces; "light" = white text on dark glass. */
+  /** "dark" = ink text on light surfaces; "light" = white text on the sign-in scene. */
   tone?: "dark" | "light";
+  size?: number;
   className?: string;
 }) {
   return (
     <span className={`inline-flex items-center gap-2.5 ${className}`}>
-      <LogoMark />
+      <LogoMark size={size} />
       <span
-        className={`text-[17px] font-bold tracking-tight whitespace-nowrap ${tone === "light" ? "text-white" : "text-ink"}`}
+        className={`text-[15px] font-semibold tracking-[-0.01em] whitespace-nowrap ${tone === "light" ? "text-white" : "text-ink"}`}
       >
         Study Buddy
       </span>

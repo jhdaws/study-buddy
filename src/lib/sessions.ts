@@ -74,6 +74,23 @@ export type SessionListItem = {
   seatsLeft: number;
   /** The host's display name; null if they deleted their account ("Deleted user"). */
   hostDisplayName: string | null;
+  /**
+   * The host's profile id, so a card can say "Hosting" to the host. Null when
+   * the host deleted their account. Optional: fixtures and older callers
+   * leave it out, and the card then shows no Hosting/Joined pill.
+   */
+  hostId?: string | null;
+  /**
+   * Who is going, host first then in join order, for the card's avatar
+   * initials and its Joined pill. Display names only, never emails (US-25).
+   */
+  going?: GoingPerson[];
+};
+
+/** One face in a card's avatar stack. */
+export type GoingPerson = {
+  userId: string;
+  displayName: string | null;
 };
 
 /** One person on a session's roster (US-23). */
@@ -93,6 +110,8 @@ export type Attendee = {
  */
 export type SessionDetail = SessionListItem & {
   status: "open" | "cancelled";
+  /** Where the place is, from `locations` (Google's coordinates), for the map. */
+  location?: { lat: number; lng: number } | null;
   /** Null when the host deleted their account. */
   hostId: string | null;
   /** The host first, then everyone else in the order they joined. */
@@ -157,10 +176,11 @@ export async function listSessions(): Promise<SessionListItem[]> {
   const { data, error } = await supabase
     .from("sessions")
     .select(
-      `id, topic, location_label, room, starts_at, ends_at, capacity,
+      `id, topic, location_label, room, starts_at, ends_at, capacity, host_id,
        courses!inner (department_code, number, title),
        profiles!sessions_host_id_fkey (display_name),
-       session_attendees (count)`,
+       session_attendees (count),
+       roster:session_attendees (user_id, joined_at, profiles (display_name))`,
     )
     .eq("status", "open")
     .gt("ends_at", "now")
@@ -174,6 +194,8 @@ export async function listSessions(): Promise<SessionListItem[]> {
     const attendeeCount = row.session_attendees[0]?.count ?? 0;
 
     return {
+      hostId: row.host_id ?? null,
+      going: goingFrom(row.roster, row.host_id),
       id: row.id,
       course: {
         departmentCode: row.courses.department_code,
@@ -191,6 +213,84 @@ export async function listSessions(): Promise<SessionListItem[]> {
       // A deleted account leaves host_id null, so the embed yields null and
       // the card shows "Deleted user".
       hostDisplayName: row.profiles?.display_name ?? null,
+    };
+  });
+}
+
+type RosterRow = {
+  user_id: string;
+  joined_at: string;
+  profiles: { display_name: string | null } | null;
+};
+
+/** The roster as avatar faces: host first, then in the order they joined. */
+function goingFrom(roster: RosterRow[] | null | undefined, hostId: string | null): GoingPerson[] {
+  return [...(roster ?? [])]
+    .sort((a, b) => {
+      const hostFirst = Number(b.user_id === hostId) - Number(a.user_id === hostId);
+      return hostFirst || Date.parse(a.joined_at) - Date.parse(b.joined_at);
+    })
+    .map((row) => ({ userId: row.user_id, displayName: row.profiles?.display_name ?? null }));
+}
+
+// ===========================================================================
+// listMySessions (redesign, 2026-10-20)
+//
+// Every session the signed-in student is on the roster of -- which includes
+// the ones they host, because the host is always on their own roster (S1).
+// Ended and cancelled ones too: My sessions has a Past tab, and the sidebar
+// lists this term's courses from it.
+//
+// The roster is embedded twice under two names. `mine` is an INNER embed
+// filtered to the student, which is what limits the sessions returned;
+// `roster` is the whole roster, for the avatars and the seat count. Through
+// the cookie-bound client, so RLS applies as the student.
+// ===========================================================================
+
+/** A session on My sessions: a list item, plus whether it was cancelled. */
+export type MySession = SessionListItem & { status: "open" | "cancelled" };
+
+/** The student's own sessions, hosted or joined, soonest first. */
+export async function listMySessions(userId: string): Promise<MySession[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("sessions")
+    .select(
+      `id, topic, location_label, room, starts_at, ends_at, capacity, host_id, status,
+       courses!inner (department_code, number, title),
+       profiles!sessions_host_id_fkey (display_name),
+       mine:session_attendees!inner (user_id),
+       roster:session_attendees (user_id, joined_at, profiles (display_name))`,
+    )
+    .eq("mine.user_id", userId)
+    .order("starts_at", { ascending: true });
+
+  if (error) {
+    throw new Error(`Could not load your sessions: ${error.message}`);
+  }
+
+  return (data ?? []).map((row) => {
+    const going = goingFrom(row.roster, row.host_id);
+    return {
+      id: row.id,
+      course: {
+        departmentCode: row.courses.department_code,
+        number: row.courses.number,
+        title: row.courses.title,
+      },
+      topic: row.topic,
+      locationLabel: row.location_label,
+      room: row.room,
+      startsAt: row.starts_at,
+      endsAt: row.ends_at,
+      capacity: row.capacity,
+      attendeeCount: going.length,
+      seatsLeft: Math.max(0, row.capacity - going.length),
+      hostDisplayName: row.profiles?.display_name ?? null,
+      hostId: row.host_id ?? null,
+      going,
+      status: row.status,
     };
   });
 }
@@ -225,6 +325,7 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
       `id, topic, location_label, room, starts_at, ends_at, capacity, status, host_id,
        courses!inner (department_code, number, title),
        profiles!sessions_host_id_fkey (display_name),
+       locations (lat, lng),
        session_attendees (user_id, joined_at, profiles (display_name))`,
     )
     .eq("id", id)
@@ -262,6 +363,8 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
     attendeeCount: attendees.length,
     seatsLeft: Math.max(0, data.capacity - attendees.length),
     hostDisplayName: data.profiles?.display_name ?? null,
+    going: attendees.map((a) => ({ userId: a.userId, displayName: a.displayName })),
+    location: data.locations ? { lat: data.locations.lat, lng: data.locations.lng } : null,
     status: data.status,
     hostId: data.host_id,
     attendees,

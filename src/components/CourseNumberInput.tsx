@@ -50,6 +50,7 @@ export type CourseNumberInputProps = {
   departmentCode: string;
   /** Read once, on mount. */
   defaultValue?: string;
+  placeholder?: string;
   className?: string;
   "aria-invalid"?: boolean;
   "aria-describedby"?: string;
@@ -59,6 +60,7 @@ export default function CourseNumberInput({
   id,
   departmentCode,
   defaultValue = "",
+  placeholder = "e.g. 3251",
   className,
   "aria-invalid": ariaInvalid,
   "aria-describedby": ariaDescribedBy,
@@ -197,7 +199,7 @@ export default function CourseNumberInput({
         autoComplete="off"
         autoCapitalize="characters"
         spellCheck={false}
-        placeholder="e.g. 3251"
+        placeholder={placeholder}
         value={value}
         onChange={(event) => {
           setValue(event.target.value);
@@ -224,7 +226,7 @@ export default function CourseNumberInput({
         // Keep focus in the input when an option is pressed, so the tap
         // registers as a click before blur closes the list.
         onMouseDown={(event) => event.preventDefault()}
-        className="absolute inset-x-0 top-full z-20 mt-1 max-h-72 overflow-auto rounded-xl border border-line bg-white p-1 text-ink shadow-lg"
+        className="absolute inset-x-0 top-full z-20 mt-1.5 max-h-72 overflow-auto rounded-xl border border-line bg-white p-1 text-sm text-ink shadow-[0_12px_32px_rgba(17,24,39,0.10)]"
       >
         {noMatch ? (
           <li

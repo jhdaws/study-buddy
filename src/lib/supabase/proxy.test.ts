@@ -54,11 +54,11 @@ afterEach(() => {
 });
 
 describe("isProtectedPath", () => {
-  it("covers /sessions and everything under it, nothing else", () => {
-    for (const path of ["/sessions", "/sessions/new", "/sessions/123"]) {
+  it("covers /sessions and everything under it, and /my, nothing else", () => {
+    for (const path of ["/sessions", "/sessions/new", "/sessions/123", "/my"]) {
       expect(isProtectedPath(path), path).toBe(true);
     }
-    for (const path of ["/", "/login", "/login/name", "/auth/confirm", "/api/courses", "/sessionsx"]) {
+    for (const path of ["/", "/login", "/login/name", "/auth/confirm", "/api/courses", "/sessionsx", "/myx"]) {
       expect(isProtectedPath(path), path).toBe(false);
     }
   });

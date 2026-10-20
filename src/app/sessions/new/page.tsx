@@ -18,7 +18,7 @@
 import type { Metadata } from "next";
 
 import CreateSessionForm from "@/components/CreateSessionForm";
-import { PAGE_LEAD, PAGE_TITLE } from "@/components/ui/styles";
+import PageHeader from "@/components/ui/PageHeader";
 import { listDepartments } from "@/lib/sessions";
 import { requireUser } from "@/lib/supabase/server";
 
@@ -27,17 +27,16 @@ export const metadata: Metadata = {
 };
 
 export default async function NewSessionPage() {
-  await requireUser();
+  const viewer = await requireUser();
   const departments = await listDepartments();
 
   return (
     <main className="min-w-0">
-      <h1 className={PAGE_TITLE}>Host a study session</h1>
-      <p className={`${PAGE_LEAD} mb-6`}>
-        Say what you&apos;re studying, where and when. Classmates see it in the
-        session list.
-      </p>
-      <CreateSessionForm departments={departments} />
+      <PageHeader
+        title="Host a study session"
+        lead="Say what you're studying, where and when. Classmates see it in the session list."
+      />
+      <CreateSessionForm departments={departments} hostName={viewer.displayName} />
     </main>
   );
 }

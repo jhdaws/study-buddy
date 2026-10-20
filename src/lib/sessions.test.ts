@@ -6,6 +6,7 @@ import {
   COURSE_SUGGESTION_LIMIT,
   getSession,
   listDepartments,
+  listMySessions,
   listSessions,
   searchCourses,
 } from "./sessions";
@@ -106,7 +107,27 @@ describe("listSessions", () => {
         attendeeCount: 3,
         seatsLeft: 3,
         hostDisplayName: "Priya",
+        hostId: null,
+        going: [],
       },
+    ]);
+  });
+
+  it("brings the roster's faces, host first, for the card's avatars", async () => {
+    respond([
+      sessionRow({
+        host_id: "h",
+        roster: [
+          { user_id: "a", joined_at: "2026-10-01T10:00:00Z", profiles: { display_name: "Alex" } },
+          { user_id: "h", joined_at: "2026-10-01T11:00:00Z", profiles: { display_name: "Priya" } },
+        ],
+      }),
+    ]);
+    const [item] = await listSessions();
+    expect(item.hostId).toBe("h");
+    expect(item.going).toEqual([
+      { userId: "h", displayName: "Priya" },
+      { userId: "a", displayName: "Alex" },
     ]);
   });
 
@@ -244,6 +265,12 @@ describe("getSession", () => {
       attendeeCount: 3,
       seatsLeft: 3,
       hostDisplayName: "Priya",
+      going: [
+        { userId: HOST, displayName: "Priya" },
+        { userId: EARLY, displayName: "Alex" },
+        { userId: LATE, displayName: "Sam" },
+      ],
+      location: null,
       status: "open",
       hostId: HOST,
       attendees: [
@@ -252,6 +279,11 @@ describe("getSession", () => {
         { userId: LATE, displayName: "Sam", isHost: false },
       ],
     });
+  });
+
+  it("brings the place's coordinates for the map", async () => {
+    respond(detailRow({ locations: { lat: 36.1445, lng: -86.8035 } }));
+    expect((await getSession(id))?.location).toEqual({ lat: 36.1445, lng: -86.8035 });
   });
 
   it("asks for that one session, by id", async () => {
@@ -507,5 +539,51 @@ describe("searchCourses", () => {
 
       expect(String(callTo("or")?.[0]).length).toBeLessThan(200);
     });
+  });
+});
+
+describe("listMySessions", () => {
+  const ME = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  const row = (overrides: Record<string, unknown> = {}) => ({
+    id: "11111111-1111-4111-8111-111111111111",
+    topic: "Dynamic programming",
+    location_label: "Central Library",
+    room: null,
+    starts_at: "2026-10-01T19:30:00+00:00",
+    ends_at: "2026-10-01T21:00:00+00:00",
+    capacity: 4,
+    host_id: ME,
+    status: "open",
+    courses: { department_code: "CS", number: "3251", title: null },
+    profiles: { display_name: "Moses" },
+    mine: [{ user_id: ME }],
+    roster: [
+      { user_id: "x", joined_at: "2026-10-01T13:00:00+00:00", profiles: { display_name: "Alex" } },
+      { user_id: ME, joined_at: "2026-10-01T12:00:00+00:00", profiles: { display_name: "Moses" } },
+    ],
+    ...overrides,
+  });
+
+  it("asks only for sessions the student is on the roster of, any status, soonest first", async () => {
+    respond([]);
+    await listMySessions(ME);
+    expect(String(callTo("select")?.[0])).toContain("mine:session_attendees!inner (user_id)");
+    expect(callTo("eq")).toEqual(["mine.user_id", ME]);
+    expect(calls.some((c) => c.method === "eq" && c.args[0] === "status")).toBe(false);
+    expect(callTo("order")).toEqual(["starts_at", { ascending: true }]);
+  });
+
+  it("counts seats from the whole roster, host first, and keeps the status", async () => {
+    respond([row({ status: "cancelled" })]);
+    const [session] = await listMySessions(ME);
+    expect(session.attendeeCount).toBe(2);
+    expect(session.seatsLeft).toBe(2);
+    expect(session.going?.map((p) => p.userId)).toEqual([ME, "x"]);
+    expect(session.status).toBe("cancelled");
+  });
+
+  it("throws our own message when the query fails", async () => {
+    respond(null, { message: "boom" });
+    await expect(listMySessions(ME)).rejects.toThrow("Could not load your sessions");
   });
 });

@@ -38,7 +38,7 @@
 import { APIProvider, useMapsLibrary } from "@vis.gl/react-google-maps";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
-import LocationMap from "@/components/LocationMap";
+import LocationMap, { MapPlaceholder } from "@/components/LocationMap";
 import Icon from "@/components/ui/Icon";
 import {
   AUTOCOMPLETE_PRIMARY_TYPES,
@@ -73,6 +73,15 @@ export type LocationPickerProps = {
   "aria-invalid"?: boolean;
   /** The id of the element showing this field's error. */
   "aria-describedby"?: string;
+  /**
+   * "below" (default): the map under the search. "side": search on the left
+   * with `beside` under it, map on the right (the host form, lg and up).
+   */
+  mapLayout?: "below" | "side";
+  /** In the side layout, shown above the search box (the field's label). */
+  header?: React.ReactNode;
+  /** In the side layout, shown under the search box (location name, room). */
+  beside?: React.ReactNode;
 };
 
 type LatLng = { lat: number; lng: number };
@@ -177,6 +186,9 @@ function Picker({
   disabled,
   "aria-invalid": ariaInvalid,
   "aria-describedby": ariaDescribedBy,
+  mapLayout = "below",
+  header,
+  beside,
   source,
   loading = false,
 }: LocationPickerProps & { source: Source; loading?: boolean }) {
@@ -280,24 +292,21 @@ function Picker({
   const showList = open && !selected && (options.length > 0 || searching || failed);
   const describedBy = [ariaDescribedBy, statusId].filter(Boolean).join(" ") || undefined;
 
-  return (
-    <div className="flex flex-col gap-3">
-      {/* The value the form submits. Controlled, so a form reset leaves it. */}
-      <input type="hidden" name={name} value={selected?.placeId ?? ""} />
-
+  const side = mapLayout === "side";
+  const searchBox = (
       <div className="relative">
         <div
           className={
-            "flex h-12 min-h-11 items-center gap-2 rounded-xl border bg-white pl-3 pr-1.5 " +
-            (ariaInvalid ? "border-danger-on-light" : selected ? "border-brand" : "border-field") +
-            " focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-signal"
+            "flex h-11 min-h-11 items-center gap-2 rounded-lg border bg-white pr-1 pl-1.5 lg:h-9 lg:min-h-9 " +
+            (ariaInvalid ? "border-error" : selected ? "border-dark" : "border-line") +
+            " focus-within:outline focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-accent"
           }
         >
           <span
             aria-hidden
-            className={"grid size-7 shrink-0 place-items-center rounded-full " + (selected ? "bg-brand text-white" : "text-ink-2")}
+            className={"grid size-6 shrink-0 place-items-center rounded-full " + (selected ? "bg-dark text-white" : "text-ink-2")}
           >
-            <Icon name={selected ? "pin" : "search"} className="size-[18px]" />
+            <Icon name={selected ? "pin" : "search"} size={selected ? 13 : 16} />
           </span>
           <input
             ref={inputRef}
@@ -330,16 +339,16 @@ function Picker({
               setTimeout(() => setOpen(false), 120);
             }}
             onKeyDown={onKeyDown}
-            className="h-full min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink-2/70"
+            className="h-full min-w-0 flex-1 bg-transparent text-base text-ink outline-none placeholder:text-ink-3 lg:text-sm"
           />
           {selected && !disabled && (
             <button
               type="button"
               onClick={clear}
               aria-label="Clear place"
-              className="grid size-9 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-paper hover:text-ink"
+              className="grid size-9 shrink-0 place-items-center rounded-md text-ink-2 hover:bg-column hover:text-ink lg:size-7"
             >
-              <Icon name="plus" className="size-[18px] rotate-45" />
+              <Icon name="x" />
             </button>
           )}
         </div>
@@ -349,7 +358,7 @@ function Picker({
           role="listbox"
           aria-label="Places"
           hidden={!showList}
-          className="absolute inset-x-0 top-[calc(100%+6px)] z-20 max-h-80 overflow-y-auto rounded-xl border border-line bg-white p-1.5 shadow-[0_16px_40px_-16px_rgba(14,27,51,0.35)]"
+          className="absolute inset-x-0 top-[calc(100%+6px)] z-20 max-h-80 overflow-y-auto rounded-xl border border-line bg-white p-1 shadow-[0_12px_32px_rgba(17,24,39,0.10)]"
         >
           {options.map((place, i) => (
             <li
@@ -361,84 +370,76 @@ function Picker({
               onMouseEnter={() => setActive(i)}
               onClick={() => void choose(place)}
               className={
-                "flex min-h-11 cursor-pointer items-center gap-3 rounded-lg px-2.5 py-2 " +
-                (i === active ? "bg-paper" : "")
+                "flex min-h-11 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 " +
+                (i === active ? "bg-column" : "")
               }
             >
-              <span aria-hidden className="grid size-8 shrink-0 place-items-center rounded-full bg-sky-50 text-brand">
-                <Icon name="pin" className="size-[16px]" />
+              <span aria-hidden className="shrink-0 text-ink-2">
+                <Icon name="pin" />
               </span>
               <span className="min-w-0">
-                <span className="block truncate text-[15px] font-semibold text-ink">{place.mainText}</span>
+                <span className="block truncate text-sm font-semibold text-ink">{place.mainText}</span>
                 {place.secondaryText && (
-                  <span className="block truncate text-sm text-ink-2">{place.secondaryText}</span>
+                  <span className="block truncate text-xs text-ink-2">{place.secondaryText}</span>
                 )}
               </span>
             </li>
           ))}
           {options.length === 0 && (
-            <li role="presentation" className="px-3 py-2.5 text-sm text-ink-2">
+            <li role="presentation" className="px-3 py-2.5 text-[13px] text-ink-2">
               {failed ? "Couldn't search places just now. Try again." : searching ? "Searching…" : "No places found near campus."}
             </li>
           )}
         </ul>
       </div>
+  );
 
-      <p id={statusId} className="sr-only" aria-live="polite">
-        {selected ? `${selected.label} selected.` : showList ? `${options.length} places found.` : ""}
-      </p>
+  const status = (
+    <p id={statusId} className="sr-only" aria-live="polite">
+      {selected ? `${selected.label} selected.` : showList ? `${options.length} places found.` : ""}
+    </p>
+  );
 
-      {/* The map: Google's, or a placeholder until M1's key exists. */}
-      <div className="relative h-56 overflow-hidden rounded-2xl border border-line bg-sky-50 sm:h-64">
-        {source.hasMap ? (
-          <LocationMap pin={pin} title={selected?.label} />
-        ) : (
-          <MapPlaceholder pin={pin} label={selected?.label} />
-        )}
-        {selected && (
-          <div className="pointer-events-none absolute inset-x-3 bottom-3 flex items-center gap-2 rounded-xl border border-line bg-white/95 px-3 py-2 text-sm shadow-sm">
-            <Icon name="pin" className="size-4 shrink-0 text-brand" />
-            <span className="truncate font-semibold text-ink">{selected.label}</span>
-            <span className="ml-auto shrink-0 text-ink-2">On campus</span>
-          </div>
-        )}
-      </div>
+  // The map: Google's, or the plain stand-in until M1's key exists.
+  const map = (
+    <div className={`relative overflow-hidden rounded-xl border border-line ${side ? "h-56 lg:h-full lg:min-h-[220px]" : "h-56 sm:h-60"}`}>
+      {source.hasMap ? <LocationMap pin={pin} title={selected?.label} /> : <MapPlaceholder pin={pin} label={selected?.label} />}
+      {selected && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-2 border-t border-line bg-white px-3 py-2 text-[13px]">
+          <span className="text-ink-2">
+            <Icon name="pin" size={14} />
+          </span>
+          <span className="truncate font-semibold text-ink">{selected.label}</span>
+          <span className="shrink-0 text-xs text-ink-2">On campus</span>
+        </div>
+      )}
     </div>
   );
-}
 
-/**
- * Stands in for the map where there is no browser key yet. It says so,
- * rather than imitating tiles, and places the pin on a plain campus grid so
- * the interaction still reads.
- */
-function MapPlaceholder({ pin, label }: { pin: LatLng | null; label?: string }) {
-  // Rough campus box for the dots: 1.5 km around CAMPUS_CENTER.
-  const x = pin ? 50 + ((pin.lng + 86.8027) / 0.017) * 50 : null;
-  const y = pin ? 50 - ((pin.lat - 36.1447) / 0.0135) * 50 : null;
+  const hidden = <input type="hidden" name={name} value={selected?.placeId ?? ""} />;
+
+  if (side) {
+    return (
+      <div className="grid gap-4 lg:grid-cols-2">
+        {hidden}
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            {header}
+            {searchBox}
+          </div>
+          {status}
+          {beside}
+        </div>
+        {map}
+      </div>
+    );
+  }
   return (
-    <div
-      aria-hidden
-      className="h-full w-full"
-      style={{
-        backgroundImage:
-          "linear-gradient(to right, rgba(19,41,75,0.08) 1px, transparent 1px), linear-gradient(to bottom, rgba(19,41,75,0.08) 1px, transparent 1px)",
-        backgroundSize: "24px 24px",
-      }}
-    >
-      {pin && x !== null && y !== null ? (
-        <span
-          className="absolute -translate-x-1/2 -translate-y-full text-brand"
-          style={{ left: `${Math.min(92, Math.max(8, x))}%`, top: `${Math.min(80, Math.max(20, y))}%` }}
-          title={label}
-        >
-          <Icon name="pin" className="size-8 drop-shadow" />
-        </span>
-      ) : (
-        <p className="absolute inset-x-4 top-1/2 -translate-y-1/2 text-center text-sm text-ink-2">
-          Pick a place and it appears here. The campus map turns on once Google Maps is connected.
-        </p>
-      )}
+    <div className="flex flex-col gap-3">
+      {hidden}
+      {searchBox}
+      {status}
+      {map}
     </div>
   );
 }

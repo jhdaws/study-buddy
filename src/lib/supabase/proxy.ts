@@ -31,7 +31,7 @@ import { loginPath, REQUEST_PATH_HEADER } from "@/lib/safe-next";
 
 /** Pages a signed-out visitor is sent to /login from. */
 export function isProtectedPath(pathname: string): boolean {
-  return pathname === "/sessions" || pathname.startsWith("/sessions/");
+  return pathname === "/sessions" || pathname.startsWith("/sessions/") || pathname === "/my";
 }
 
 export async function updateSession(request: NextRequest) {

@@ -108,3 +108,36 @@ describe("groupByDay", () => {
     expect(groupByDay([overnight], now)[0].label).toBe("Today");
   });
 });
+
+describe("course and place filters (2026-10-20 redesign)", () => {
+  it("narrows to one course or one place, and counts them for the Filter button", async () => {
+    const { filterSessions, filterOptions, popoverFilterCount, isFiltered, NO_FILTERS } = await import(
+      "./session-filters"
+    );
+    const now = new Date("2026-10-20T15:00:00Z");
+    const mk = (code: string, number: string, place: string) => ({
+      id: `${code}${number}`,
+      course: { departmentCode: code, number, title: null },
+      topic: "t",
+      locationLabel: place,
+      room: null,
+      startsAt: "2026-10-20T20:00:00Z",
+      endsAt: "2026-10-20T22:00:00Z",
+      capacity: 4,
+      attendeeCount: 1,
+      seatsLeft: 3,
+      hostDisplayName: "x",
+    });
+    const list = [mk("CS", "3251", "Central Library"), mk("MATH", "2410", "Stevenson Library")];
+    expect(filterSessions(list, { ...NO_FILTERS, course: "CS 3251" }, now).map((s) => s.id)).toEqual(["CS3251"]);
+    expect(filterSessions(list, { ...NO_FILTERS, place: "Stevenson Library" }, now).map((s) => s.id)).toEqual([
+      "MATH2410",
+    ]);
+    expect(filterOptions(list)).toEqual({
+      courses: ["CS 3251", "MATH 2410"],
+      places: ["Central Library", "Stevenson Library"],
+    });
+    expect(popoverFilterCount({ ...NO_FILTERS, course: "CS 3251", place: "x" })).toBe(2);
+    expect(isFiltered({ ...NO_FILTERS, place: "x" })).toBe(true);
+  });
+});
