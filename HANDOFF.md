@@ -75,7 +75,7 @@ spends its first hour rediscovering the same dead end.
 
 ## 2026-10-19 · A6: email + password sign-in; BUG-15 department select
 
-**Branch:** `a6-us-01-password-sign-in` (stacked on `s3-us-02-department-select`, #81) · **Commits made:** this PR
+**Branch:** `a6-us-01-password-sign-in` · **Commits made:** this PR (BUG-15 merged separately in #81)
 
 ### What changed
 - `/login` opens on email + password; the emailed code is for sign-up and "forgot", and is always followed by `/login/password`. `requireUser()` sends a signed-in student without a password there, so existing teammates are asked once. Details: `docs/tickets.md`, A6.
