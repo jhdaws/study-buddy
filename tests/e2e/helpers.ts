@@ -1,6 +1,6 @@
 // Shared steps for the end-to-end journeys.
 
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 import { loginPath } from "../../src/lib/safe-next";
 
@@ -94,6 +94,18 @@ export async function signInAsNewStudent(
   await page.getByLabel("Type it again").fill(E2E_PASSWORD);
   await page.getByRole("button", { name: "Save password" }).click();
   await expect(page).toHaveURL(nextPath);
+}
+
+/**
+ * Pick a <select> option the way a person does: focus it and type the start
+ * of the option's text. NOT `selectOption()`, which fires `input` and
+ * `change` from a single script call -- that hid BUG-15, where a re-render
+ * between a real pick's two events undid it. Checks the pick stuck.
+ */
+export async function chooseByKeyboard(select: Locator, text: string, value: string): Promise<void> {
+  await select.focus();
+  await select.page().keyboard.type(text, { delay: 50 });
+  await expect(select).toHaveValue(value);
 }
 
 /** A `datetime-local` value in campus time, `hoursFromNow` hours from now. */
