@@ -35,7 +35,8 @@ test("journey 2: a signed-in student hosts a session, and it is saved with them 
   await page.getByLabel("Department").selectOption("CS");
   await page.getByLabel("Course number").fill("3251");
   await page.getByLabel("What are you studying?").fill(topic);
-  await page.getByLabel("Place").selectOption({ label: "Featheringill Hall" });
+  await page.getByLabel("Place").fill("Feath");
+  await page.getByRole("option", { name: /Featheringill Hall/ }).click();
   await page.getByLabel("Starts").fill(campusTime(2));
   await page.getByLabel("Ends").fill(campusTime(4));
   await page.getByLabel("How many people, including you?").fill("4");
