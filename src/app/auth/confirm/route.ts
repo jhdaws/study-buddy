@@ -40,9 +40,25 @@ const ACCEPTED_TYPES: ReadonlySet<string> = new Set(["email", "magiclink", "sign
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
+  const code = params.get("code");
   const tokenHash = params.get("token_hash");
   const type = params.get("type");
   const next = safeNext(params.get("next"));
+
+  // SUPABASE'S DEFAULT EMAIL (A5, #35). Until custom SMTP unlocks our own
+  // template on the hosted project, Supabase sends its default email: a link
+  // through its own /verify, which comes back here with a one-time `code`
+  // instead of a token_hash. That code can only be exchanged in the browser
+  // that asked for the email (signIn() left a code-verifier cookie there), so
+  // the link works on the same device and fails cleanly anywhere else.
+  if (code) {
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error || !data.user) {
+      return redirectTo(request, loginWithError(next));
+    }
+    return redirectTo(request, await pathAfterSignIn(supabase, data.user.id, next));
+  }
 
   if (!tokenHash || !type || !ACCEPTED_TYPES.has(type)) {
     return redirectTo(request, loginWithError(next));
