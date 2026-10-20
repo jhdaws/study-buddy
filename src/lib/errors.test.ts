@@ -5,6 +5,9 @@ import {
   CODE_REJECTED_MESSAGE,
   databaseErrorMessage,
   GENERIC_ERROR_MESSAGE,
+  PASSWORD_REJECTED_MESSAGE,
+  passwordSignInErrorMessage,
+  setPasswordErrorMessage,
   SIGN_IN_RATE_LIMITED_MESSAGE,
   signInErrorMessage,
   verifyCodeErrorMessage,
@@ -227,3 +230,45 @@ describe("verifyCodeErrorMessage", () => {
     expect(verifyCodeErrorMessage(null)).toBe(GENERIC_ERROR_MESSAGE);
   });
 });
+
+describe("passwordSignInErrorMessage (A6)", () => {
+  it("says the email and password don't match, whether or not the account exists", () => {
+    expect(
+      passwordSignInErrorMessage({ code: "invalid_credentials", status: 400, message: "Invalid login credentials" }),
+    ).toBe(PASSWORD_REJECTED_MESSAGE);
+    expect(passwordSignInErrorMessage({ status: 400, message: "Invalid login credentials" })).toBe(
+      PASSWORD_REJECTED_MESSAGE,
+    );
+  });
+
+  it("points an unfinished sign-up at the code", () => {
+    expect(passwordSignInErrorMessage({ code: "email_not_confirmed", status: 400 })).toMatch(
+      /get a code by email/,
+    );
+  });
+
+  it("maps rate limits and anything unknown to our own text", () => {
+    expect(passwordSignInErrorMessage({ status: 429 })).toBe(CODE_RATE_LIMITED_MESSAGE);
+    expect(passwordSignInErrorMessage({ status: 500, message: "boom" })).toBe(GENERIC_ERROR_MESSAGE);
+    expect(passwordSignInErrorMessage(null)).toBe(GENERIC_ERROR_MESSAGE);
+  });
+});
+
+describe("setPasswordErrorMessage (A6)", () => {
+  it("explains Supabase's refusals in our words", () => {
+    expect(setPasswordErrorMessage({ code: "weak_password", status: 422 })).toMatch(/stronger password/);
+    expect(setPasswordErrorMessage({ code: "same_password", status: 422 })).toMatch(
+      /already your password/,
+    );
+    expect(setPasswordErrorMessage({ code: "reauthentication_needed", status: 400 })).toMatch(
+      /sign in again with a code/,
+    );
+  });
+
+  it("maps rate limits and anything unknown to our own text", () => {
+    expect(setPasswordErrorMessage({ status: 429 })).toBe(CODE_RATE_LIMITED_MESSAGE);
+    expect(setPasswordErrorMessage({ status: 500, message: "boom" })).toBe(GENERIC_ERROR_MESSAGE);
+    expect(setPasswordErrorMessage(undefined)).toBe(GENERIC_ERROR_MESSAGE);
+  });
+});
+

@@ -204,7 +204,7 @@ production sends, and it lands there.
   Some hosted projects reportedly default to 8.
 - **Email OTP Expiration:** 3600 seconds (one hour) — the default, and what
   the email and `/login` tell students.
-- Leave **Confirm email** on.
+- Leave **Confirm email** on — and see step 7 for the password settings.
 
 ### 4. Email delivery and rate limits — matters for the demo
 
@@ -223,10 +223,13 @@ So with the built-in service, the Sprint 2 "done when" — two people signing
 in on production — works only if **both are members of the Supabase
 organization**, and only twice an hour between them. For anything wider
 (other testers, a class demo), set up **custom SMTP** (Authentication →
-Emails → SMTP Settings; any provider — Resend, SendGrid, Postmark — with a
-verified sender domain) and then raise the email rate limit under
-Authentication → Rate Limits. Its credentials belong in the dashboard only,
-never in this repository.
+Emails → SMTP Settings; any provider — Resend, SendGrid, Postmark, Brevo —
+with a verified sender; some verify a single address, others need a domain
+you own) and then raise the email rate limit under Authentication → Rate
+Limits. Then paste the template (step 2), so the email carries a code.
+Its credentials belong in the dashboard only, never in this repository.
+Since A6, each student needs one email at sign-up and one per forgotten
+password, not one per sign-in.
 
 **Without custom SMTP (where the hosted project is now).** Supabase sends
 its own default email: a link and no code, because our template stays locked
@@ -269,32 +272,38 @@ the secret key can run it, and why it is a stopgap rather than a feature.
 The Vanderbilt-only rule still holds. `scripts/sign-in-link.mjs` has the
 details.
 
-### 7. Test login (`group4@vanderbilt.edu`), for local and previews only
+### 7. Passwords (A6) — one email per student, not one per sign-in
 
-For building and testing without the email limits. Entering the test address
-on `/login` sends **no email**; the code step takes the test user's
-**password**, checked by Supabase (`signInWithPassword`). How:
-`src/lib/test-login.ts`.
+A returning student signs in on `/login` with their Vanderbilt email and a
+password; **no email is sent**. The emailed code is only for signing up and
+for a forgotten password ("Get a sign-in code by email"), and either way the
+student then chooses a password (`/login/password`). How: `src/app/login/actions.ts`.
 
-It is **off on production**: the app ignores it whenever Vercel says the
-deployment is production (`VERCEL_ENV=production`), whatever else is set.
-It is also off anywhere `TEST_LOGIN_EMAIL` is unset.
+In the dashboard (Authentication → Sign In / Providers → Email, see step 3):
 
-**The code is never written in this repository** (the repo is public). Share
-it with the team privately. To set it up:
+- **Minimum password length: 8** — the same as `PASSWORD_MIN_LENGTH` in
+  `src/lib/limits.ts` and `minimum_password_length` in `config.toml`. The
+  form's rule is for the message; this setting is the real enforcement.
+- **Leave "Confirm email" on.** It is what makes a new address prove it is
+  the student's before it can have a password. With it off, anyone could call
+  Supabase's sign-up API with any `@vanderbilt.edu` address and a password of
+  their choosing.
+- **"Secure password change": leave off** (the default). With it on, changing
+  a password more than a day after signing in needs a fresh code; the app
+  only asks for a password straight after a code anyway.
 
-1. Pick a random code of **6 to 10 digits** (the code field accepts only
-   that). Longer is better; 10 digits is a good choice.
-2. **Create the user.** Hosted: Authentication → Users → Add user → Create
-   new user, email `group4@vanderbilt.edu`, the code as the password, **Auto
-   Confirm User** ticked. Local: the same in Studio
-   (http://127.0.0.1:54323).
-3. **Turn it on.** Set `TEST_LOGIN_EMAIL=group4@vanderbilt.edu` in
-   `.env.local` and, in Vercel, for the **Preview** environment only.
+**Students who signed up before passwords** are asked to choose one, once,
+the next time they open a page while signed in (`requireUser()`). Signed
+out, they need a code first — or, until custom SMTP is set up (step 4), a
+link from `npm run auth:link` (step 6).
 
-A2's signup trigger accepts the address and makes its profile; the first
-sign-in asks for a display name as usual. One limit to know: previews and
-production share the hosted project, so the account exists there too, and
-anyone holding the password could sign in through Supabase's API directly.
-That is why the password stays private and long. To switch it off, delete the
-user.
+**A test account** needs no email at all: Authentication → Users → Add user →
+Create new user, a `@vanderbilt.edu` address, a password, **Auto Confirm
+User** ticked. It signs in on `/login` with that password and asks for a
+display name the first time. The password is a real credential on
+production (previews share the project): never write it in this public
+repository; share it privately.
+
+Passwords do not remove the need for custom SMTP: a classmate or grader
+signing up still needs their first code, and the built-in sender only
+reaches the Supabase organization's members, twice an hour (step 4).

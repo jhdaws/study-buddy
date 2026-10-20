@@ -3,7 +3,17 @@
 /**
  * The sign-in form (US-01). Built by A3 (#16); rendered by
  * src/app/login/page.tsx inside <AuthScene>. Restyled to the Claude Design
- * spec (pages 9-16). Two steps, one component:
+ * spec (pages 9-16).
+ *
+ * Opens on PASSWORD (A6): Vanderbilt email + password,
+ * `useActionState(signInWithPassword, {})`, which redirects on success and
+ * sends no email. "New here, or forgot your password?" switches to the code
+ * flow below, and "I have a password" switches back, without a round trip.
+ * After a code sign-in the student chooses a password (/login/password), so
+ * the code flow is needed once per student, not once per visit -- which is
+ * what keeps Supabase's email limits out of the way.
+ *
+ * The code flow is two steps:
  *
  *   1. EMAIL -- `useActionState(signIn, {})`. signIn never redirects: once
  *      the email has gone out it returns `{ sentTo }`, and the code step
@@ -39,7 +49,9 @@ import { useActionState, useEffect, useId, useState } from "react";
 
 import {
   signIn,
+  signInWithPassword,
   verifyCode,
+  type PasswordSignInState,
   type SignInState,
   type VerifyCodeState,
 } from "@/app/login/actions";
@@ -66,11 +78,18 @@ export const RESEND_AFTER_SECONDS = 60;
 export type SignInFormProps = {
   /** A same-origin path to return to after signing in; already checked. */
   next?: string;
-  /** useActionState's starting state. `{}` on the page; tests pass others. */
+  /** The code flow's starting state. `{}` on the page; tests pass others. */
   initialState?: SignInState;
+  /** Which way in to show first. The page opens on "password". */
+  initialMode?: "password" | "code";
 };
 
-export default function SignInForm({ next, initialState = {} }: SignInFormProps) {
+export default function SignInForm({
+  next,
+  initialState = {},
+  initialMode = "password",
+}: SignInFormProps) {
+  const [mode, setMode] = useState(initialMode);
   const [state, formAction, pending] = useActionState(signIn, initialState);
   // The state whose code step the student left with "Use a different
   // email". A new send produces a new state object, so its step shows again.
@@ -85,12 +104,14 @@ export default function SignInForm({ next, initialState = {} }: SignInFormProps)
     setRound(round + 1);
   }
 
+  if (mode === "password") {
+    return <PasswordStep next={next} onUseCode={() => setMode("code")} />;
+  }
   if (state.sentTo && dismissed !== state) {
     return (
       <CodeStep
         key={round}
         email={state.sentTo}
-        testLogin={state.testLogin === true}
         next={next}
         resend={formAction}
         resending={pending}
@@ -98,7 +119,106 @@ export default function SignInForm({ next, initialState = {} }: SignInFormProps)
       />
     );
   }
-  return <EmailStep state={state} formAction={formAction} pending={pending} next={next} />;
+  return (
+    <EmailStep
+      state={state}
+      formAction={formAction}
+      pending={pending}
+      next={next}
+      onUsePassword={() => setMode("password")}
+    />
+  );
+}
+
+function PasswordStep({ next, onUseCode }: { next?: string; onUseCode: () => void }) {
+  const [state, formAction, pending] = useActionState<PasswordSignInState, FormData>(
+    signInWithPassword,
+    {},
+  );
+  const prefix = useId();
+  const ids = {
+    heading: `${prefix}-heading`,
+    email: `${prefix}-email`,
+    emailError: `${prefix}-email-error`,
+    password: `${prefix}-password`,
+    passwordError: `${prefix}-password-error`,
+  };
+  const emailError = state.fieldErrors?.email?.[0];
+  const passwordError = state.fieldErrors?.password?.[0];
+
+  return (
+    <section aria-labelledby={ids.heading}>
+      <h1 id={ids.heading} className="text-center text-[26px] leading-tight font-bold tracking-tight">
+        Sign in
+      </h1>
+      <p className="mt-2 mb-6 text-center text-base text-white/80">
+        Use your Vanderbilt email and your Study Buddy password.
+      </p>
+      <form action={formAction} noValidate className="flex flex-col gap-4">
+        {next && <input type="hidden" name="next" value={next} />}
+        {state.formError && (
+          <p role="alert" className={FORM_ERROR_ON_DARK}>
+            {state.formError}
+          </p>
+        )}
+        <div className={FIELD}>
+          <label htmlFor={ids.email} className={LABEL_ON_DARK}>
+            Vanderbilt email
+          </label>
+          <input
+            id={ids.email}
+            name="email"
+            type="email"
+            inputMode="email"
+            autoComplete="username"
+            autoCapitalize="none"
+            spellCheck={false}
+            placeholder="you@vanderbilt.edu"
+            required
+            defaultValue={state.values?.email ?? ""}
+            aria-invalid={emailError ? true : undefined}
+            aria-describedby={emailError ? ids.emailError : undefined}
+            className={INPUT_ON_DARK}
+          />
+          {emailError && (
+            <p id={ids.emailError} role="alert" className={FIELD_ERROR_ON_DARK}>
+              {emailError}
+            </p>
+          )}
+        </div>
+        <div className={FIELD}>
+          <label htmlFor={ids.password} className={LABEL_ON_DARK}>
+            Password
+          </label>
+          <input
+            id={ids.password}
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            aria-invalid={passwordError ? true : undefined}
+            aria-describedby={passwordError ? ids.passwordError : undefined}
+            className={INPUT_ON_DARK}
+          />
+          {passwordError && (
+            <p id={ids.passwordError} role="alert" className={FIELD_ERROR_ON_DARK}>
+              {passwordError}
+            </p>
+          )}
+        </div>
+        <button type="submit" disabled={pending} className={`${BUTTON_ON_DARK} mt-1 w-full`}>
+          {pending && <Spinner />}
+          {pending ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+      <div className="mt-4 border-t border-white/10 pt-4 text-center">
+        <p className="text-sm text-white/72">New here, or forgot your password?</p>
+        <button type="button" onClick={onUseCode} className={LINK_ON_DARK}>
+          Get a sign-in code by email
+        </button>
+      </div>
+    </section>
+  );
 }
 
 function Spinner() {
@@ -115,11 +235,13 @@ function EmailStep({
   formAction,
   pending,
   next,
+  onUsePassword,
 }: {
   state: SignInState;
   formAction: (formData: FormData) => void;
   pending: boolean;
   next?: string;
+  onUsePassword: () => void;
 }) {
   const prefix = useId();
   const ids = {
@@ -133,10 +255,11 @@ function EmailStep({
   return (
     <section aria-labelledby={ids.heading}>
       <h1 id={ids.heading} className="text-center text-[26px] leading-tight font-bold tracking-tight">
-        Sign in
+        Get a sign-in code
       </h1>
       <p className="mt-2 mb-6 text-center text-base text-white/80">
-        Use your Vanderbilt email. We&apos;ll send you a code.
+        New here, or forgot your password? We&apos;ll email your Vanderbilt address a code.
+        Then you&apos;ll choose a password.
       </p>
       <form action={formAction} noValidate className="flex flex-col gap-4">
         {next && <input type="hidden" name="next" value={next} />}
@@ -182,24 +305,26 @@ function EmailStep({
           {pending ? "Sending…" : "Send code"}
         </button>
         <p id={ids.hint} className="text-center text-sm text-white/72">
-          Only @vanderbilt.edu addresses can sign in. No password needed.
+          Only @vanderbilt.edu addresses can sign in.
         </p>
       </form>
+      <div className="mt-2 text-center">
+        <button type="button" onClick={onUsePassword} className={LINK_ON_DARK}>
+          I have a password
+        </button>
+      </div>
     </section>
   );
 }
 
 function CodeStep({
   email,
-  testLogin,
   next,
   resend,
   resending,
   onChangeEmail,
 }: {
   email: string;
-  /** The test login (src/lib/test-login.ts): no email went out. */
-  testLogin: boolean;
   next?: string;
   resend: (formData: FormData) => void;
   resending: boolean;
@@ -243,16 +368,14 @@ function CodeStep({
   return (
     <section aria-labelledby={ids.heading}>
       <h1 id={ids.heading} className="text-center text-[26px] leading-tight font-bold tracking-tight">
-        {testLogin ? "Test login" : "Check your inbox"}
+        Check your inbox
       </h1>
       {/* role="status" so a screen reader announces the change of step. */}
       <p role="status" className="mt-2 mb-6 text-center text-base text-white/80">
-        {testLogin ? "No email was sent to" : "We sent a sign-in code to"}{" "}
+        We sent a sign-in code to{" "}
         <strong className="block font-bold text-white [overflow-wrap:anywhere]">{email}</strong>
         <span className="mt-1 block text-sm text-white/72">
-          {testLogin
-            ? "Enter the test code: the password set for this user in Supabase."
-            : "Enter the code from that email below."}
+          Enter the code from that email below.
         </span>
       </p>
 

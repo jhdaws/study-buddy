@@ -31,6 +31,8 @@ import {
   MIN_CAPACITY,
   OTP_CODE_MAX_LENGTH,
   OTP_CODE_MIN_LENGTH,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
   ROOM_MAX_LENGTH,
   START_GRACE_MINUTES,
   TOPIC_MAX_LENGTH,
@@ -46,6 +48,8 @@ export {
   MIN_CAPACITY,
   OTP_CODE_MAX_LENGTH,
   OTP_CODE_MIN_LENGTH,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
   ROOM_MAX_LENGTH,
   START_GRACE_MINUTES,
   TOPIC_MAX_LENGTH,
@@ -170,6 +174,54 @@ export const verifyCodeSchema = z.object({
 
 export type VerifyCodeValues = z.output<typeof verifyCodeSchema>;
 export type VerifyCodeField = keyof VerifyCodeValues;
+
+// ---------------------------------------------------------------------------
+// Passwords (US-01, A6). A returning student signs in with their email and
+// password -- no email sent. They choose the password after their first
+// sign-in by code, and again after "forgot my password".
+// ---------------------------------------------------------------------------
+
+/**
+ * Sign in with a password. Only "is anything there" is checked: telling a
+ * student their password is too short for the rules would describe the
+ * rules, not their mistake, and Supabase decides whether it matches.
+ */
+export const passwordSignInSchema = z.object({
+  email: signInSchema.shape.email,
+  password: z
+    .string({ error: "Enter your password." })
+    .min(1, { error: "Enter your password." }),
+});
+
+export type PasswordSignInValues = z.output<typeof passwordSignInSchema>;
+export type PasswordSignInField = keyof PasswordSignInValues;
+
+/**
+ * Choose a password: PASSWORD_MIN_LENGTH to PASSWORD_MAX_LENGTH characters,
+ * typed twice. Not trimmed -- a space is a character like any other, and
+ * trimming one would set a password the student did not type.
+ */
+export const setPasswordSchema = z
+  .object({
+    password: z
+      .string({ error: "Choose a password." })
+      .min(1, { error: "Choose a password." })
+      .min(PASSWORD_MIN_LENGTH, {
+        error: `Use at least ${PASSWORD_MIN_LENGTH} characters.`,
+      })
+      .max(PASSWORD_MAX_LENGTH, {
+        error: `Keep it to ${PASSWORD_MAX_LENGTH} characters or fewer.`,
+      }),
+    confirmPassword: z.string({ error: "Type the password again." }),
+  })
+  .refine((values) => values.confirmPassword === values.password, {
+    error: "The two passwords don't match.",
+    path: ["confirmPassword"],
+    when: (payload) => payload.issues.length === 0,
+  });
+
+export type SetPasswordValues = z.output<typeof setPasswordSchema>;
+export type SetPasswordField = keyof SetPasswordValues;
 
 // ---------------------------------------------------------------------------
 // Display name (US-01, ADR 0008 rule 1) -- A4 calls this in saveDisplayName().

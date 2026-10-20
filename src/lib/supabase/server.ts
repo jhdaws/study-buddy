@@ -7,6 +7,7 @@
 // request.
 
 import { createServerClient } from "@supabase/ssr";
+import type { User } from "@supabase/supabase-js";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { cache } from "react";
@@ -16,6 +17,7 @@ import { supabaseEnv } from "@/lib/env";
 import {
   displayNamePath,
   loginPath,
+  passwordPath,
   REQUEST_PATH_HEADER,
   safeNext,
 } from "@/lib/safe-next";
@@ -98,28 +100,52 @@ export async function fetchDisplayName(
 }
 
 /**
- * Where a student goes once they have just signed in (the emailed link, or
- * the code): the name step if they have no display name yet -- ADR 0008
- * rule 1, "required at first sign-in" -- carrying `next`; else the safe
- * `next`, or /sessions.
+ * The user_metadata flag setPassword() (A6) sets once a student has chosen a
+ * password. Supabase does not tell a client whether an account has one, so
+ * the app records it. It is the student's own metadata -- they could set it
+ * without choosing a password -- but it only decides whether the app ASKS
+ * for one; Supabase alone decides whether a password signs anyone in.
+ */
+export const HAS_PASSWORD = "has_password";
+
+/** True once the student has chosen a password (see HAS_PASSWORD). */
+export function hasPassword(user: Pick<User, "user_metadata">): boolean {
+  return user.user_metadata?.[HAS_PASSWORD] === true;
+}
+
+/** What pathAfterSignIn() needs from the user who just signed in. */
+export type SignedInUser = Pick<User, "id" | "user_metadata">;
+
+/**
+ * Where a student goes once they have just signed in, carrying `next`:
+ *   1. the name step if they have no display name yet -- ADR 0008 rule 1,
+ *      "required at first sign-in" (it goes on to the password step itself);
+ *   2. the password step (A6) if they have no password yet, or if they
+ *      signed in by code to choose one (`choosePassword`: new here, or
+ *      forgot it);
+ *   3. else the safe `next`, or /sessions.
  *
  * Takes the client that signed them in, whose session is already set. If
  * the profile cannot be read, the student is signed in regardless and goes
- * on to `next`: requireUser() checks the name again wherever it matters, so
- * a failed read here must not turn a successful sign-in into an error page.
+ * on to `next`: requireUser() checks the name and password again wherever
+ * it matters, so a failed read here must not turn a successful sign-in into
+ * an error page.
  */
 export async function pathAfterSignIn(
   supabase: ServerClient,
-  userId: string,
+  user: SignedInUser,
   next: unknown,
+  { choosePassword = false }: { choosePassword?: boolean } = {},
 ): Promise<string> {
   let displayName: string | null;
   try {
-    displayName = await fetchDisplayName(supabase, userId);
+    displayName = await fetchDisplayName(supabase, user.id);
   } catch {
     return safeNext(next);
   }
-  return displayName ? safeNext(next) : displayNamePath(next);
+  if (!displayName) return displayNamePath(next);
+  if (choosePassword || !hasPassword(user)) return passwordPath(next);
+  return safeNext(next);
 }
 
 // ---------------------------------------------------------------------------
@@ -134,15 +160,19 @@ export async function pathAfterSignIn(
 //      the REQUEST_PATH_HEADER the proxy sets on every request -- the page's
 //      path, for a Server Action too -- and goes through safeNextPath().
 //   3. No display name yet: redirect to the name step, carrying `next`.
-//   4. Return { id, displayName }.
+//   4. No password yet (A6): redirect to the password step, carrying
+//      `next`. This is how students who signed up before passwords existed
+//      are asked for one, once.
+//   5. Return { id, displayName }.
 // redirect() throws, so callers never see a signed-out or nameless user.
 //
 // Wrapped in React's cache(), so several calls in one render (the page and
 // a component in it) share one getUser() and one profile read. In a Server
 // Action there is no render to share, and each call does the work.
 //
-// saveDisplayName() must NOT call this -- it would redirect the user to the
-// step they are completing; it uses getCurrentUser() instead.
+// saveDisplayName() and setPassword() must NOT call this -- it would
+// redirect the user to the step they are completing; they use
+// getCurrentUser() instead.
 //
 // Callers: createSession() (S3), /sessions/new. Both are dynamic already:
 // this reads cookies and headers.
@@ -163,6 +193,9 @@ export const requireUser = cache(async (): Promise<CurrentUser> => {
   const displayName = await fetchDisplayName(supabase, user.id);
   if (!displayName) {
     redirect(displayNamePath(here));
+  }
+  if (!hasPassword(user)) {
+    redirect(passwordPath(here));
   }
 
   return { id: user.id, displayName };
