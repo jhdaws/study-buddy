@@ -89,6 +89,8 @@ test("journey 3: another student sees the session in the list with the right sea
   // session_attendees on every read, never stored (ADR 0008 rule 9).
   await expect(card).toContainText("3 seats left");
   await expect(card).toContainText("1 of 4 going");
+});
+
 test("sign-out (US-21): the session ends, and private pages send the student back to sign in", async ({
   page,
 }) => {
@@ -121,8 +123,4 @@ test("calendar download (US-19): a session from the list downloads as an .ics ev
   const body = await response.text();
   expect(body.startsWith("BEGIN:VCALENDAR\r\n")).toBe(true);
   expect(body).toContain(`UID:${sessionId}@study-buddy`);
-});
-
-test("journey 3: another student sees the session in the list with the right seats left", async () => {
-  test.fixme(true, "Needs S4 (#21): the session list still reads fixture data, not the database.");
 });
