@@ -287,15 +287,16 @@ Per #33, Supabase's built-in sender reaches only members of the Supabase organiz
 - [x] W8's journey 3, parked on this ticket (`test.fixme("Needs S4")`), now runs: a second student signs in and sees another's session with the right seats left
 
 #### S5 · Join and leave with a seat limit
-**L · US-04, US-07, US-08 · Sprint 3 · Tapan**
+**L · US-04, US-07, US-08 · Sprint 3 · Tapan · 🚧**
 
 The other half of the core loop: a student can host and browse, but not yet join. Design in `architecture.md` §3: join and leave go through database functions holding a row lock, never a plain `INSERT` from app code.
-- [ ] `join_session(session_id)`: SECURITY DEFINER, locks the session row (`for update`); refuses when full, cancelled, ended, already joined, signed out, or without a display name, each with a short raised message; inserts into `session_attendees`
-- [ ] `leave_session(session_id)`: removes the caller; the host cannot leave (they cancel, US-09, later)
-- [ ] No client INSERT or DELETE on `session_attendees`; `anon` gets no EXECUTE on either function
-- [ ] `joinSession()` and `leaveSession()` server actions, errors mapped in `databaseErrorMessage()`
-- [ ] Database tests for every refusal, and **US-07b**: two concurrent joins for the last seat, exactly one succeeds. Then delete `tests/db/harness.test.ts` (CLAUDE.md)
-- [ ] Seats left in the list reflect joins and leaves
+- [x] `join_session(session_id)`: SECURITY DEFINER, locks the session row (`for update`); refuses when full, cancelled, ended, already joined, signed out, or without a display name, each with a short raised message; inserts into `session_attendees` (`*_join_leave_session.sql`)
+- [x] `leave_session(session_id)`: removes the caller; the host cannot leave (they cancel, US-09, later)
+- [x] No client INSERT or DELETE on `session_attendees`; `anon` gets no EXECUTE on either function — including the explicit `revoke ... from anon` BUG-08 found necessary on `create_session` (`revoke all from public` alone leaves Supabase's default grant to `anon` standing)
+- [x] `joinSession()` and `leaveSession()` server actions (`src/app/sessions/actions.ts`), errors mapped in `databaseErrorMessage()`; bound to a session id the way Next documents for extra Server Action arguments (`joinSession.bind(null, sessionId)`), for S6 to wire up
+- [x] Database tests for every refusal, and **US-07b**: two concurrent joins for the last seat, exactly one succeeds (`tests/db/join-leave-session.test.ts`) — **not yet run against a real database, no Docker here** (see HANDOFF.md); `tests/db/harness.test.ts` deleted now that US-07b has a real replacement
+- [x] 7 unit tests on the server actions (`src/app/sessions/actions.test.ts`), mocked the way S3's `createSession()` tests are
+- [ ] Seats left in the list reflect joins and leaves — mechanically true once S4's `listSessions()` reads the real roster (these functions are the only writers to it), but not watchable end to end until S4 lands
 
 #### S6 · Session page with roster
 **M · US-04, US-23 · Sprint 3 · after S4 · Nate**

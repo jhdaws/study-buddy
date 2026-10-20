@@ -125,6 +125,21 @@ describe("databaseErrorMessage: creating a session (S1-S3)", () => {
   });
 });
 
+// What join_session and leave_session can raise (S5).
+describe("databaseErrorMessage: joining and leaving a session (S5)", () => {
+  it.each([
+    ["session_not_found", "That session doesn't exist anymore."],
+    ["session_cancelled", "This session has been cancelled."],
+    ["session_ended", "This session has already ended."],
+    ["already_joined", "You're already on the roster for this session."],
+    ["session_full", "This session is full."],
+    ["not_joined", "You're not on the roster for this session."],
+    ["host_cannot_leave", "As the host, you can't leave — cancel the session instead."],
+  ])("maps the raised message %j", (message, expected) => {
+    expect(databaseErrorMessage({ message, code: "P0001" })).toBe(expected);
+  });
+});
+
 describe("signInErrorMessage", () => {
   it("maps both rate limits to the same message", () => {
     expect(

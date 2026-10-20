@@ -197,6 +197,21 @@ isOneToOne: false
 "get_or_create_course":
 { Args: { "p_course_number": string,"p_department_code": string }; Returns: string
                            },
+"join_session":
+{ Args: { "session_id": string }; Returns: {
+              "joined_at": string,
+"session_id": string,
+"user_id": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "session_attendees"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"leave_session":
+{ Args: { "session_id": string }; Returns: undefined
+                           },
 "normalize_course_number":
 { Args: { "raw": string }; Returns: string
                            },

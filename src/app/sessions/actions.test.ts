@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PlaceError } from "@/lib/places";
 
-import { createSession } from "./actions";
+import { createSession, joinSession, leaveSession } from "./actions";
 
 // createSession() (S3) with everything outside it replaced: requireUser(),
 // resolvePlace(), the two RPCs and redirect(). The database's own rules are
@@ -28,6 +28,9 @@ vi.mock("@/lib/supabase/server", () => ({
   requireUser: server.requireUser,
   createClient: async () => ({ rpc: server.rpc }),
 }));
+
+const cache = vi.hoisted(() => ({ revalidatePath: vi.fn() }));
+vi.mock("next/cache", () => ({ revalidatePath: cache.revalidatePath }));
 
 // Keep the real PlaceError (and its messages); replace only the lookup.
 const places = vi.hoisted(() => ({ resolvePlace: vi.fn() }));
@@ -85,6 +88,7 @@ afterEach(() => {
   server.requireUser.mockReset();
   server.rpc.mockReset();
   places.resolvePlace.mockReset();
+  cache.revalidatePath.mockReset();
 });
 
 describe("createSession: success", () => {
@@ -202,5 +206,98 @@ describe("createSession: database refusals", () => {
       "createSession: create_session failed",
       expect.objectContaining({ code: "23503" }),
     );
+  });
+});
+
+// joinSession() and leaveSession() (S5) with everything outside them
+// replaced the same way: requireUser() and the RPC. The row lock and every
+// refusal reason (full, cancelled, ended, already on the roster, ...) are
+// join_session's and leave_session's own rules, tested against real
+// Postgres in tests/db/join-leave-session.test.ts -- these tests check that
+// the action calls the right RPC, revalidates the right paths, and never
+// shows raw database text.
+
+describe("joinSession: success", () => {
+  it("calls join_session with the session id and revalidates the session and the list", async () => {
+    server.rpc.mockResolvedValue({ data: { session_id: "s1", user_id: "u1" }, error: null });
+
+    const state = await joinSession("s1", {}, new FormData());
+
+    expect(state).toEqual({});
+    expect(server.rpc).toHaveBeenCalledWith("join_session", { session_id: "s1" });
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/sessions/s1");
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/sessions");
+  });
+});
+
+describe("joinSession: stops early", () => {
+  it("lets requireUser()'s redirect through for a signed-out student, before the RPC", async () => {
+    server.requireUser.mockRejectedValue(new Redirect("/login?next=%2Fsessions%2Fs1"));
+
+    await expect(joinSession("s1", {}, new FormData())).rejects.toBeInstanceOf(Redirect);
+    expect(server.rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe("joinSession: database refusals", () => {
+  it("maps session_full to our own message, logs the original, and does not revalidate", async () => {
+    server.rpc.mockResolvedValue({ data: null, error: { code: "P0001", message: "session_full" } });
+
+    const state = await joinSession("s1", {}, new FormData());
+
+    expect(state).toEqual({ error: "This session is full." });
+    expect(cache.revalidatePath).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith("joinSession: join_session failed", {
+      code: "P0001",
+      message: "session_full",
+    });
+  });
+
+  it("never shows Postgres's own text for an unmapped error", async () => {
+    server.rpc.mockResolvedValue({
+      data: null,
+      error: { code: "55P03", message: "could not obtain lock on row in relation \"sessions\"" },
+    });
+
+    const state = await joinSession("s1", {}, new FormData());
+
+    expect(state.error).toBe("Something went wrong on our side. Try again in a moment.");
+    expect(state.error).not.toMatch(/relation|lock/);
+  });
+});
+
+describe("leaveSession: success", () => {
+  it("calls leave_session with the session id and revalidates the session and the list", async () => {
+    server.rpc.mockResolvedValue({ data: null, error: null });
+
+    const state = await leaveSession("s1", {}, new FormData());
+
+    expect(state).toEqual({});
+    expect(server.rpc).toHaveBeenCalledWith("leave_session", { session_id: "s1" });
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/sessions/s1");
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/sessions");
+  });
+});
+
+describe("leaveSession: stops early", () => {
+  it("lets requireUser()'s redirect through for a signed-out student, before the RPC", async () => {
+    server.requireUser.mockRejectedValue(new Redirect("/login?next=%2Fsessions%2Fs1"));
+
+    await expect(leaveSession("s1", {}, new FormData())).rejects.toBeInstanceOf(Redirect);
+    expect(server.rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe("leaveSession: database refusals", () => {
+  it("maps host_cannot_leave to our own message", async () => {
+    server.rpc.mockResolvedValue({
+      data: null,
+      error: { code: "P0001", message: "host_cannot_leave" },
+    });
+
+    const state = await leaveSession("s1", {}, new FormData());
+
+    expect(state).toEqual({ error: "As the host, you can't leave — cancel the session instead." });
+    expect(cache.revalidatePath).not.toHaveBeenCalled();
   });
 });
