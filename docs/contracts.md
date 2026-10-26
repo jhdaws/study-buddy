@@ -307,3 +307,14 @@ click (a UX nicety — the function refuses it either way), showing "You're
 hosting" instead of a button for the host, and the roster itself. All S6
 (`src/components/SessionRoster.tsx`, `src/app/sessions/[id]/page.tsx`), which
 has landed: `rosterAction()` in `src/lib/roster.ts` picks the button.
+
+**Live roster (2026-10-26).** `subscribeToRoster(client, sessionId, onChange)`
+in `src/lib/live-roster.ts` returns a function that stops listening. It calls
+`onChange` — coalesced, at most once per 250 ms — when anyone joins or leaves
+that session, and once each time the channel (re)subscribes, to catch up on
+anything missed. It never says *what* changed: `<SessionRoster>` answers with
+`router.refresh()`, so the roster on screen is always `getSession()`'s. It
+waits for `client.realtime.setAuth()` before joining the channel; without
+that, a freshly loaded page joins signed out and receives nothing. A future
+Realtime feature (US-05's chat) should do the same, and add its table to
+`tests/db/live-roster.test.ts`'s publication allowlist on purpose.

@@ -110,6 +110,9 @@ journeys 1 and 2 pass. Journey 2 checks the saved session in the database,
 because the list still reads fixtures. Journey 3 is marked `fixme` until S4
 (#21). `tests/e2e/global-setup.ts` gives the stub picker's fixture places
 location rows in the local database, which is M5's local-and-CI half.
+**2026-10-26:** journey 5 — one student watches a session page while a second
+browser joins and leaves; the roster updates without a reload (live roster).
+CI's `e2e` job now starts Realtime for it.
 
 ## Not testing (and why)
 
