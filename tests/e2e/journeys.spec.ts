@@ -144,6 +144,57 @@ test("journey 4: another student opens the session, joins it, and leaves again (
   await expect(roster).not.toContainText("Jordan Joiner");
 });
 
+test("journey 5: the roster updates live while another student joins and leaves (US-23, live roster)", async ({
+  page,
+  browser,
+}) => {
+  if (hostedTopic === null) {
+    throw new Error("Journey 5 watches the session journey 2 hosts; journey 2 did not get that far.");
+  }
+  const topic = hostedTopic;
+  // Two sign-ins, each through a real emailed code.
+  test.setTimeout(120_000);
+
+  const openSession = async (student: typeof page) => {
+    await student
+      .locator("article")
+      .filter({ hasText: topic })
+      .getByRole("link", { name: /^CS 3251/ })
+      .click();
+    await expect(student).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+  };
+
+  // The watcher opens the session page and stays on it: no reload below.
+  await signInAsNewStudent(page, newStudentEmail("journey5watch"), "Wren Watcher", "/sessions");
+  await openSession(page);
+  const watched = page.getByRole("region", { name: "Who's going" });
+  await expect(watched).toContainText("1 of 4 going");
+
+  // A second student, in their own browser, joins and then leaves.
+  const otherContext = await browser.newContext();
+  try {
+    const other = await otherContext.newPage();
+    await signInAsNewStudent(other, newStudentEmail("journey5join"), "Lane Live", "/sessions");
+    await openSession(other);
+    const theirs = other.getByRole("region", { name: "Who's going" });
+
+    await theirs.getByRole("button", { name: "Join session" }).click();
+    await expect(theirs.getByText("You're going.")).toBeVisible();
+
+    // The watcher sees it arrive through Realtime (src/lib/live-roster.ts).
+    await expect(watched).toContainText("Lane Live");
+    await expect(watched).toContainText("2 of 4 going");
+
+    await theirs.getByRole("button", { name: "Leave session" }).click();
+    await expect(theirs.getByRole("button", { name: "Join session" })).toBeVisible();
+
+    await expect(watched).toContainText("1 of 4 going");
+    await expect(watched).not.toContainText("Lane Live");
+  } finally {
+    await otherContext.close();
+  }
+});
+
 test("returning student (A6): signs back in with email and password, and no email is sent", async ({
   page,
 }) => {
