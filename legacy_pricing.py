@@ -22,14 +22,21 @@ def base_price(event_type, day):
     return weekend_price if day in WEEKEND_DAYS else weekday_price
 
 
+MAX_TICKETS = 10
+
+
+def validate_quantity(quantity):
+    if quantity <= 0:
+        raise ValueError("bad qty")
+    if quantity > MAX_TICKETS:
+        raise ValueError("too many")
+
+
 def calc(t, q, u, d, c=None, w=False):
     # t = event type, q = quantity, u = user dict, d = day of week (0=Mon..6=Sun),
     # c = coupon code, w = waitlist
     p = base_price(t, d)
-    if q <= 0:
-        raise ValueError("bad qty")
-    if q > 10:
-        raise ValueError("too many")
+    validate_quantity(q)
     total = p * q
     if u is not None:
         if u.get("role") == "student":
