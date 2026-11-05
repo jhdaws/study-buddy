@@ -68,6 +68,8 @@ def coupon_multiplier(code, event_type, user):
     raise ValueError("bad coupon")
 
 
+WAITLIST_FEE = 2.0
+
 # (upper bound, exclusive) -> fee; totals at or above the last bound pay TOP_FEE
 FEE_BANDS = ((20, 1.0), (100, 2.5))
 TOP_FEE = 5.0
@@ -85,14 +87,14 @@ def service_fee(total):
 def calc(t, q, u, d, c=None, w=False):
     # t = event type, q = quantity, u = user dict, d = day of week (0=Mon..6=Sun),
     # c = coupon code, w = waitlist
-    p = base_price(t, d)
+    # Order matters (pinned by tests): role % -> flat bulk -> coupon % -> waitlist -> fee.
+    unit_price = base_price(t, d)
     validate_quantity(q)
-    total = p * q
-    total = total * role_multiplier(u)
-    total = total - bulk_discount(t, q)
-    total = total * coupon_multiplier(c, t, u)
+    total = unit_price * q
+    total *= role_multiplier(u)
+    total -= bulk_discount(t, q)
+    total *= coupon_multiplier(c, t, u)
     if w:
-        total = total + 2.0
-    if total < 0:
-        total = 0.0
+        total += WAITLIST_FEE
+    total = max(total, 0.0)  # unreachable with current prices; kept as a guard
     return round(total + service_fee(total), 2)
