@@ -45,6 +45,16 @@ def role_multiplier(user):
     return 1.0
 
 
+BULK_MIN_QTY = 5
+BULK_DISCOUNT = 5.0  # flat amount off the order, not per ticket
+
+
+def bulk_discount(event_type, quantity):
+    if quantity >= BULK_MIN_QTY and event_type != "workshop":
+        return BULK_DISCOUNT
+    return 0.0
+
+
 def calc(t, q, u, d, c=None, w=False):
     # t = event type, q = quantity, u = user dict, d = day of week (0=Mon..6=Sun),
     # c = coupon code, w = waitlist
@@ -52,9 +62,7 @@ def calc(t, q, u, d, c=None, w=False):
     validate_quantity(q)
     total = p * q
     total = total * role_multiplier(u)
-    if q >= 5:
-        if t != "workshop":
-            total = total - 5.0
+    total = total - bulk_discount(t, q)
     if c is not None:
         if c == "WELCOME10":
             if u is not None and u.get("first_purchase"):
