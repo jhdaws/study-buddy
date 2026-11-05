@@ -55,6 +55,19 @@ def bulk_discount(event_type, quantity):
     return 0.0
 
 
+def coupon_multiplier(code, event_type, user):
+    # A recognised coupon that does not apply is silently ignored; an unknown one raises.
+    if code is None:
+        return 1.0
+    if code == "WELCOME10":
+        return 0.9 if user is not None and user.get("first_purchase") else 1.0
+    if code == "HALFOFF":
+        return 0.5 if event_type == "lecture" else 1.0
+    if code == "FREEDRINK":
+        return 1.0  # accepted, but has no effect on price
+    raise ValueError("bad coupon")
+
+
 def calc(t, q, u, d, c=None, w=False):
     # t = event type, q = quantity, u = user dict, d = day of week (0=Mon..6=Sun),
     # c = coupon code, w = waitlist
@@ -63,17 +76,7 @@ def calc(t, q, u, d, c=None, w=False):
     total = p * q
     total = total * role_multiplier(u)
     total = total - bulk_discount(t, q)
-    if c is not None:
-        if c == "WELCOME10":
-            if u is not None and u.get("first_purchase"):
-                total = total * 0.9
-        elif c == "HALFOFF":
-            if t == "lecture":
-                total = total * 0.5
-        elif c == "FREEDRINK":
-            pass
-        else:
-            raise ValueError("bad coupon")
+    total = total * coupon_multiplier(c, t, u)
     if w:
         total = total + 2.0
     if total < 0:
