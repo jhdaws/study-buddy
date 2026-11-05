@@ -68,6 +68,20 @@ def coupon_multiplier(code, event_type, user):
     raise ValueError("bad coupon")
 
 
+# (upper bound, exclusive) -> fee; totals at or above the last bound pay TOP_FEE
+FEE_BANDS = ((20, 1.0), (100, 2.5))
+TOP_FEE = 5.0
+
+
+def service_fee(total):
+    if total <= 0:
+        return 0.0
+    for upper_bound, fee in FEE_BANDS:
+        if total < upper_bound:
+            return fee
+    return TOP_FEE
+
+
 def calc(t, q, u, d, c=None, w=False):
     # t = event type, q = quantity, u = user dict, d = day of week (0=Mon..6=Sun),
     # c = coupon code, w = waitlist
@@ -81,12 +95,4 @@ def calc(t, q, u, d, c=None, w=False):
         total = total + 2.0
     if total < 0:
         total = 0.0
-    fee = 0.0
-    if total > 0:
-        if total < 20:
-            fee = 1.0
-        elif total < 100:
-            fee = 2.5
-        else:
-            fee = 5.0
-    return round(total + fee, 2)
+    return round(total + service_fee(total), 2)
