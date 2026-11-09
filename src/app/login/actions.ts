@@ -92,11 +92,11 @@ export type DisplayNameState = FormState<DisplayNameField>;
 // Form fields: `email`, and an optional hidden `next` (where to go after
 // signing in; dropped unless safeNextPath() accepts it).
 //
-// The email carries a one-time code only (A1's template,
-// supabase/templates/magic_link.html; the link was dropped on 2026-10-12 at
-// the user's request). `emailRedirectTo` is still passed so that an email
-// built from an older template, or Supabase's default one, still lands on
-// /auth/confirm on this origin rather than somewhere that cannot sign in.
+// The email carries a link and the same one-time code (A1's template,
+// supabase/templates/magic_link.html; the link came back on 2026-11-09).
+// The link is `emailRedirectTo` plus `&token_hash=…&type=email`, so it
+// lands on /auth/confirm on this origin and works on any device; the code
+// is the fallback when a mail scanner has already opened the link.
 //
 // Same reply whether or not the address already has an account:
 // signInWithOtp() signs up a new address and signs in a known one, and both
