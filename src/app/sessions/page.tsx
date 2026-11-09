@@ -10,8 +10,10 @@
  * blank page.
  *
  * Search and filter chips run in the browser over this list
- * (SessionBrowser, src/lib/session-filters.ts). A server-side course filter
- * (US-06) and the map (M4) come later; see the comment in SessionBrowser.tsx.
+ * (SessionBrowser, src/lib/session-filters.ts), and so does the List / Map
+ * toggle (M4): `?view=map` is read in the browser component, which is why
+ * this page never looks at its searchParams. A server-side course filter
+ * (US-06) comes later; see the comment in SessionBrowser.tsx.
  */
 
 import type { Metadata } from "next";

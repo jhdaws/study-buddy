@@ -247,3 +247,29 @@ export function setPasswordErrorMessage(error: AuthErrorLike | null | undefined)
   if (error.status === 429) return CODE_RATE_LIMITED_MESSAGE;
   return GENERIC_ERROR_MESSAGE;
 }
+
+// ---------------------------------------------------------------------------
+// The session map (M4) -- when Google Maps cannot be shown. Never Google's own
+// text: its errors name the key, the referrer and the billing account, and
+// none of that helps a student find a session. The list always works, so
+// every message points there.
+// ---------------------------------------------------------------------------
+
+/**
+ * Why the map is not showing: this deployment has no browser key (CI, Vercel
+ * previews), or the Maps script failed to load or refused the key.
+ */
+export type MapUnavailableReason = "not_configured" | "load_failed";
+
+/** The heading the map shows in place of itself. */
+export const MAP_UNAVAILABLE_TITLE = "Map unavailable";
+
+const MAP_UNAVAILABLE_MESSAGES: Record<MapUnavailableReason, string> = {
+  not_configured: "The map isn't switched on for this version of Study Buddy. Every session is in the list.",
+  load_failed: "Google Maps didn't load. Check your connection and reload, or use the list — it has every session.",
+};
+
+/** A message for a map that cannot be shown, safe to show. */
+export function mapUnavailableMessage(reason: MapUnavailableReason): string {
+  return MAP_UNAVAILABLE_MESSAGES[reason];
+}

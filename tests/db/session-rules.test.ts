@@ -206,6 +206,30 @@ describe("RLS on sessions and session_attendees (S1)", () => {
     expect(attendees.rows).toEqual([{ user_id: ownerId }]);
   });
 
+  it("lets any signed-in user read where a session is, for the map's pins (M4)", async () => {
+    // listSessions() embeds `locations!inner (lat, lng)`. If a reader could
+    // see a session but not its location, `!inner` would drop the session
+    // from the list altogether -- so this is what keeps the list whole.
+    const owner = await connection();
+    const ownerId = await createUser(owner, { displayName: "Jamie Host" });
+    await signInAs(owner, ownerId);
+    const created = await callCreateSession(owner, validSessionArgs());
+    const sessionId = created.rows[0].id;
+
+    const reader = await connection();
+    const readerId = await createUser(reader, { displayName: "Alex Reader" });
+    await signInAs(reader, readerId);
+
+    const pins = await reader.query(
+      `select l.lat, l.lng
+         from public.sessions s
+         join public.locations l on l.id = s.location_id
+        where s.id = $1`,
+      [sessionId],
+    );
+    expect(pins.rows).toEqual([{ lat: 36.1447, lng: -86.8027 }]);
+  });
+
   it("hides sessions from a connection with no signed-in user", async () => {
     const owner = await connection();
     const ownerId = await createUser(owner, { displayName: "Jamie Host" });
