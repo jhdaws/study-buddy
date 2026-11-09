@@ -190,9 +190,11 @@ app can finish only in the browser that asked. Ours has a link straight to
 `/auth/confirm` (any device) and the code. History: the link was dropped on
 2026-10-12 and restored on 2026-11-09. Vanderbilt mail goes through
 Microsoft Outlook, whose link scanning can open a link before the student
-does and spend the one-time token, and the link and the code are the same
-token, so a scanned link also breaks the code. If that happens, the student
-asks for a new email; if it happens often, go back to a code-only template.
+does, and the link and the code are the same one-time token. So
+`/auth/confirm` no longer verifies the link: it sends the student to
+`/login/continue`, and only the **Continue signing in** button there spends
+the token (`src/lib/email-link.ts`). A scanner opens the page and spends
+nothing; the link and the code both still work for the student.
 
 ### 3. Authentication → Sign In / Providers → Email
 

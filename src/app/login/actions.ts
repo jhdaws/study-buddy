@@ -28,6 +28,7 @@ import {
   signInErrorMessage,
   verifyCodeErrorMessage,
 } from "@/lib/errors";
+import { isAcceptedLinkType, loginWithLinkError } from "@/lib/email-link";
 import { requestOrigin } from "@/lib/request-origin";
 import {
   DEFAULT_NEXT_PATH,
@@ -95,8 +96,10 @@ export type DisplayNameState = FormState<DisplayNameField>;
 // The email carries a link and the same one-time code (A1's template,
 // supabase/templates/magic_link.html; the link came back on 2026-11-09).
 // The link is `emailRedirectTo` plus `&token_hash=…&type=email`, so it
-// lands on /auth/confirm on this origin and works on any device; the code
-// is the fallback when a mail scanner has already opened the link.
+// lands on /auth/confirm on this origin and works on any device. The token
+// is spent only by the "Continue signing in" button on /login/continue
+// (confirmSignIn() below), so a mail scanner that opens the link first
+// spends nothing, and the code still works too.
 //
 // Same reply whether or not the address already has an account:
 // signInWithOtp() signs up a new address and signs in a known one, and both
@@ -173,6 +176,38 @@ export async function verifyCode(
   });
   // Outside any try/catch: redirect() works by throwing.
   redirect(destination);
+}
+
+// ---------------------------------------------------------------------------
+// confirmSignIn -- A7. The "Continue signing in" button on /login/continue.
+//
+// The emailed link lands on that page instead of being verified on GET
+// (src/app/auth/confirm/route.ts), so a mail scanner that opens the link
+// spends nothing: only this POST, made when the student presses the button,
+// uses the one-time token. Form fields, all hidden: `token_hash`, `type`,
+// `next`.
+//
+// Like a code sign-in, this always goes on to the password step (and the
+// name step first if needed): the emailed link is for signing up and for a
+// forgotten password, the same as the code.
+// ---------------------------------------------------------------------------
+
+/** Sign in with the token from the emailed link, once the student asks to. */
+export async function confirmSignIn(formData: FormData): Promise<void> {
+  const tokenHash = formData.get("token_hash");
+  const type = formData.get("type");
+  const next = formData.get("next");
+  if (typeof tokenHash !== "string" || tokenHash === "" || !isAcceptedLinkType(type)) {
+    redirect(loginWithLinkError(next));
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+  if (error || !data.user) {
+    redirect(loginWithLinkError(next));
+  }
+
+  redirect(await pathAfterSignIn(supabase, data.user, next, { choosePassword: true }));
 }
 
 // ---------------------------------------------------------------------------
