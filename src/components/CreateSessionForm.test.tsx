@@ -49,6 +49,15 @@ function change(element: HTMLElement, value: string) {
   fireEvent.change(element, { target: { value } });
 }
 
+/** Pick a place in the picker's search box: type its name, click the match. */
+async function pickPlace(label: string) {
+  const box = field("Place");
+  fireEvent.focus(box);
+  change(box, ""); // a repeat of the same name is no change to React
+  change(box, label);
+  fireEvent.click(await screen.findByRole("option", { name: new RegExp(label) }));
+}
+
 async function submit() {
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: /create session/i }));
@@ -132,7 +141,7 @@ describe("<CreateSessionForm> errors and values", () => {
     expect(field("Department").value).toBe("MATH");
     expect(field(COURSE_LABEL).value).toBe("2410");
     expect(field(/^Room/).value).toBe("Group study room 3");
-    expect(field("Place").value).toBe("ChIJ-FAKE-central-library");
+    expect(field("Place").value).toBe("Library, 3rd floor");
     expect(field("Location name").value).toBe("Library, 3rd floor");
     expect(field("Starts").value).toBe("2026-10-01T14:30"); // campus/browser time
     expect(field("Ends").value).toBe("2026-10-01T16:00");
@@ -156,7 +165,7 @@ describe("<CreateSessionForm> errors and values", () => {
 
     change(field("Department"), "CS");
     change(field(COURSE_LABEL), "3251");
-    change(field("Place"), "ChIJ-FAKE-central-library");
+    await pickPlace("Central Library");
     change(field(/^Room/), "Room 204");
     change(field("Starts"), "2026-10-01T14:30");
     change(field("Ends"), "2026-10-01T16:30");
@@ -227,21 +236,21 @@ describe("<CreateSessionForm> fields", () => {
     expect(field("New department code").value).toBe("BME");
   });
 
-  it("prefills the location name from the picker, but never over the host's own", () => {
+  it("prefills the location name from the picker, but never over the host's own", async () => {
     render(<CreateSessionForm departments={departments} />);
     const label = field("Location name");
 
-    change(field("Place"), "ChIJ-FAKE-featheringill-hall");
+    await pickPlace("Featheringill Hall");
     expect(label.value).toBe("Featheringill Hall");
 
     change(label, "Featheringill, 2nd floor");
-    change(field("Place"), "ChIJ-FAKE-central-library");
+    await pickPlace("Central Library");
     expect(label.value).toBe("Featheringill, 2nd floor");
 
     // Emptying it hands it back to the picker.
     change(label, "");
-    change(field("Place"), "ChIJ-FAKE-central-library");
-    change(field("Place"), "ChIJ-FAKE-hillsboro-village-cafe");
+    await pickPlace("Central Library");
+    await pickPlace("Hillsboro Village café");
     expect(label.value).toBe("Hillsboro Village café");
   });
 
