@@ -22,8 +22,8 @@
 // is server-only and Vitest cannot import it. They filter and derive the way
 // the real queries must, and fixtures.test.ts holds them to it.
 //
-// Client-safe on purpose: <LocationPicker>'s no-Maps-key body reads
-// FIXTURE_PLACES in the browser. Do not import server-only code here (`import type` is fine -- it is
+// Client-safe on purpose: <LocationPicker>'s stub reads FIXTURE_PLACES in the
+// browser. Do not import server-only code here (`import type` is fine -- it is
 // erased). W6 removes whatever the app no longer uses once the tracks land;
 // tests may keep the rest.
 

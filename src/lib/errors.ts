@@ -109,6 +109,34 @@ export function databaseErrorMessage(error: DatabaseErrorLike | null | undefined
 }
 
 // ---------------------------------------------------------------------------
+// Place search (M2) -- the picker's Autocomplete calls to Google, from the
+// browser. Google's own error text is never shown; only the HTTP status (or
+// its absence, for a network failure) picks the wording.
+// ---------------------------------------------------------------------------
+
+export const PLACE_SEARCH_FAILED_MESSAGE =
+  "We couldn't search places just now. Try again in a moment.";
+export const PLACE_SEARCH_BUSY_MESSAGE =
+  "Place search is busy right now. Try again in a minute.";
+export const PLACE_SEARCH_OFFLINE_MESSAGE =
+  "We couldn't reach Google Maps. Check your connection and try again.";
+
+/**
+ * A message for a failed place search, safe to show. 429 is Google's quota
+ * (per minute, or the daily cap set in M1). Any other status -- 403 for a
+ * key restricted to other sites, 5xx -- is ours or Google's to fix, not the
+ * student's. No status at all -- fetch's own TypeError -- means the request
+ * never got an answer. Takes whatever the search threw.
+ */
+export function placeSearchErrorMessage(error: unknown): string {
+  const status =
+    typeof error === "object" && error !== null && "status" in error ? error.status : undefined;
+  if (typeof status !== "number") return PLACE_SEARCH_OFFLINE_MESSAGE;
+  if (status === 429) return PLACE_SEARCH_BUSY_MESSAGE;
+  return PLACE_SEARCH_FAILED_MESSAGE;
+}
+
+// ---------------------------------------------------------------------------
 // Supabase Auth errors -- AuthError: a string `code` (ErrorCode in
 // @supabase/auth-js), an HTTP `status`, and English `message`.
 // ---------------------------------------------------------------------------
@@ -248,32 +276,4 @@ export function setPasswordErrorMessage(error: AuthErrorLike | null | undefined)
   }
   if (error.status === 429) return CODE_RATE_LIMITED_MESSAGE;
   return GENERIC_ERROR_MESSAGE;
-}
-
-// ---------------------------------------------------------------------------
-// Place search (M2) -- the picker's Autocomplete calls to Google, from the
-// browser. Google's own error text is never shown; only the HTTP status (or
-// its absence, for a network failure) picks the wording.
-// ---------------------------------------------------------------------------
-
-export const PLACE_SEARCH_FAILED_MESSAGE =
-  "We couldn't search places just now. Try again in a moment.";
-export const PLACE_SEARCH_BUSY_MESSAGE =
-  "Place search is busy right now. Try again in a minute.";
-export const PLACE_SEARCH_OFFLINE_MESSAGE =
-  "We couldn't reach Google Maps. Check your connection and try again.";
-
-/**
- * A message for a failed place search, safe to show. 429 is Google's quota
- * (per minute, or the daily cap set in M1). Any other status -- 403 for a
- * key restricted to other sites, 5xx -- is ours or Google's to fix, not the
- * student's. No status at all -- fetch's own TypeError -- means the request
- * never got an answer. Takes whatever the search threw.
- */
-export function placeSearchErrorMessage(error: unknown): string {
-  const status =
-    typeof error === "object" && error !== null && "status" in error ? error.status : undefined;
-  if (typeof status !== "number") return PLACE_SEARCH_OFFLINE_MESSAGE;
-  if (status === 429) return PLACE_SEARCH_BUSY_MESSAGE;
-  return PLACE_SEARCH_FAILED_MESSAGE;
 }
