@@ -97,7 +97,9 @@ describe("createSession: success", () => {
 
     expect(await redirectOf(createSession({}, submitted))).toBe("/sessions");
 
-    expect(places.resolvePlace).toHaveBeenCalledWith("ChIJN1t_tDeuEmsRUsoyG83frY4");
+    expect(places.resolvePlace).toHaveBeenCalledWith("ChIJN1t_tDeuEmsRUsoyG83frY4", {
+      sessionToken: undefined, // the fixture picker sends none
+    });
     expect(server.rpc).toHaveBeenNthCalledWith(1, "get_or_create_course", {
       p_department_code: "CS",
       p_course_number: "3251",
@@ -111,6 +113,14 @@ describe("createSession: success", () => {
       starts_at: submitted.get("startsAt"),
       ends_at: submitted.get("endsAt"),
       capacity: 4,
+    });
+  });
+
+  it("hands the picker's Autocomplete session token to resolvePlace() (M2)", async () => {
+    const token = "0b6c8a52-3f0e-4c1d-9d55-6f1d3c0a9e21";
+    await redirectOf(createSession({}, form({ placeSessionToken: token })));
+    expect(places.resolvePlace).toHaveBeenCalledWith("ChIJN1t_tDeuEmsRUsoyG83frY4", {
+      sessionToken: token,
     });
   });
 

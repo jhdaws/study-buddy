@@ -272,6 +272,22 @@ describe("createSessionSchema (US-02)", () => {
     });
   });
 
+  it("passes the picker's Autocomplete session token through, trimmed (M2)", () => {
+    const token = "0b6c8a52-3f0e-4c1d-9d55-6f1d3c0a9e21";
+    const result = createSessionSchema(NOW).safeParse(
+      validSession({ placeSessionToken: ` ${token} ` }),
+    );
+    expect(result.success && result.data.placeSessionToken).toBe(token);
+  });
+
+  it("never fails over the session token: blank, missing or not text becomes undefined", () => {
+    for (const placeSessionToken of ["", "   ", undefined, new File([], "x"), 42]) {
+      const result = createSessionSchema(NOW).safeParse({ ...validSession(), placeSessionToken });
+      expect(result.success).toBe(true);
+      expect(result.success && result.data.placeSessionToken).toBeUndefined();
+    }
+  });
+
   it("treats a blank or missing room as none", () => {
     const blank = createSessionSchema(NOW).safeParse(validSession({ room: "  " }));
     expect(blank.success && blank.data.room).toBeNull();
