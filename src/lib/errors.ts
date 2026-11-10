@@ -200,7 +200,7 @@ export function signInErrorMessage(error: AuthErrorLike | null | undefined): str
 // ---------------------------------------------------------------------------
 
 export const CODE_REJECTED_MESSAGE =
-  "That code didn't work. Check it against the latest email — codes expire after an hour — or ask for a new one.";
+  "That code didn't work. Check it against the latest email — codes expire after 10 minutes — or ask for a new one.";
 
 export const CODE_RATE_LIMITED_MESSAGE =
   "Too many tries. Wait a few minutes, then try again.";
