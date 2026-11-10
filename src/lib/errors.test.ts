@@ -272,3 +272,18 @@ describe("setPasswordErrorMessage (A6)", () => {
   });
 });
 
+
+// SEC-05: consume_rate_limit() at the limit, as supabase.rpc() hands it back.
+describe("databaseErrorMessage: the place lookup rate limit (SEC-05)", () => {
+  it("maps place_lookup_rate_limited, and never shows the count in its details", () => {
+    const message = databaseErrorMessage({
+      code: "PT429",
+      message: "place_lookup_rate_limited",
+      details: "20 of 20 hits used in the last 00:10:00",
+    });
+    expect(message).toBe(
+      "You've tried a lot of places in the last few minutes. Wait a few minutes, then try again.",
+    );
+    expect(message).not.toMatch(/rate_limited|hits|PT429/);
+  });
+});

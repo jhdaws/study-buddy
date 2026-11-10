@@ -68,3 +68,15 @@ export const MAX_CAPACITY = 2_147_483_647;
  * interval '5 minutes'`) or the database will reject what this accepts.
  */
 export const START_GRACE_MINUTES = 5;
+
+/**
+ * SEC-05: place lookups per student -- at most PLACE_LOOKUPS_PER_WINDOW in any
+ * rolling PLACE_LOOKUP_WINDOW_MINUTES. createSession() spends one before every
+ * resolvePlace(), accepted place or not, since each real place id is a billed
+ * Google call. THE DATABASE HOLDS AND ENFORCES THESE: the `place_lookup` row of
+ * private.rate_limit_rules (*_place_lookup_rate_limit.sql), which
+ * consume_rate_limit() reads -- it never takes a limit from its caller. These
+ * copies document it and size the tests, which check the two agree.
+ */
+export const PLACE_LOOKUPS_PER_WINDOW = 20;
+export const PLACE_LOOKUP_WINDOW_MINUTES = 10;

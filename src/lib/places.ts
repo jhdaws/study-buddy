@@ -119,9 +119,12 @@ export class PlaceError extends Error {
 // and the lookup is refused before Google is called. Until A4 lets anyone
 // sign in, that closes the real path in production entirely, even with the
 // keys set. Not checked outside production, so M3 and M2 can be tried
-// locally before sign-in exists. NOT done yet: per-user rate limiting -- a
-// signed-in student can still trigger lookups in a loop (Google's daily
-// quota cap, M1, is the backstop).
+// locally before sign-in exists.
+//
+// RATE LIMITED BY THE CALLER (SEC-05). createSession() spends one
+// `place_lookup` hit (src/lib/rate-limit.ts; PLACE_LOOKUPS_PER_WINDOW in
+// limits.ts) before calling this, so a student cannot loop lookups. Any new
+// caller must do the same. Google's daily quota cap (M1) stays the backstop.
 // ===========================================================================
 
 /** Optional extras for resolvePlace(). */

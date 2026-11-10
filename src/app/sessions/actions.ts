@@ -17,6 +17,7 @@ import { redirect } from "next/navigation";
 
 import { databaseErrorMessage, type DatabaseErrorLike } from "@/lib/errors";
 import { PlaceError, resolvePlace } from "@/lib/places";
+import { consumeRateLimit } from "@/lib/rate-limit";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import {
   createSessionSchema,
@@ -51,6 +52,14 @@ export async function createSession(
   const parsed = createSessionSchema().safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return invalidFormState(parsed.error, formData);
+  }
+
+  // SEC-05: resolvePlace() can be a billed Google call, so spend one of this
+  // student's place lookups first (limits.ts, counted in the database by
+  // auth.uid()). Refused, or the check itself failing: no lookup.
+  const limitError = await consumeRateLimit("place_lookup");
+  if (limitError) {
+    return databaseFailure("consume_rate_limit", limitError, formData);
   }
 
   let locationId: string;

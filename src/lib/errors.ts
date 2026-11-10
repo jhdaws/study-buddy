@@ -79,6 +79,10 @@ const RAISED_MESSAGES: Record<string, string> = {
   session_full: "This session is full.",
   not_joined: "You're not on the roster for this session.",
   host_cannot_leave: "As the host, you can't leave — cancel the session instead.",
+  // SEC-05: consume_rate_limit() (*_place_lookup_rate_limit.sql, SQLSTATE
+  // PT429), which createSession() calls before every place lookup.
+  place_lookup_rate_limited:
+    "You've tried a lot of places in the last few minutes. Wait a few minutes, then try again.",
 };
 
 /** SQLSTATE codes with one meaning wherever they come from. */

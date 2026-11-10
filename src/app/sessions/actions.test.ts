@@ -39,6 +39,10 @@ vi.mock("@/lib/places", async (importOriginal) => ({
   resolvePlace: places.resolvePlace,
 }));
 
+// SEC-05's per-student limit: null is "allowed", an error is a refusal.
+const rateLimit = vi.hoisted(() => ({ consumeRateLimit: vi.fn() }));
+vi.mock("@/lib/rate-limit", () => ({ consumeRateLimit: rateLimit.consumeRateLimit }));
+
 const HOUR = 60 * 60 * 1000;
 
 /** A submission that passes createSessionSchema, as the form posts it. */
@@ -79,6 +83,7 @@ async function redirectOf(promise: Promise<unknown>): Promise<string> {
 beforeEach(() => {
   server.requireUser.mockResolvedValue({ id: "u1", displayName: "Priya" });
   places.resolvePlace.mockResolvedValue({ locationId: "loc-1" });
+  rateLimit.consumeRateLimit.mockResolvedValue(null);
   rpcReplies({ data: "course-1", error: null }, { data: { id: "s1" }, error: null });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -88,6 +93,7 @@ afterEach(() => {
   server.requireUser.mockReset();
   server.rpc.mockReset();
   places.resolvePlace.mockReset();
+  rateLimit.consumeRateLimit.mockReset();
   cache.revalidatePath.mockReset();
 });
 
@@ -206,6 +212,68 @@ describe("createSession: database refusals", () => {
       "createSession: create_session failed",
       expect.objectContaining({ code: "23503" }),
     );
+  });
+});
+
+// SEC-05 (threat model T8): every resolvePlace() can be a billed Google
+// call, so createSession() spends a `place_lookup` hit first. The counting
+// itself is consume_rate_limit()'s, tested against real Postgres in
+// tests/db/place-lookup-rate-limit.test.ts.
+describe("createSession: place lookup rate limit (SEC-05)", () => {
+  const LIMITED = { code: "PT429", message: "place_lookup_rate_limited", details: "20 of 20 hits" };
+
+  it("spends one place lookup before resolving the place", async () => {
+    await redirectOf(createSession({}, form()));
+
+    expect(rateLimit.consumeRateLimit).toHaveBeenCalledOnce();
+    expect(rateLimit.consumeRateLimit).toHaveBeenCalledWith("place_lookup");
+    expect(rateLimit.consumeRateLimit.mock.invocationCallOrder[0]).toBeLessThan(
+      places.resolvePlace.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("at the limit: never calls resolvePlace() or either RPC, and says why against the form", async () => {
+    rateLimit.consumeRateLimit.mockResolvedValue(LIMITED);
+
+    const state = await createSession({}, form());
+
+    expect(places.resolvePlace).not.toHaveBeenCalled();
+    expect(server.rpc).not.toHaveBeenCalled();
+    expect(state.formError).toBe(
+      "You've tried a lot of places in the last few minutes. Wait a few minutes, then try again.",
+    );
+    expect(state.fieldErrors).toBeUndefined();
+    expect(state.values?.topic).toBe("Design patterns review");
+  });
+
+  it("logs the refusal by code and name only -- not the place, not the student", async () => {
+    rateLimit.consumeRateLimit.mockResolvedValue(LIMITED);
+
+    await createSession({}, form());
+
+    expect(console.error).toHaveBeenCalledWith("createSession: consume_rate_limit failed", {
+      code: "PT429",
+      message: "place_lookup_rate_limited",
+    });
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toMatch(/ChIJ|u1|Priya/);
+  });
+
+  it("fails closed: if the check itself fails, nothing is looked up", async () => {
+    rateLimit.consumeRateLimit.mockResolvedValue({ message: "fetch failed" });
+
+    const state = await createSession({}, form());
+
+    expect(places.resolvePlace).not.toHaveBeenCalled();
+    expect(state.formError).toBe("Something went wrong on our side. Try again in a moment.");
+  });
+
+  it("spends nothing on a form that fails validation, or for a signed-out student", async () => {
+    await createSession({}, form({ topic: "" }));
+
+    server.requireUser.mockRejectedValue(new Redirect("/login"));
+    await redirectOf(createSession({}, form()));
+
+    expect(rateLimit.consumeRateLimit).not.toHaveBeenCalled();
   });
 });
 
