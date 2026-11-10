@@ -11,6 +11,8 @@ name: CI
 #   db, e2e          integration tests: real Postgres, and browser journeys
 #                    against the full local stack -- only once verify passed
 #   coverage-report  published only once every test stage has passed
+#   security         dependency audit, SAST and secret scan -- alongside
+#                    verify, not after it (docs/security/scans.md)
 # Delivery is outside this file: Vercel deploys every merge to main (and a
 # preview per PR), and deploy-db.yml applies migrations after this passes.
 
@@ -157,6 +159,63 @@ jobs:
             playwright-report/
             test-results/
           retention-days: 7
+
+  # The security stage (SEC-06, SEC-07): three scans, triaged in
+  # docs/security/scans.md. Needs nothing from verify, so it runs beside it.
+  # Each scan runs even if an earlier one failed, so one red step does not
+  # hide another. Actions are pinned to commit SHAs, the tools to exact
+  # versions (Dependabot updates the SHAs).
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      # fetch-depth 0: every commit on every branch and tag, for gitleaks.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      # Production dependencies only: dev tooling is never deployed. Fails on
+      # High or Critical. Reads package-lock.json, so needs no install.
+      - name: Dependency audit (npm audit)
+        run: npm audit --omit=dev --audit-level=high
+
+      # SAST. Every finding is printed; only ERROR-severity ones fail the step.
+      - name: SAST (Semgrep)
+        if: ${{ !cancelled() }}
+        env:
+          SEMGREP_VERSION: 1.184.0
+        run: |
+          pipx install "semgrep==${SEMGREP_VERSION}"
+          semgrep scan --metrics=off \
+            --config p/javascript --config p/typescript --config p/react --config p/nextjs \
+            --json-output="$RUNNER_TEMP/semgrep.json"
+          errors=$(jq '[.results[] | select(.extra.severity == "ERROR")] | length' "$RUNNER_TEMP/semgrep.json")
+          echo "Semgrep ERROR findings: $errors"
+          if [ "$errors" -gt 0 ]; then
+            echo "::error::Semgrep found $errors ERROR-severity finding(s); see the output above."
+            exit 1
+          fi
+
+      # Every commit on every fetched branch, so a secret on any branch fails
+      # every PR until it is rotated and triaged. --redact keeps the value
+      # out of this public log. The release is pinned by checksum.
+      - name: Secret scan (gitleaks, full history)
+        if: ${{ !cancelled() }}
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -sSfL -o gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf gitleaks.tar.gz gitleaks
+          cd "$GITHUB_WORKSPACE"
+          "$RUNNER_TEMP/gitleaks" git --redact --verbose --exit-code 1 .
 
   # The last stage: once unit and integration tests have all passed, publish
   # the unit-test coverage -- a table on the run's summary page, and the full
