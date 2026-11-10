@@ -202,8 +202,11 @@ production sends, and it lands there.
 - **Email OTP Length:** check it. The form accepts 6 to 10 digits, the
   whole range Supabase allows, so any value works; 6 matches `config.toml`.
   Some hosted projects reportedly default to 8.
-- **Email OTP Expiration:** 3600 seconds (one hour) — the default, and what
-  the email and `/login` tell students.
+- **Email OTP Expiration: 600 seconds** (10 minutes), the same as
+  `otp_expiry` in `config.toml`, and what the email and `/login` tell
+  students. Not Supabase's one-hour default: a wrong guess never uses up a
+  code, so its lifetime is the whole guessing window (SEC-12). Ten minutes
+  cuts that window to a sixth.
 - Leave **Confirm email** on — and see step 7 for the password settings.
 
 ### 4. Email delivery and rate limits — matters for the demo
