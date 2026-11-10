@@ -50,6 +50,18 @@ export const ROOM_MAX_LENGTH = 50;
  */
 export const DEPARTMENT_CODE_MAX_LENGTH = 10;
 
+/**
+ * SEC-03: how many new departments -- and, counted separately, how many new
+ * courses -- one student may add, per rolling hour and per rolling day. A
+ * sanity limit against scripted junk in the shared picker, far above normal
+ * use. THE DATABASE IS THE ENFORCEMENT: a trigger in
+ * *_catalogue_insert_limit.sql, which a direct PostgREST insert cannot skip.
+ * These copies only word the error message (errors.ts) and size the tests.
+ * Change one, change the other.
+ */
+export const CATALOGUE_INSERTS_PER_HOUR = 10;
+export const CATALOGUE_INSERTS_PER_DAY = 30;
+
 /** The host counts as one (ADR 0008 rule 2). S1: `CHECK (capacity >= 2)`. */
 export const MIN_CAPACITY = 2;
 

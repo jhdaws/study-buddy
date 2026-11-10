@@ -14,6 +14,8 @@
 //     and the CHECKs on sessions, departments and courses
 //     (*_s1_session_rules.sql, *_s2_course_normalization.sql,
 //     *_session_text_limits.sql).
+//   - SEC-03: the per-student cap on new departments and courses
+//     (*_catalogue_insert_limit.sql).
 //   - S5: what join_session and leave_session raise
 //     (*_join_leave_session.sql).
 //   - S7 (US-09): what update_session and cancel_session raise
@@ -28,6 +30,8 @@
 //     name, which is why both new entries are in CONSTRAINT_MESSAGES.
 // Still to come:
 //   - Later: chat (US-05).
+
+import { CATALOGUE_INSERTS_PER_DAY, CATALOGUE_INSERTS_PER_HOUR } from "@/lib/limits";
 
 /** For anything we have not mapped. Says nothing about the cause. */
 export const GENERIC_ERROR_MESSAGE =
@@ -87,6 +91,12 @@ const RAISED_MESSAGES: Record<string, string> = {
   starts_in_past: "That start time has already passed.",
   department_required: "Choose or add a department.",
   invalid_course_number: "Enter a 4-digit course number, like 3251 or 2100W.",
+  // SEC-03: the catalogue trigger (SQLSTATE PT429). It fires inside
+  // get_or_create_course too, which is how it reaches the create form.
+  catalogue_limit_reached:
+    "You've added a lot of new courses and departments lately — the limit is " +
+    `${CATALOGUE_INSERTS_PER_HOUR} of each an hour and ${CATALOGUE_INSERTS_PER_DAY} a day. ` +
+    "Choose one that's already listed, or try again later.",
   // S5: join_session and leave_session.
   session_not_found: "That session doesn't exist anymore.",
   session_cancelled: "This session has been cancelled.",
