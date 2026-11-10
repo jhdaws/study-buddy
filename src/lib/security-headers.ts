@@ -22,8 +22,10 @@
 //                @vis.gl/react-google-maps inserts, and Google's own). No
 //                'unsafe-inline'. 'unsafe-eval' in `next dev` only: React
 //                uses eval there for error stacks; production needs none.
-//   style-src    <style> and <link> elements need the nonce too (the Maps API
-//                copies it onto the <style> elements it inserts).
+//   style-src    <style> and <link> elements need the nonce too. The Maps API
+//                copies it onto the <style> elements it inserts from the
+//                first style[nonce] on the page: the empty one the root
+//                layout renders for that purpose.
 //                style-src-attr 'unsafe-inline' is for style="" attributes,
 //                which a nonce cannot cover: React renders inline styles into
 //                the server HTML (AuthScene, the code boxes in SignInForm),
@@ -44,7 +46,10 @@
 // real deployment. The local stack is plain http on 127.0.0.1, which the
 // upgrade would break.
 
-/** The request header the nonce is passed to Server Components in (Next's convention). */
+/**
+ * The request header the nonce is passed to Server Components in (Next's
+ * convention). The root layout reads it for its nonce-carrying <style>.
+ */
 export const NONCE_HEADER = "x-nonce";
 
 export type ContentSecurityPolicyOptions = {
