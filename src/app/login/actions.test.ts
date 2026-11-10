@@ -9,6 +9,7 @@ import {
   setPassword,
   signIn,
   signInWithPassword,
+  restartWithCode,
   signOut,
   verifyCode,
 } from "./actions";
@@ -46,6 +47,7 @@ const server = vi.hoisted(() => ({
   select: vi.fn(),
   user: null as { id: string; user_metadata?: Record<string, unknown> } | null,
   pathAfterSignIn: vi.fn(),
+  canChoosePassword: true,
 }));
 vi.mock("@/lib/supabase/server", () => {
   const client = {
@@ -61,6 +63,7 @@ vi.mock("@/lib/supabase/server", () => {
     createClient: async () => client,
     getCurrentUser: async () => server.user,
     pathAfterSignIn: (...args: unknown[]) => server.pathAfterSignIn(...args),
+    canChoosePassword: async () => server.canChoosePassword,
     HAS_PASSWORD: "has_password",
     hasPassword: (user: { user_metadata?: Record<string, unknown> }) =>
       user.user_metadata?.has_password === true,
@@ -280,6 +283,16 @@ describe("signInWithPassword", () => {
 describe("setPassword", () => {
   beforeEach(() => {
     server.user = { id: "u1", user_metadata: {} };
+    server.canChoosePassword = true;
+  });
+
+  it("refuses to change a password without a fresh code sign-in (SEC-15), changing nothing", async () => {
+    server.user = { id: "u1", user_metadata: { has_password: true } };
+    server.canChoosePassword = false;
+    const state = await setPassword({}, form({ password: "a long one", confirmPassword: "a long one" }));
+    expect(state.formError).toMatch(/sign in again with a code/);
+    expect(state.values).toBeUndefined();
+    expect(auth.updateUser).not.toHaveBeenCalled();
   });
 
   it("sets the password and the flag together, then goes on to next", async () => {
@@ -409,5 +422,19 @@ describe("signOut", () => {
     const path = await redirectOf(signOut());
     expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
     expect(path).toBe("/");
+  });
+});
+
+describe("restartWithCode (SEC-15)", () => {
+  it("signs this device out and goes to /login, keeping a safe next", async () => {
+    auth.signOut.mockResolvedValue({ error: null });
+    const path = await redirectOf(restartWithCode(form({ next: "/sessions/new" })));
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
+    expect(path).toBe("/login?next=%2Fsessions%2Fnew");
+  });
+
+  it("drops an unsafe next", async () => {
+    auth.signOut.mockResolvedValue({ error: null });
+    expect(await redirectOf(restartWithCode(form({ next: "https://evil.example" })))).toBe("/login");
   });
 });

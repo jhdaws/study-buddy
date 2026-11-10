@@ -170,6 +170,14 @@ test("returning student (A6): signs back in with email and password, and no emai
 
   // The whole point: signing in again cost no email.
   expect(await emailsTo(email)).toBe(emailsBefore);
+
+  // SEC-15: a password sign-in cannot change the password. Someone at a
+  // device left signed in has to get a code from the owner's inbox first.
+  await page.goto("/login/password");
+  await expect(page.getByRole("heading", { name: "Get a code to change your password" })).toBeVisible();
+  await expect(page.getByLabel("New password")).toHaveCount(0);
+  await page.getByRole("button", { name: "Sign out and get a code" }).click();
+  await expect(page).toHaveURL("/login");
 });
 
 test("sign-out (US-21): the session ends, and private pages send the student back to sign in", async ({

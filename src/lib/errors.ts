@@ -202,6 +202,13 @@ export function verifyCodeErrorMessage(error: AuthErrorLike | null | undefined):
 // Passwords (A6): signInWithPassword() and updateUser({ password }).
 // ---------------------------------------------------------------------------
 
+/**
+ * SEC-15: changing an existing password needs a fresh sign-in code, so a
+ * device someone left signed in cannot be used to lock them out.
+ */
+export const PASSWORD_CHANGE_NEEDS_CODE_MESSAGE =
+  "To change your password, sign in again with a code from your email. That way nobody else using this device can change it.";
+
 export const PASSWORD_REJECTED_MESSAGE =
   "That email and password don't match. New here, or forgot it? Get a code by email instead.";
 

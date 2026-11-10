@@ -74,6 +74,26 @@ spends its first hour rediscovering the same dead end.
 
 
 
+## 2026-11-09 · Moses's A07 fixes: SEC-15, SEC-12, SEC-16 (three PRs)
+
+**Branches:** sec-15-us-01-password-change-needs-code, sec-12-us-01-short-code-expiry, sec-16-us-21-device-session-lifetime · one commit each; this entry and the AI-log row live in the SEC-15 PR only, to keep the three from conflicting
+
+### What changed
+- `src/lib/password-change.ts`: the rule. No password yet: allowed. Has one: only within 15 minutes of a code sign-in, from the token's `amr` claim.
+- `setPassword()` enforces it; `/login/password` shows "Get a code to change your password" with a sign-out-and-get-a-code button (`restartWithCode()`).
+- SEC-12 PR: `otp_expiry` 3600 to 600 in `config.toml`; the "10 minutes" copy in `SignInForm.tsx` and the email template.
+- SEC-16 PR: the Supabase auth cookies expire after 7 days unused instead of 400 days.
+
+### Open questions for the user
+- SEC-01: is `njpm@vanderbilt.edu` gone from hosted Supabase (Authentication → Users)? Only someone with dashboard access can close it.
+- Hosted "Email OTP Expiration" must be set to 600 by hand, or the copy says 10 minutes while codes last an hour.
+- SEC-02 (no lockout or CAPTCHA) stays open: CAPTCHA needs a Cloudflare Turnstile or hCaptcha account and the hosted toggle.
+
+### Things the next agent should be careful about
+- `findings.md` is on #92's branch, not main, so this PR does not update it. Mark SEC-12 and SEC-15 there once both merge.
+- #94 also edits `templates/magic_link.html`: expect a one-line conflict on the expiry sentence.
+- The e2e addition (end of the returning-student journey) has not run; check CI.
+
 ## 2026-11-03 · Threat model draft (ICA 15, Sprint 4 Part 2a)
 
 **Branch:** `ica15-threat-model` · **Commits made:** this PR
