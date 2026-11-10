@@ -37,35 +37,29 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("GET /auth/confirm", () => {
-  it("verifies the token and goes on to a same-origin next", async () => {
-    verifyOtp.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+describe("GET /auth/confirm with a token_hash (our email's link, A7)", () => {
+  it("hands the link to /login/continue without spending the token", async () => {
+    // The regression test for mail scanners: a GET -- which is all a scanner
+    // does -- must never call Supabase, or it spends the one-time token and
+    // the email's code (the same token) with it.
     const { response, location } = await visit(
       "next=%2Fsessions%2Fnew&token_hash=abc123&type=email",
     );
 
-    expect(verifyOtp).toHaveBeenCalledWith({ type: "email", token_hash: "abc123" });
+    expect(verifyOtp).not.toHaveBeenCalled();
+    expect(createClient).not.toHaveBeenCalled();
     expect(response.status).toBe(303);
     expect(location?.origin).toBe(ORIGIN);
-    expect(location?.pathname).toBe("/sessions/new");
+    expect(location?.pathname).toBe("/login/continue");
+    expect(location?.searchParams.get("token_hash")).toBe("abc123");
+    expect(location?.searchParams.get("type")).toBe("email");
+    expect(location?.searchParams.get("next")).toBe("/sessions/new");
     expect(response.headers.get("cache-control")).toContain("no-store");
   });
 
-  it("sends a first-time student to the name step (A4)", async () => {
-    verifyOtp.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
-    vi.mocked(pathAfterSignIn).mockResolvedValueOnce("/login/name?next=%2Fsessions%2Fnew");
-    const { location } = await visit("next=%2Fsessions%2Fnew&token_hash=abc123&type=email");
-
-    expect(vi.mocked(pathAfterSignIn)).toHaveBeenCalledWith(expect.anything(), { id: "u1" }, "/sessions/new");
-    expect(location?.origin).toBe(ORIGIN);
-    expect(location?.pathname).toBe("/login/name");
-    expect(location?.searchParams.get("next")).toBe("/sessions/new");
-  });
-
-  it("defaults to /sessions without a next", async () => {
-    verifyOtp.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+  it("defaults next to /sessions", async () => {
     const { location } = await visit("token_hash=abc123&type=email");
-    expect(location?.href).toBe(`${ORIGIN}/sessions`);
+    expect(location?.searchParams.get("next")).toBe("/sessions");
   });
 
   it.each([
@@ -74,28 +68,13 @@ describe("GET /auth/confirm", () => {
     "/\\evil.example",
     "/\t/evil.example",
     "javascript:alert(1)",
-  ])("never redirects off-site, even for next=%j", async (next) => {
-    verifyOtp.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+  ])("never carries an off-site next, even for next=%j", async (next) => {
     const { location } = await visit(
       `next=${encodeURIComponent(next)}&token_hash=abc123&type=email`,
     );
     expect(location?.origin).toBe(ORIGIN);
-    expect(location?.pathname).toBe("/sessions");
-  });
-
-  it("sends a failed link back to /login with the error flag, keeping next", async () => {
-    verifyOtp.mockResolvedValue({
-      data: { user: null, session: null },
-      error: { code: "otp_expired", status: 403, message: "Email link is invalid or has expired" },
-    });
-    const { location } = await visit("next=%2Fsessions%2Fnew&token_hash=used&type=email");
-
-    expect(location?.origin).toBe(ORIGIN);
-    expect(location?.pathname).toBe("/login");
-    expect(location?.searchParams.get("error")).toBe("link");
-    expect(location?.searchParams.get("next")).toBe("/sessions/new");
-    // Supabase's own text never travels in the URL.
-    expect(location?.search).not.toMatch(/expired|invalid/i);
+    expect(location?.pathname).toBe("/login/continue");
+    expect(location?.searchParams.get("next")).toBe("/sessions");
   });
 
   it.each([

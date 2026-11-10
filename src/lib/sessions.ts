@@ -42,8 +42,8 @@ export type CourseLabel = {
 };
 
 /**
- * One card in the session list (US-03). Everything W5's card needs, and
- * nothing it does not -- no host id, no roster, no coordinates.
+ * One card in the session list (US-03), and one pin on its map (M4). Everything
+ * the card and the map need, and nothing they do not -- no host id, no roster.
  */
 export type SessionListItem = {
   /** `sessions.id` -- for the link to /sessions/[id] (S6). */
@@ -54,6 +54,13 @@ export type SessionListItem = {
   locationLabel: string;
   /** Null when the host left it blank -- normal for a cafe. */
   room: string | null;
+  /**
+   * Where the map puts the pin (M4): the coordinates resolvePlace() validated
+   * and stored in `locations` -- Google's, never the host's. Degrees, WGS 84.
+   */
+  lat: number;
+  /** Degrees, like `lat`. */
+  lng: number;
   /**
    * ISO 8601 in UTC (`2026-10-01T19:30:00.000Z`), as Supabase returns
    * `timestamptz`. FORMAT WITH AN EXPLICIT TIME ZONE: a Server Component on
@@ -89,9 +96,10 @@ export type Attendee = {
  * The session page (S6, #52): a list item, plus what only the page shows --
  * whether it was cancelled, who hosts it, and who is going. Unlike the list,
  * cancelled and ended sessions are returned too: someone holding a link to
- * one should be told what happened, not shown a 404.
+ * one should be told what happened, not shown a 404. No coordinates: the page
+ * has no map, so getSession() does not embed `locations`.
  */
-export type SessionDetail = SessionListItem & {
+export type SessionDetail = Omit<SessionListItem, "lat" | "lng"> & {
   status: "open" | "cancelled";
   /** Null when the host deleted their account. */
   hostId: string | null;
@@ -125,7 +133,7 @@ export const COURSE_SUGGESTION_LIMIT = 8;
 // ===========================================================================
 // listSessions (S4, #21)
 //
-// Four things in this query are less obvious than they look:
+// Five things in this query are less obvious than they look:
 //
 //   - `profiles!sessions_host_id_fkey`. Plain `profiles` is AMBIGUOUS and
 //     fails at runtime with PGRST201: PostgREST finds two ways to get from a
@@ -144,6 +152,15 @@ export const COURSE_SUGGESTION_LIMIT = 8;
 //     attendeeCount is never read from a stored counter (ADR 0008 rule 9).
 //     PostgREST returns the aggregate as `[{ count: n }]`.
 //
+//   - `locations!inner (lat, lng)` gives the map its pins (M4). Reading it
+//     needs M3's read policy on `locations`, which allows any signed-in user
+//     -- the same reader this query already requires. `!inner`, like
+//     `courses!inner`, because `sessions.location_id` is NOT NULL: the only
+//     way the embed comes back empty is a broken policy, and then the session
+//     is left out rather than handed to the mapping below without
+//     coordinates. tests/db/session-rules.test.ts checks that a signed-in
+//     student who is not the host can read both halves.
+//
 //   - No view, so no `security_invoker` question to get wrong (ADR 0008,
 //     "Watch"). The query runs through the cookie-bound client, so S1's
 //     policies apply as the signed-in user; signed out it returns nothing,
@@ -159,6 +176,7 @@ export async function listSessions(): Promise<SessionListItem[]> {
     .select(
       `id, topic, location_label, room, starts_at, ends_at, capacity,
        courses!inner (department_code, number, title),
+       locations!inner (lat, lng),
        profiles!sessions_host_id_fkey (display_name),
        session_attendees (count)`,
     )
@@ -183,6 +201,8 @@ export async function listSessions(): Promise<SessionListItem[]> {
       topic: row.topic,
       locationLabel: row.location_label,
       room: row.room,
+      lat: row.locations.lat,
+      lng: row.locations.lng,
       startsAt: row.starts_at,
       endsAt: row.ends_at,
       capacity: row.capacity,

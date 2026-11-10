@@ -4,39 +4,26 @@
 //
 //   GET /auth/confirm?next=/sessions/new&token_hash=...&type=email
 //
-// 1. Read token_hash and type. Missing or of a kind we never send: back to
-//    /login with ?error=link.
-// 2. verifyOtp({ type, token_hash }) through the server client. On success
-//    it writes the session cookies; Next merges cookies set during a Route
-//    Handler into the redirect it returns (checked in next/dist's
-//    app-route module), so the student arrives signed in.
-// 3. Failure (expired, already used, unknown): /login?error=link, keeping
-//    `next`, so they can ask for a new link and still end up where they
-//    were going.
-// 4. Success, first sign-in without a display name: the name step
-//    (/login/name, A4), carrying `next` -- ADR 0008 rule 1.
-// 5. Success otherwise: on to `next` -- ONLY a same-origin path
-//    (safeNextPath), else /sessions. Accepting an absolute URL here would
-//    make this an open redirect on a page every student is sent to by email.
-//
-// ONE-TIME LINKS AND MAIL SCANNERS: a GET here spends the token. A mail
-// security scanner that follows links before the student does (Microsoft
-// Defender's Safe Links can) would spend it first and the student would see
-// "link expired". Unverified for Vanderbilt's mail -- see HANDOFF.md.
+// 1. A token_hash link (our template, A7): check the type is one we send and
+//    hand it to /login/continue WITHOUT verifying it. The student spends the
+//    token there by pressing "Continue signing in" (confirmSignIn()). A GET
+//    that verified it let Outlook's link scanner, which opens links before
+//    the student does, spend the one-time token, and the email's code (the
+//    same token) died with it. See src/lib/email-link.ts.
+// 2. A `code` (Supabase's default email, below): exchange it here. Its
+//    token was already spent at Supabase's own /verify, so there is nothing
+//    left for a scanner to take; the code only works in the browser that
+//    asked for the email.
+// 3. Anything else, or a failed exchange: /login?error=link, keeping `next`.
+// 4. `next` is ONLY ever a same-origin path (safeNext), else /sessions.
+//    Accepting an absolute URL here would make this an open redirect on a
+//    page every student is sent to by email.
 
 import { type NextRequest, NextResponse } from "next/server";
-import type { EmailOtpType } from "@supabase/supabase-js";
 
-import { LINK_ERROR, safeNext } from "@/lib/safe-next";
+import { continuePath, isAcceptedLinkType, loginWithLinkError } from "@/lib/email-link";
+import { safeNext } from "@/lib/safe-next";
 import { createClient, pathAfterSignIn } from "@/lib/supabase/server";
-
-/**
- * The OTP types our emails carry. The template sends `email`; `magiclink`
- * and `signup` are the older names for the same two emails. Never
- * `recovery`, `invite` or `email_change`: we send none of those, and a
- * link of that kind arriving here is not one of ours.
- */
-const ACCEPTED_TYPES: ReadonlySet<string> = new Set(["email", "magiclink", "signup"]);
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
@@ -55,29 +42,17 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (error || !data.user) {
-      return redirectTo(request, loginWithError(next));
+      return redirectTo(request, loginWithLinkError(next));
     }
     return redirectTo(request, await pathAfterSignIn(supabase, data.user, next));
   }
 
-  if (!tokenHash || !type || !ACCEPTED_TYPES.has(type)) {
-    return redirectTo(request, loginWithError(next));
+  if (!tokenHash || !isAcceptedLinkType(type)) {
+    return redirectTo(request, loginWithLinkError(next));
   }
 
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.verifyOtp({
-    type: type as EmailOtpType,
-    token_hash: tokenHash,
-  });
-  if (error || !data.user) {
-    return redirectTo(request, loginWithError(next));
-  }
-
-  return redirectTo(request, await pathAfterSignIn(supabase, data.user, next));
-}
-
-function loginWithError(next: string): string {
-  return `/login?${new URLSearchParams({ error: LINK_ERROR, next })}`;
+  // Not verified here: see step 1 at the top of this file.
+  return redirectTo(request, continuePath(tokenHash, type, next));
 }
 
 /**

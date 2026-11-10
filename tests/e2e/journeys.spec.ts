@@ -144,6 +144,95 @@ test("journey 4: another student opens the session, joins it, and leaves again (
   await expect(roster).not.toContainText("Jordan Joiner");
 });
 
+test("journey 5: the roster updates live while another student joins and leaves (US-23, live roster)", async ({
+  page,
+  browser,
+}) => {
+  if (hostedTopic === null) {
+    throw new Error("Journey 5 watches the session journey 2 hosts; journey 2 did not get that far.");
+  }
+  const topic = hostedTopic;
+  // Two sign-ins, each through a real emailed code.
+  test.setTimeout(120_000);
+
+  const openSession = async (student: typeof page) => {
+    await student
+      .locator("article")
+      .filter({ hasText: topic })
+      .getByRole("link", { name: /^CS 3251/ })
+      .click();
+    await expect(student).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+  };
+
+  // The watcher opens the session page and stays on it: no reload below.
+  await signInAsNewStudent(page, newStudentEmail("journey5watch"), "Wren Watcher", "/sessions");
+  await openSession(page);
+  const watched = page.getByRole("region", { name: "Who's going" });
+  await expect(watched).toContainText("1 of 4 going");
+
+  // A second student, in their own browser, joins and then leaves.
+  const otherContext = await browser.newContext();
+  try {
+    const other = await otherContext.newPage();
+    await signInAsNewStudent(other, newStudentEmail("journey5join"), "Lane Live", "/sessions");
+    await openSession(other);
+    const theirs = other.getByRole("region", { name: "Who's going" });
+
+    await theirs.getByRole("button", { name: "Join session" }).click();
+    await expect(theirs.getByText("You're going.")).toBeVisible();
+
+    // The watcher sees it arrive through Realtime (src/lib/live-roster.ts).
+    await expect(watched).toContainText("Lane Live");
+    await expect(watched).toContainText("2 of 4 going");
+
+    await theirs.getByRole("button", { name: "Leave session" }).click();
+    await expect(theirs.getByRole("button", { name: "Join session" })).toBeVisible();
+
+    await expect(watched).toContainText("1 of 4 going");
+    await expect(watched).not.toContainText("Lane Live");
+  } finally {
+    await otherContext.close();
+  }
+});
+
+test("map view (M4, US-03): a student switches the session list to the map and back, and a reload keeps it", async ({
+  page,
+}) => {
+  await signInAsNewStudent(page, newStudentEmail("map"), "Morgan Map", "/sessions");
+
+  // Journey 2's session, at least, is open, so the list -- and the toggle --
+  // are there. The list is the default (ADR 0004).
+  const toggle = page.getByRole("group", { name: "Show sessions as" });
+  const listButton = toggle.getByRole("button", { name: "List" });
+  const mapButton = toggle.getByRole("button", { name: "Map" });
+  await expect(listButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("article").first()).toBeVisible();
+
+  await mapButton.click();
+  await expect(page).toHaveURL("/sessions?view=map");
+  await expect(mapButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("article")).toHaveCount(0);
+
+  // CI builds without NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, so it sees the
+  // fallback. A build with a key shows the map -- or, on a port the key's
+  // referrer restriction refuses (this one, 3100), the fallback again once
+  // Google says so. Either way, never an error page.
+  const mapOrFallback = page
+    .getByRole("region", { name: "Map of study sessions" })
+    .or(page.getByRole("heading", { name: "Map unavailable" }));
+  await expect(mapOrFallback).toBeVisible();
+
+  // The view is in the URL, so it survives a reload.
+  await page.reload();
+  await expect(mapButton).toHaveAttribute("aria-pressed", "true");
+  await expect(mapOrFallback).toBeVisible();
+
+  await listButton.click();
+  await expect(page).toHaveURL("/sessions");
+  await expect(listButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("article").first()).toBeVisible();
+});
+
 test("returning student (A6): signs back in with email and password, and no email is sent", async ({
   page,
 }) => {
