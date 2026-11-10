@@ -23,6 +23,7 @@ import { redirect } from "next/navigation";
 
 import {
   databaseErrorMessage,
+  PASSWORD_CHANGE_NEEDS_CODE_MESSAGE,
   passwordSignInErrorMessage,
   setPasswordErrorMessage,
   signInErrorMessage,
@@ -37,6 +38,7 @@ import {
   safeNextPath,
 } from "@/lib/safe-next";
 import {
+  canChoosePassword,
   createClient,
   getCurrentUser,
   HAS_PASSWORD,
@@ -224,6 +226,9 @@ export async function signInWithPassword(
 //
 //   1. getCurrentUser() -- NOT requireUser(), which sends a student without
 //      a password to this very step. Signed out: to /login.
+//   1b. canChoosePassword() (SEC-15): a student who already has a password
+//      may replace it only within 15 minutes of signing in by code. Anyone
+//      else gets PASSWORD_CHANGE_NEEDS_CODE_MESSAGE and nothing changes.
 //   2. setPasswordSchema; on failure, field errors (passwords not echoed).
 //   3. updateUser() sets the password and the HAS_PASSWORD flag together.
 //      Supabase enforces its own minimum length (keep it at
@@ -242,12 +247,16 @@ export async function setPassword(
     redirect(loginPath(formData.get("next")));
   }
 
+  const supabase = await createClient();
+  if (!(await canChoosePassword(supabase, user))) {
+    return { formError: PASSWORD_CHANGE_NEEDS_CODE_MESSAGE };
+  }
+
   const parsed = setPasswordSchema.safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return withoutPasswords(invalidFormState(parsed.error, formData));
   }
 
-  const supabase = await createClient();
   const { error } = await supabase.auth.updateUser({
     password: parsed.data.password,
     data: { [HAS_PASSWORD]: true },
@@ -343,6 +352,18 @@ export async function saveDisplayName(
 // ---------------------------------------------------------------------------
 
 /** Sign out (US-21). Use as `<form action={signOut}>`. */
+/**
+ * SEC-15: from /login/password when this session may not change the
+ * password. Signs this device out (only this one) and goes to /login, where
+ * "Get a code" leads back to the password step with a fresh code. Form
+ * field: an optional hidden `next`, carried through safely.
+ */
+export async function restartWithCode(formData: FormData): Promise<void> {
+  const supabase = await createClient();
+  await supabase.auth.signOut({ scope: "local" });
+  redirect(loginPath(formData.get("next")));
+}
+
 export async function signOut(): Promise<void> {
   const supabase = await createClient();
   await supabase.auth.signOut({ scope: "local" });

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { REQUEST_PATH_HEADER } from "@/lib/safe-next";
 
-import { fetchDisplayName, pathAfterSignIn, requireUser, type ServerClient } from "./server";
+import { canChoosePassword, fetchDisplayName, pathAfterSignIn, requireUser, type ServerClient } from "./server";
 
 // requireUser() reads cookies and headers, redirects, and asks Supabase.
 // Each is replaced: a fake client whose getUser() and profile read the test
@@ -158,5 +158,44 @@ describe("fetchDisplayName", () => {
   it("treats an empty name as none", async () => {
     fake.profile = { data: { display_name: "" }, error: null };
     expect(await fetchDisplayName(fakeClient() as unknown as ServerClient, "u1")).toBeNull();
+  });
+});
+
+describe("canChoosePassword (SEC-15)", () => {
+  const withPassword = { user_metadata: { has_password: true } };
+  const now = () => Math.floor(Date.now() / 1000);
+  const clientWithClaims = (result: unknown) =>
+    ({ auth: { getClaims: async () => result } }) as unknown as Parameters<typeof canChoosePassword>[0];
+
+  it("always allows a student with no password yet, without reading claims", async () => {
+    const client = { auth: { getClaims: vi.fn() } } as unknown as Parameters<typeof canChoosePassword>[0];
+    await expect(canChoosePassword(client, { user_metadata: {} })).resolves.toBe(true);
+    expect(client.auth.getClaims as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+  });
+
+  it("allows a change right after a code sign-in, from the verified amr claim", async () => {
+    const client = clientWithClaims({
+      data: { claims: { amr: [{ method: "otp", timestamp: now() - 60 }] } },
+      error: null,
+    });
+    await expect(canChoosePassword(client, withPassword)).resolves.toBe(true);
+  });
+
+  it("refuses a password sign-in, a stale code, an error, and a throw", async () => {
+    for (const result of [
+      { data: { claims: { amr: [{ method: "password", timestamp: now() }] } }, error: null },
+      { data: { claims: { amr: [{ method: "otp", timestamp: now() - 3600 }] } }, error: null },
+      { data: null, error: { message: "invalid JWT" } },
+    ]) {
+      await expect(canChoosePassword(clientWithClaims(result), withPassword)).resolves.toBe(false);
+    }
+    const throwing = {
+      auth: {
+        getClaims: async () => {
+          throw new Error("network");
+        },
+      },
+    } as unknown as Parameters<typeof canChoosePassword>[0];
+    await expect(canChoosePassword(throwing, withPassword)).resolves.toBe(false);
   });
 });
