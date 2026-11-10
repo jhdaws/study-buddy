@@ -53,7 +53,7 @@ from the session page, and each has a browser journey or a component test
 | US-10 | P2 | ⬜ | As a student who joined a session, I want a reminder 30 minutes before it starts. | 8 |
 | US-13 | P2 | ⬜ | As a host, I want to remove a disruptive attendee. | 11 |
 | US-14 | P2 | ⬜ | As a student who just finished a session, I want to rate the session and host. | 8 |
-| US-18 | **P2** | ⬜ | As a student, I want to report an inappropriate user or message. | 6 |
+| US-18 | **P2** | 🚧 | As a student, I want to report an inappropriate user or message. | 6 |
 | US-15 | P3 | ⬜ | As a returning user, I want to see past sessions I've attended, so I can rejoin groups that worked well. | 5 |
 | US-17 | P3 | ⬜ | As a student enrolled in a course, I want a notification when a session is created for it. | 7 |
 | US-19 | P3 | ✅ | As an attendee, I want to download a `.ics` file for a session, so it lands in whatever calendar I use. *(`GET /sessions/[id]/calendar.ics` works; no UI links to it yet.)* | ~~6~~ **1** |
