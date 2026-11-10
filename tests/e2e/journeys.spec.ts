@@ -144,6 +144,57 @@ test("journey 4: another student opens the session, joins it, and leaves again (
   await expect(roster).not.toContainText("Jordan Joiner");
 });
 
+test("journey 5: the roster updates live while another student joins and leaves (US-23, live roster)", async ({
+  page,
+  browser,
+}) => {
+  if (hostedTopic === null) {
+    throw new Error("Journey 5 watches the session journey 2 hosts; journey 2 did not get that far.");
+  }
+  const topic = hostedTopic;
+  // Two sign-ins, each through a real emailed code.
+  test.setTimeout(120_000);
+
+  const openSession = async (student: typeof page) => {
+    await student
+      .locator("article")
+      .filter({ hasText: topic })
+      .getByRole("link", { name: /^CS 3251/ })
+      .click();
+    await expect(student).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+  };
+
+  // The watcher opens the session page and stays on it: no reload below.
+  await signInAsNewStudent(page, newStudentEmail("journey5watch"), "Wren Watcher", "/sessions");
+  await openSession(page);
+  const watched = page.getByRole("region", { name: "Who's going" });
+  await expect(watched).toContainText("1 of 4 going");
+
+  // A second student, in their own browser, joins and then leaves.
+  const otherContext = await browser.newContext();
+  try {
+    const other = await otherContext.newPage();
+    await signInAsNewStudent(other, newStudentEmail("journey5join"), "Lane Live", "/sessions");
+    await openSession(other);
+    const theirs = other.getByRole("region", { name: "Who's going" });
+
+    await theirs.getByRole("button", { name: "Join session" }).click();
+    await expect(theirs.getByText("You're going.")).toBeVisible();
+
+    // The watcher sees it arrive through Realtime (src/lib/live-roster.ts).
+    await expect(watched).toContainText("Lane Live");
+    await expect(watched).toContainText("2 of 4 going");
+
+    await theirs.getByRole("button", { name: "Leave session" }).click();
+    await expect(theirs.getByRole("button", { name: "Join session" })).toBeVisible();
+
+    await expect(watched).toContainText("1 of 4 going");
+    await expect(watched).not.toContainText("Lane Live");
+  } finally {
+    await otherContext.close();
+  }
+});
+
 test("map view (M4, US-03): a student switches the session list to the map and back, and a reload keeps it", async ({
   page,
 }) => {
@@ -242,6 +293,209 @@ test("calendar download (US-19): a session from the list downloads as an .ics ev
   const body = await response.text();
   expect(body.startsWith("BEGIN:VCALENDAR\r\n")).toBe(true);
   expect(body).toContain(`UID:${sessionId}@study-buddy`);
+});
+
+/**
+ * The session journey 5 hosts and edits, which journey 6 then reads as a
+ * different student before the host cancels it (US-09, S7). Its own session
+ * rather than journey 2's, so cancelling it cannot pull the ground out from
+ * under journeys 3, 4 and the calendar download.
+ */
+let editedTopic: string | null = null;
+let editHostEmail: string | null = null;
+
+test("journey 5 (US-09): the host edits their own session, and the change is saved", async ({
+  page,
+}) => {
+  const email = newStudentEmail("journey5");
+  editHostEmail = email;
+  await signInAsNewStudent(page, email, "Morgan Mutable");
+
+  const topic = `E2E edit journey ${Date.now()}`;
+  await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
+  await page.getByLabel("Course number").fill("3251");
+  await page.getByLabel("What are you studying?").fill(topic);
+  await chooseByKeyboard(page.getByLabel("Place"), "Feath", "ChIJ-FAKE-featheringill-hall");
+  await page.getByLabel("Starts").fill(campusTime(2));
+  await page.getByLabel("Ends").fill(campusTime(4));
+  await page.getByLabel("How many people, including you?").fill("4");
+  await page.getByRole("button", { name: "Create session" }).click();
+  await expect(page).toHaveURL("/sessions");
+
+  // Open it, as the host.
+  await page
+    .locator("article")
+    .filter({ hasText: topic })
+    .getByRole("link", { name: /^CS 3251/ })
+    .click();
+  await expect(page).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+
+  // Only the host is offered these (the page renders them; the database
+  // enforces them -- tests/db/edit-cancel-session.test.ts).
+  const controls = page.getByRole("region", { name: "Manage your session" });
+  await expect(controls).toBeVisible();
+  await controls.getByRole("link", { name: "Edit session" }).click();
+  await expect(page).toHaveURL(/\/sessions\/[0-9a-f-]{36}\/edit$/);
+
+  // The form arrives prefilled with what the session already is -- including
+  // the place, which the host did not pick again. If that regressed, saving
+  // would clear the location rather than keep it.
+  await expect(page.getByLabel("Department")).toHaveValue("CS");
+  await expect(page.getByLabel("Course number")).toHaveValue("3251");
+  await expect(page.getByLabel("What are you studying?")).toHaveValue(topic);
+  await expect(page.getByLabel("How many people, including you?")).toHaveValue("4");
+
+  const newTopic = `${topic} (moved)`;
+  editedTopic = newTopic;
+  await page.getByLabel("What are you studying?").fill(newTopic);
+  // Later, and bigger: both rules the database re-checks.
+  await page.getByLabel("Starts").fill(campusTime(6));
+  await page.getByLabel("Ends").fill(campusTime(8));
+  await page.getByLabel("How many people, including you?").fill("6");
+  await page.getByRole("button", { name: "Save changes" }).click();
+
+  // Back on the session, showing the new values.
+  await expect(page).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(newTopic);
+  await expect(page.getByRole("region", { name: "Who's going" })).toContainText("1 of 6 going");
+
+  // The database is the record: capacity moved, the location did NOT get
+  // cleared, and the host is still the host.
+  const db = await connect();
+  try {
+    const { rows } = await db.query<{ capacity: number; label: string; host: string }>(
+      `select s.capacity, s.location_label as label, p.display_name as host
+         from public.sessions s
+         join public.profiles p on p.id = s.host_id
+        where s.topic = $1`,
+      [newTopic],
+    );
+    expect(rows).toEqual([
+      { capacity: 6, label: "Featheringill Hall", host: "Morgan Mutable" },
+    ]);
+  } finally {
+    await db.end();
+  }
+});
+
+test("journey 6 (US-09): another student sees the edit; a stranger cannot edit; the host cancels and it leaves the list", async ({
+  page,
+}) => {
+  if (editedTopic === null || editHostEmail === null) {
+    throw new Error("Journey 6 reads the session journey 5 edits; journey 5 did not get that far.");
+  }
+  const topic = editedTopic;
+
+  // --- A different student sees the edited session ------------------------
+  await signInAsNewStudent(page, newStudentEmail("journey6"), "Quinn Reader", "/sessions");
+
+  const card = page.locator("article").filter({ hasText: topic });
+  await expect(card).toBeVisible();
+  // Capacity 6 with only the host on the roster: the edit's new capacity,
+  // counted against the same roster.
+  await expect(card).toContainText("5 seats left");
+
+  await card.getByRole("link", { name: /^CS 3251/ }).click();
+  await expect(page).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+  const sessionUrl = page.url();
+
+  // Not the host: no Edit or Cancel offered...
+  await expect(page.getByRole("region", { name: "Manage your session" })).toHaveCount(0);
+  // ...and the edit page is a 404 for them, not a form they could submit.
+  const refused = await page.request.get(`${sessionUrl}/edit`);
+  expect(refused.status()).toBe(404);
+
+  await page.getByRole("button", { name: "Account" }).click();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL("/");
+
+  // --- The host comes back and cancels ------------------------------------
+  await page.goto("/sessions");
+  await expect(page).toHaveURL(/\/login/);
+  await page.getByLabel("Vanderbilt email").fill(editHostEmail);
+  await page.getByLabel("Password").fill(E2E_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL("/sessions");
+
+  await page.goto(sessionUrl);
+  const controls = page.getByRole("region", { name: "Manage your session" });
+  await controls.getByRole("button", { name: "Cancel session" }).click();
+  // It asks first, and says who is affected.
+  await expect(controls).toContainText("can't undo it");
+  await controls.getByRole("button", { name: "Yes, cancel it" }).click();
+
+  // The session page still explains what happened -- a student holding a link
+  // is told, not 404'd.
+  await expect(page.getByRole("status")).toContainText("The host cancelled this session.");
+  await expect(page.getByRole("region", { name: "Manage your session" })).toHaveCount(0);
+
+  // And it is gone from the list.
+  await page.goto("/sessions");
+  await expect(page.locator("article").filter({ hasText: topic })).toHaveCount(0);
+});
+
+test("study requests (US-16, R1): a student asks for a course, a host picks it up, then the ask is withdrawn", async ({
+  page,
+}) => {
+  // A course number of its own, so the count below is this journey's doing
+  // and not an earlier run's: requests live for 7 days, so a fixed number
+  // would read "2 students want..." the second time this is run locally.
+  const courseNumber = String(1000 + Math.floor(Math.random() * 9000));
+  const note = `E2E ask ${Date.now()}`;
+
+  await signInAsNewStudent(page, newStudentEmail("journey5"), "Sam Seeker", "/sessions");
+
+  await page.getByRole("button", { name: "Request a session" }).click();
+  await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
+  await page.getByLabel("Course number").fill(courseNumber);
+  await page.getByLabel(/Note/).fill(note);
+  await page.getByRole("button", { name: "Post request" }).click();
+
+  // Scoped to the waiting-list section: the course typeahead also uses <li>
+  // options, and a bare `li` filter for the course number matches both.
+  const waiting = page.getByRole("region", { name: "Students waiting for a session" });
+  const row = waiting.getByRole("listitem").filter({ hasText: `CS ${courseNumber}` });
+  // The ask appears with the student's own note, and as THEIR ask -- the
+  // Withdraw button is what viewerAsked drives.
+  await expect(row).toContainText("1 student wants");
+  await expect(row).toContainText(note);
+  await expect(row.getByRole("button", { name: "Withdraw" })).toBeVisible();
+
+  // The point of the feature: "Host one" carries the course across, so the
+  // would-be host does not retype it. Without the prefill this is where a
+  // student gives up.
+  await row.getByRole("link", { name: "Host one" }).click();
+  await expect(page).toHaveURL(`/sessions/new?department=CS&course=${courseNumber}`);
+  await expect(page.getByLabel("Department")).toHaveValue("CS");
+  await expect(page.getByLabel("Course number")).toHaveValue(courseNumber);
+
+  // Withdrawing takes it off the list for everyone.
+  await page.goto("/sessions");
+  const waitingAgain = page.getByRole("region", { name: "Students waiting for a session" });
+  await waitingAgain
+    .getByRole("listitem")
+    .filter({ hasText: `CS ${courseNumber}` })
+    .getByRole("button", { name: "Withdraw" })
+    .click();
+  await expect(
+    waitingAgain.getByRole("listitem").filter({ hasText: `CS ${courseNumber}` }),
+  ).toHaveCount(0);
+
+  const db = await connect();
+  try {
+    const { rows } = await db.query<{ count: number }>(
+      `select count(*)::int as count
+         from public.study_requests r
+         join public.courses c on c.id = r.course_id
+        where c.department_code = 'CS' and c.number = $1`,
+      [courseNumber],
+    );
+    // Withdrawing DELETES rather than hiding: nothing sweeps up expired rows,
+    // so a row left behind would keep being counted for seven days.
+    expect(rows).toEqual([{ count: 0 }]);
+  } finally {
+    await db.end();
+  }
 });
 
 test("course filter (US-06, S8): filtering by course keeps only that course, and the URL is shareable", async ({

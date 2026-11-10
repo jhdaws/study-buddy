@@ -10,6 +10,7 @@ import {
   START_GRACE_MINUTES,
   createSessionSchema,
   displayNameSchema,
+  editSessionSchema,
   passwordSignInSchema,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
@@ -18,6 +19,8 @@ import {
   normalizeCourseNumber,
   normalizeDepartmentCode,
   signInSchema,
+  STUDY_REQUEST_NOTE_MAX_LENGTH,
+  studyRequestSchema,
   verifyCodeSchema,
 } from "./validation";
 
@@ -492,3 +495,142 @@ describe("setPasswordSchema (A6)", () => {
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// editSessionSchema (S7, US-09) -- the create rules, plus one allowance.
+// ---------------------------------------------------------------------------
+
+describe("editSessionSchema", () => {
+  const now = NOW;
+
+  /** The same submission validSession() builds, with the times overridden. */
+  const edit = (startsAt: string, endsAt: string) => validSession({ startsAt, endsAt });
+
+  const future = iso(1 * HOUR);
+  const laterStill = iso(3 * HOUR);
+  const past = iso(-1 * HOUR);
+  const longerAgo = iso(-2 * HOUR);
+
+  it("accepts a start that has passed when the host did not move it", () => {
+    // The session is already in progress; the host is fixing the topic.
+    const result = editSessionSchema(new Date(past), now).safeParse(edit(past, laterStill));
+    expect(result.success).toBe(true);
+  });
+
+  it("still refuses a start the host moved into the past", () => {
+    const result = editSessionSchema(new Date(past), now).safeParse(edit(longerAgo, laterStill));
+
+    expect(result.success).toBe(false);
+    expect(fieldErrors(result)).toMatchObject({ startsAt: ["The start time has already passed."] });
+  });
+
+  it("compares the instant, not the string: a different offset for the same moment counts as unmoved", () => {
+    // The stored start as PostgREST returns it (+00:00) and the same instant
+    // written with a Central offset. The host did not move it.
+    const sameMomentElsewhere = new Date(past).toISOString().replace("Z", "+00:00");
+    const result = editSessionSchema(new Date(past), now).safeParse(
+      edit(sameMomentElsewhere, laterStill),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it("keeps every other create rule", () => {
+    const result = editSessionSchema(new Date(future), now).safeParse({
+      ...edit(future, laterStill),
+      topic: "   ",
+      capacity: "1",
+    });
+
+    expect(result.success).toBe(false);
+    expect(fieldErrors(result)).toMatchObject({
+      topic: ["Say what you'll be studying."],
+      capacity: ["At least 2 — you count as one."],
+    });
+  });
+
+  it("still refuses an end at or before the start", () => {
+    const result = editSessionSchema(new Date(future), now).safeParse(edit(future, future));
+
+    expect(result.success).toBe(false);
+    expect(fieldErrors(result)).toMatchObject({
+      endsAt: ["The end time must be after the start time."],
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("studyRequestSchema (US-16, R1)", () => {
+  const ask = (overrides: Record<string, string> = {}) =>
+    studyRequestSchema.safeParse({
+      departmentCode: "cs",
+      courseNumber: "3251",
+      note: "Tue evening would suit me",
+      ...overrides,
+    });
+
+  it("normalises the course the same way the create-session form does", () => {
+    const result = ask({ departmentCode: " c.s. ", courseNumber: " 2100-w " });
+
+    expect(result.success).toBe(true);
+    // Both forms reach the same get_or_create_course, so a request that
+    // normalised differently would ask for a course no session could satisfy.
+    expect(result.data).toMatchObject({ departmentCode: "CS", courseNumber: "2100W" });
+  });
+
+  it("keeps the note it was given", () => {
+    const result = ask({ note: "  Before the midterm  " });
+
+    expect(result.success && result.data.note).toBe("Before the midterm");
+  });
+
+  it("treats a blank note as no note", () => {
+    expect(ask({ note: "   " }).data?.note).toBeNull();
+  });
+
+  it("treats a missing note as no note", () => {
+    const result = studyRequestSchema.safeParse({ departmentCode: "CS", courseNumber: "3251" });
+
+    // Asking is the point; the note is a courtesy.
+    expect(result.success).toBe(true);
+    expect(result.data?.note).toBeNull();
+  });
+
+  it("accepts a note of exactly the limit", () => {
+    expect(ask({ note: "x".repeat(STUDY_REQUEST_NOTE_MAX_LENGTH) }).success).toBe(true);
+  });
+
+  it("refuses a note over the limit", () => {
+    expect(fieldErrors(ask({ note: "x".repeat(STUDY_REQUEST_NOTE_MAX_LENGTH + 1) })).note).toEqual([
+      `Keep it to ${STUDY_REQUEST_NOTE_MAX_LENGTH} characters or fewer.`,
+    ]);
+  });
+
+  it("asks for a department and a course number when they are missing", () => {
+    const errors = fieldErrors(studyRequestSchema.safeParse({}));
+
+    expect(errors.departmentCode).toEqual(["Choose or add a department."]);
+    expect(errors.courseNumber).toEqual(["Enter a course number."]);
+  });
+
+  it("refuses a course number that is not four digits", () => {
+    expect(fieldErrors(ask({ courseNumber: "32" })).courseNumber).toEqual([
+      "Enter a 4-digit course number, like 3251 or 2100W.",
+    ]);
+  });
+
+  it("refuses a department code that is a pasted sentence", () => {
+    expect(fieldErrors(ask({ departmentCode: "computer science and more" })).departmentCode).toEqual([
+      `Department codes are at most ${DEPARTMENT_CODE_MAX_LENGTH} letters or digits.`,
+    ]);
+  });
+
+  it("asks for nothing a request does not have", () => {
+    // No time, place or capacity: a student who knew those would be hosting.
+    expect(Object.keys(studyRequestSchema.shape).sort()).toEqual([
+      "courseNumber",
+      "departmentCode",
+      "note",
+    ]);
+  });
+});

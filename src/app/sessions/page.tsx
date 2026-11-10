@@ -8,6 +8,12 @@
  * If listSessions() throws, ./error.tsx shows a retry screen rather than a
  * blank page.
  *
+ * Study requests (US-16, R1) sit in their own section below the list, with
+ * their own read (listStudyRequests) and the department list the ask form
+ * needs. They are deliberately not part of SessionBrowser: the filters do not
+ * apply to them, and they must still show when the list is empty -- which is
+ * exactly when a student most needs them.
+ *
  * Search and the when/has-seats chips still run in the browser over this list
  * (SessionBrowser, src/lib/session-filters.ts), and so does the List / Map
  * toggle (M4): `?view=map` is read in the browser. The COURSE filter (US-06)
@@ -23,9 +29,11 @@ import { connection } from "next/server";
 import Link from "next/link";
 
 import SessionBrowser from "@/components/SessionBrowser";
+import StudyRequests from "@/components/StudyRequests";
 import { BUTTON_PRIMARY, PAGE_LEAD, PAGE_TITLE } from "@/components/ui/styles";
 import { COURSE_PARAM, parseCourseParam } from "@/lib/session-course";
-import { listSessions } from "@/lib/sessions";
+import { listDepartments, listSessions } from "@/lib/sessions";
+import { listStudyRequests } from "@/lib/study-requests";
 
 export const metadata: Metadata = {
   title: "Study sessions",
@@ -53,7 +61,16 @@ export default async function SessionsPage({ searchParams }: SessionsPageProps) 
 
   const params = await searchParams;
   const course = parseCourseParam(one(params, COURSE_PARAM));
-  const sessions = await listSessions(course ? { course } : {});
+  // In parallel: three independent reads, and the page shows all three. Run
+  // in series this would be three round trips deep before anything renders.
+  // Promise.all, not allSettled: if any one fails the page's error boundary
+  // (./error.tsx) offers a retry, which is better than a list with a silently
+  // missing half.
+  const [sessions, requests, departments] = await Promise.all([
+    listSessions(course ? { course } : {}),
+    listStudyRequests(),
+    listDepartments(),
+  ]);
   const now = new Date();
 
   return (
@@ -73,6 +90,9 @@ export default async function SessionsPage({ searchParams }: SessionsPageProps) 
         </div>
       </div>
       <SessionBrowser sessions={sessions} now={now} courseFilter={course} />
+      {/* Below the list on purpose: a student who found their session never
+          needs this, and one who did not has just read "no sessions match". */}
+      <StudyRequests requests={requests} departments={departments} />
     </main>
   );
 }

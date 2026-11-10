@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { joinSession, leaveSession } from "@/app/sessions/actions";
+import { subscribeToRoster } from "@/lib/live-roster";
 import type { Attendee } from "@/lib/sessions";
 
 import SessionRoster, { type SessionRosterProps } from "./SessionRoster";
@@ -11,9 +12,15 @@ import SessionRoster, { type SessionRosterProps } from "./SessionRoster";
 vi.mock("@/app/sessions/actions", () => ({ joinSession: vi.fn(), leaveSession: vi.fn() }));
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
+// The subscription itself is tested in src/lib/live-roster.test.ts; here,
+// only whether the roster listens, and what it does when told of a change.
+const stopListening = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/live-roster", () => ({ subscribeToRoster: vi.fn(() => stopListening) }));
+vi.mock("@/lib/supabase/client", () => ({ createClient: () => "browser-client" }));
 
 const joinMock = vi.mocked(joinSession);
 const leaveMock = vi.mocked(leaveSession);
+const subscribeMock = vi.mocked(subscribeToRoster);
 
 const SESSION = "11111111-1111-4111-8111-111111111111";
 const attendees: Attendee[] = [
@@ -116,5 +123,62 @@ describe("SessionRoster", () => {
 
     expect(screen.getByText("This session has ended.")).toBeTruthy();
     expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  describe("live roster", () => {
+    it.each(["join", "full", "leave", "hosting"] as const)(
+      "listens for joins and leaves while the viewer could act (%s)",
+      (action) => {
+        renderRoster({ action });
+
+        expect(subscribeMock).toHaveBeenCalledTimes(1);
+        expect(subscribeMock.mock.calls[0][0]).toBe("browser-client");
+        expect(subscribeMock.mock.calls[0][1]).toBe(SESSION);
+      },
+    );
+
+    it.each(["cancelled", "ended"] as const)("does not listen once nothing can change (%s)", (action) => {
+      renderRoster({ action });
+      expect(subscribeMock).not.toHaveBeenCalled();
+    });
+
+    it("refreshes the page when someone else joins or leaves", () => {
+      renderRoster();
+      expect(router.refresh).not.toHaveBeenCalled();
+
+      const onChange = subscribeMock.mock.calls[0][2];
+      act(() => onChange());
+
+      expect(router.refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops listening when the roster leaves the page", () => {
+      renderRoster();
+      expect(stopListening).not.toHaveBeenCalled();
+
+      cleanup();
+      expect(stopListening).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps one subscription when fresh props arrive", () => {
+      const props: SessionRosterProps = {
+        sessionId: SESSION,
+        capacity: 4,
+        seatsLeft: 2,
+        attendees,
+        viewerId: "someone-else",
+        action: "join",
+      };
+      const { rerender } = render(<SessionRoster {...props} />);
+      rerender(<SessionRoster {...props} seatsLeft={0} action="full" />);
+
+      expect(subscribeMock).toHaveBeenCalledTimes(1);
+      expect(stopListening).not.toHaveBeenCalled();
+    });
+
+    it("announces the going count politely, so a screen reader hears it change", () => {
+      renderRoster();
+      expect(screen.getByText("2 of 4 going").getAttribute("aria-live")).toBe("polite");
+    });
   });
 });

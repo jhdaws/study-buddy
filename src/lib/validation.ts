@@ -35,6 +35,7 @@ import {
   PASSWORD_MIN_LENGTH,
   ROOM_MAX_LENGTH,
   START_GRACE_MINUTES,
+  STUDY_REQUEST_NOTE_MAX_LENGTH,
   TOPIC_MAX_LENGTH,
 } from "@/lib/limits";
 
@@ -52,6 +53,7 @@ export {
   PASSWORD_MIN_LENGTH,
   ROOM_MAX_LENGTH,
   START_GRACE_MINUTES,
+  STUDY_REQUEST_NOTE_MAX_LENGTH,
   TOPIC_MAX_LENGTH,
 };
 
@@ -306,6 +308,32 @@ export function normalizeCourseNumber(raw: string): string {
 /** Four digits, optionally followed by one uppercase letter -- data/README.md. */
 const COURSE_NUMBER_PATTERN = /^[0-9]{4}[A-Z]?$/;
 
+// Which course, as two fields. Shared by the create-session form and the
+// study-request form (US-16) so the normalisation cannot drift between them:
+// both end up at the same get_or_create_course, and a request normalised
+// differently would ask for a course no session could ever match.
+
+const departmentCodeField = z
+  .string({ error: "Choose or add a department." })
+  .trim()
+  .min(1, { error: "Choose or add a department." })
+  .transform(normalizeDepartmentCode)
+  .refine((value) => value.length > 0, {
+    error: "Choose or add a department.",
+  })
+  .refine((value) => value.length <= DEPARTMENT_CODE_MAX_LENGTH, {
+    error: `Department codes are at most ${DEPARTMENT_CODE_MAX_LENGTH} letters or digits.`,
+  });
+
+const courseNumberField = z
+  .string({ error: "Enter a course number." })
+  .trim()
+  .min(1, { error: "Enter a course number." })
+  .transform(normalizeCourseNumber)
+  .refine((value) => COURSE_NUMBER_PATTERN.test(value), {
+    error: "Enter a 4-digit course number, like 3251 or 2100W.",
+  });
+
 /**
  * The create-session form. A factory so "now" is injectable: the start-time
  * rule depends on the clock, and tests pass a fixed one. Call it per request
@@ -318,30 +346,16 @@ const COURSE_NUMBER_PATTERN = /^[0-9]{4}[A-Z]?$/;
  * Department and course numbers are normalised here (S2, #19) the same way
  * the database does (see the SQL twin, named above).
  */
-export function createSessionSchema(now: Date = new Date()) {
+export function createSessionSchema(
+  now: Date = new Date(),
+  options: { unchangedStart?: Date } = {},
+) {
   const earliestStart = new Date(now.getTime() - START_GRACE_MINUTES * 60_000);
 
   return z
     .object({
-      departmentCode: z
-        .string({ error: "Choose or add a department." })
-        .trim()
-        .min(1, { error: "Choose or add a department." })
-        .transform(normalizeDepartmentCode)
-        .refine((value) => value.length > 0, {
-          error: "Choose or add a department.",
-        })
-        .refine((value) => value.length <= DEPARTMENT_CODE_MAX_LENGTH, {
-          error: `Department codes are at most ${DEPARTMENT_CODE_MAX_LENGTH} letters or digits.`,
-        }),
-      courseNumber: z
-        .string({ error: "Enter a course number." })
-        .trim()
-        .min(1, { error: "Enter a course number." })
-        .transform(normalizeCourseNumber)
-        .refine((value) => COURSE_NUMBER_PATTERN.test(value), {
-          error: "Enter a 4-digit course number, like 3251 or 2100W.",
-        }),
+      departmentCode: departmentCodeField,
+      courseNumber: courseNumberField,
       topic: z
         .string({ error: "Say what you'll be studying." })
         .trim()
@@ -385,7 +399,13 @@ export function createSessionSchema(now: Date = new Date()) {
           error: `Keep the location name to ${LOCATION_LABEL_MAX_LENGTH} characters or fewer.`,
         }),
       startsAt: instant("Choose a start time.").refine(
-        (startsAt) => startsAt >= earliestStart,
+        (startsAt) =>
+          startsAt >= earliestStart ||
+          // S7/US-09: an edit that leaves the start alone is allowed even once
+          // it has passed, so a host can fix the topic or room of a session
+          // already in progress. update_session() makes the same allowance,
+          // comparing against the STORED start.
+          startsAt.getTime() === options.unchangedStart?.getTime(),
         { error: "The start time has already passed." },
       ),
       endsAt: instant("Choose an end time."),
@@ -418,3 +438,54 @@ export function createSessionSchema(now: Date = new Date()) {
 export type CreateSessionSchema = ReturnType<typeof createSessionSchema>;
 export type CreateSessionValues = z.output<CreateSessionSchema>;
 export type CreateSessionField = keyof CreateSessionValues;
+
+// ---------------------------------------------------------------------------
+// Edit a session (US-09) -- S7 calls this in updateSession().
+// ---------------------------------------------------------------------------
+
+/**
+ * The edit-session form: the same fields and the same rules as creating one,
+ * because a host editing a session may not leave it in a state they could not
+ * have created. Deliberately the same schema rather than a parallel copy --
+ * two sets of rules for one table drift, and the database only has one.
+ *
+ * `unchangedStart` is the session's stored start time. Passing it allows a
+ * start that has already passed **only if the host did not move it**, which is
+ * what update_session() allows too: see the note on `startsAt` above.
+ */
+export function editSessionSchema(unchangedStart: Date, now: Date = new Date()) {
+  return createSessionSchema(now, { unchangedStart });
+}
+
+export type EditSessionSchema = ReturnType<typeof editSessionSchema>;
+export type EditSessionValues = z.output<EditSessionSchema>;
+export type EditSessionField = keyof EditSessionValues;
+
+// ---------------------------------------------------------------------------
+// Ask for a session (US-16, R1) -- requestSession() calls this.
+//
+// The create-session form's department and course rules, and nothing else. A
+// request says WHICH COURSE and, optionally, why; it has no time, place or
+// capacity, because a student who knew those would be hosting rather than
+// asking.
+// ---------------------------------------------------------------------------
+
+export const studyRequestSchema = z.object({
+  departmentCode: departmentCodeField,
+  courseNumber: courseNumberField,
+  // Optional, like `room`: null when blank, so the database stores null and
+  // the UI tests one thing rather than two. The BEFORE INSERT trigger in
+  // *_r1_study_requests.sql trims again -- that is the enforcement, this is
+  // the message.
+  note: z
+    .string()
+    .trim()
+    .max(STUDY_REQUEST_NOTE_MAX_LENGTH, {
+      error: `Keep it to ${STUDY_REQUEST_NOTE_MAX_LENGTH} characters or fewer.`,
+    })
+    .optional()
+    .transform((note) => note || null),
+});
+
+export type StudyRequestValues = z.output<typeof studyRequestSchema>;
+export type StudyRequestField = keyof StudyRequestValues;

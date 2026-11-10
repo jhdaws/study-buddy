@@ -143,6 +143,12 @@ describe("databaseErrorMessage: joining and leaving a session (S5)", () => {
     ["session_full", "This session is full."],
     ["not_joined", "You're not on the roster for this session."],
     ["host_cannot_leave", "As the host, you can't leave — cancel the session instead."],
+    // S7 (US-09): update_session and cancel_session.
+    ["not_session_host", "Only the host can change or cancel this session."],
+    [
+      "capacity_below_roster",
+      "That's fewer seats than the students already coming. Nobody is removed by an edit.",
+    ],
   ])("maps the raised message %j", (message, expected) => {
     expect(databaseErrorMessage({ message, code: "P0001" })).toBe(expected);
   });
@@ -322,5 +328,39 @@ describe("mapUnavailableMessage (M4)", () => {
     for (const reason of ["not_configured", "load_failed"] as const) {
       expect(mapUnavailableMessage(reason)).not.toMatch(/key|referr|billing|RefererNotAllowed|ApiNotActivated/i);
     }
+  });
+});
+
+describe("databaseErrorMessage: study requests (R1, US-16)", () => {
+  it("explains a second ask for the same course", () => {
+    // study_requests is written through RLS policies, not a function, so a
+    // refusal arrives as a constraint name rather than a raised message.
+    const message = databaseErrorMessage({
+      code: "23505",
+      message:
+        'duplicate key value violates unique constraint "study_requests_course_id_author_id_key"',
+    });
+
+    expect(message).toBe("You've already asked for this course. Classmates can see it.");
+  });
+
+  it("explains a note that is too long", () => {
+    const message = databaseErrorMessage({
+      code: "23514",
+      message:
+        'new row for relation "study_requests" violates check constraint "study_requests_note_length"',
+    });
+
+    expect(message).toBe("Keep your note to 200 characters or fewer.");
+  });
+
+  it("falls back to the permission message when a policy refuses the write", () => {
+    // What a forged author_id looks like from PostgREST.
+    const message = databaseErrorMessage({
+      code: "42501",
+      message: 'new row violates row-level security policy for table "study_requests"',
+    });
+
+    expect(message).toBe("You don't have permission to do that.");
   });
 });
