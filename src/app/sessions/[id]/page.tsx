@@ -27,6 +27,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import HostSessionControls from "@/components/HostSessionControls";
 import SessionRoster from "@/components/SessionRoster";
 import Icon from "@/components/ui/Icon";
 import { LINK, PAGE_TITLE, PANEL } from "@/components/ui/styles";
@@ -52,6 +53,10 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   // The calendar route only serves sessions still in the list, so offer it
   // only for those.
   const upcoming = action !== "cancelled" && action !== "ended";
+  // US-09: Edit and Cancel, for the host of a session that can still change.
+  // Presentation only -- update_session() and cancel_session() check the host
+  // themselves, and refuse a cancelled or ended session regardless.
+  const hosting = session.hostId === viewer.id && upcoming;
 
   return (
     <main className="min-w-0 lg:max-w-3xl">
@@ -118,6 +123,15 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
           action={action}
         />
       </div>
+
+      {hosting && (
+        <div className="mt-4">
+          <HostSessionControls
+            sessionId={session.id}
+            otherAttendees={Math.max(0, session.attendeeCount - 1)}
+          />
+        </div>
+      )}
     </main>
   );
 }

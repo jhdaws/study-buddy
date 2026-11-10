@@ -318,7 +318,10 @@ const COURSE_NUMBER_PATTERN = /^[0-9]{4}[A-Z]?$/;
  * Department and course numbers are normalised here (S2, #19) the same way
  * the database does (see the SQL twin, named above).
  */
-export function createSessionSchema(now: Date = new Date()) {
+export function createSessionSchema(
+  now: Date = new Date(),
+  options: { unchangedStart?: Date } = {},
+) {
   const earliestStart = new Date(now.getTime() - START_GRACE_MINUTES * 60_000);
 
   return z
@@ -385,7 +388,13 @@ export function createSessionSchema(now: Date = new Date()) {
           error: `Keep the location name to ${LOCATION_LABEL_MAX_LENGTH} characters or fewer.`,
         }),
       startsAt: instant("Choose a start time.").refine(
-        (startsAt) => startsAt >= earliestStart,
+        (startsAt) =>
+          startsAt >= earliestStart ||
+          // S7/US-09: an edit that leaves the start alone is allowed even once
+          // it has passed, so a host can fix the topic or room of a session
+          // already in progress. update_session() makes the same allowance,
+          // comparing against the STORED start.
+          startsAt.getTime() === options.unchangedStart?.getTime(),
         { error: "The start time has already passed." },
       ),
       endsAt: instant("Choose an end time."),
@@ -418,3 +427,25 @@ export function createSessionSchema(now: Date = new Date()) {
 export type CreateSessionSchema = ReturnType<typeof createSessionSchema>;
 export type CreateSessionValues = z.output<CreateSessionSchema>;
 export type CreateSessionField = keyof CreateSessionValues;
+
+// ---------------------------------------------------------------------------
+// Edit a session (US-09) -- S7 calls this in updateSession().
+// ---------------------------------------------------------------------------
+
+/**
+ * The edit-session form: the same fields and the same rules as creating one,
+ * because a host editing a session may not leave it in a state they could not
+ * have created. Deliberately the same schema rather than a parallel copy --
+ * two sets of rules for one table drift, and the database only has one.
+ *
+ * `unchangedStart` is the session's stored start time. Passing it allows a
+ * start that has already passed **only if the host did not move it**, which is
+ * what update_session() allows too: see the note on `startsAt` above.
+ */
+export function editSessionSchema(unchangedStart: Date, now: Date = new Date()) {
+  return createSessionSchema(now, { unchangedStart });
+}
+
+export type EditSessionSchema = ReturnType<typeof editSessionSchema>;
+export type EditSessionValues = z.output<EditSessionSchema>;
+export type EditSessionField = keyof EditSessionValues;
