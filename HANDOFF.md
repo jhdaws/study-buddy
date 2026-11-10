@@ -92,7 +92,7 @@ spends its first hour rediscovering the same dead end.
 ### Things the next agent should be careful about
 - `findings.md` is on #92's branch, not main, so this PR does not update it. Mark SEC-12 and SEC-15 there once both merge.
 - #94 also edits `templates/magic_link.html`: expect a one-line conflict on the expiry sentence.
-- The e2e addition (end of the returning-student journey) has not run; check CI.
+- The e2e addition (end of the returning-student journey) passed in CI. No journey covers forgot-password with an existing password: if that path ever shows the refusal page, the `amr` assumption in `password-change.ts` is wrong.
 
 ## 2026-11-03 · Threat model draft (ICA 15, Sprint 4 Part 2a)
 
