@@ -170,6 +170,13 @@ export async function editSession(
     return invalidFormState(parsed.error, formData);
   }
 
+  // SEC-05: the same per-student lookup budget as createSession() -- an edit
+  // can call Google too. Refused, or the check itself failing: no lookup.
+  const limitError = await consumeRateLimit("place_lookup");
+  if (limitError) {
+    return editFailure("consume_rate_limit", limitError, formData);
+  }
+
   let locationId: string;
   try {
     ({ locationId } = await resolvePlace(parsed.data.placeId));

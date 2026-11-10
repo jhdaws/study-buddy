@@ -432,6 +432,23 @@ describe("editSession", () => {
     });
   });
 
+  it("spends a place lookup (SEC-05), and stops at the limit before calling Google", async () => {
+    rateLimit.consumeRateLimit.mockResolvedValue({
+      code: "PT429",
+      message: "place_lookup_rate_limited",
+      details: "20 of 20 hits",
+    });
+
+    const state = await editSession("s1", {}, form());
+
+    expect(rateLimit.consumeRateLimit).toHaveBeenCalledWith("place_lookup");
+    expect(places.resolvePlace).not.toHaveBeenCalled();
+    expect(server.rpc).not.toHaveBeenCalled();
+    expect(state.formError).toBe(
+      "You've tried a lot of places in the last few minutes. Wait a few minutes, then try again.",
+    );
+  });
+
   it("revalidates the session page and the list", async () => {
     await redirectOf(editSession("s1", {}, form()));
 
