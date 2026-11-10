@@ -364,6 +364,18 @@ export function createSessionSchema(now: Date = new Date()) {
         .string({ error: "Choose a location." })
         .trim()
         .min(1, { error: "Choose a location." }),
+      // The Autocomplete session token the picker used to find that place
+      // (M2), for resolvePlace() to close Google's billing session with.
+      // Optional -- the fixture picker has none -- and never an error: a
+      // missing or malformed token only affects billing, so anything that is
+      // not a non-blank string becomes undefined, and resolvePlace() drops a
+      // token Google would reject.
+      placeSessionToken: z
+        .string()
+        .trim()
+        .optional()
+        .transform((token) => token || undefined)
+        .catch(undefined),
       // The host's own words, prefilled from the picker (ADR 0008 rule 14).
       locationLabel: z
         .string({ error: "Give the location a name." })

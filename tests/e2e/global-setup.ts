@@ -1,6 +1,7 @@
-// Before the journeys: give the stub picker's fixture places real `locations`
-// rows in the LOCAL database, so a session can be created end to end before
-// M2's Google picker exists. This is M5's (#36) local-and-CI option; nothing
+// Before the journeys: give the fixture places real `locations` rows in the
+// LOCAL database, so a session can be created end to end without Google (the
+// journeys build without a Maps key, so the picker offers only these; see
+// playwright.config.ts). This is M5's (#36) local-and-CI option; nothing
 // here can reach the hosted project (playwright.config.ts and
 // tests/db/connection.ts both refuse non-local hosts).
 

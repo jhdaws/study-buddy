@@ -3,7 +3,7 @@
 /**
  * Location picker for creating a session (US-02). Owner: Track M -- M2 (#23).
  *
- * THE CONTRACT (fixed by W4, #11 -- M2 replaces the body, keeps the props):
+ * THE CONTRACT (fixed by W4, #11; M2 kept the props):
  *   - It submits a Google Places **place ID** as a form field named `name`
  *     (default `placeId`, createSessionSchema's key). Never coordinates, never
  *     a name: the server looks the place up itself (resolvePlace, M3 #24).
@@ -16,33 +16,35 @@
  *     the form after the action (LocationPicker.test.tsx checks this).
  *     `defaultValue` is read once, on mount.
  *
- * There is NO curated building list (ADR 0008 rule 7). Every location, campus
- * buildings included, comes from Google Places. The real picker (M2):
- *   - Places Autocomplete **(New)** -- the legacy Places API lacks the two
- *     options below. @vis.gl/react-google-maps is already a dependency; the
- *     browser key is googleMapsBrowserKey() in src/lib/env.ts.
- *   - `locationRestriction`: a circle of CAMPUS_RADIUS_METERS around
- *     CAMPUS_CENTER (src/lib/env.ts -- the same values resolvePlace() checks
- *     against). NOT `locationBias`, which is only a preference and would still
- *     offer results across Nashville.
- *   - `includedPrimaryTypes` that surface campus buildings as well as cafes
- *     and libraries, but not residences. Check that Featheringill and
- *     Stevenson appear.
- *   - Session tokens, so a whole typing session is billed as one unit rather
- *     than per keystroke. If the server lookup should share the token, see
- *     the note in src/lib/places.ts.
+ * TWO BODIES, chosen by whether this build has the browser Maps key
+ * (NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, M1):
+ *   - With it: <PlacesPicker> (src/components/PlacesPicker.tsx) -- Places
+ *     Autocomplete (New) restricted to the campus circle, with session
+ *     tokens it also submits as `placeSessionToken`, and a map once a place
+ *     is chosen. The real picker.
+ *   - Without it -- CI, Vercel previews, a fresh clone: a plain <select> of
+ *     FIXTURE_PLACES, below. Their ids are fake (`ChIJ-FAKE-...`), resolve
+ *     only to the fixture locations, and resolvePlace() accepts them only
+ *     outside a production build or where there is no server key
+ *     (src/lib/places.ts, THE FIXTURE IDS). The e2e journeys use this body:
+ *     they pick "Featheringill Hall" by keyboard.
+ * So a deployment needs both Google keys or neither: the browser key alone
+ * offers real places the server cannot look up, and the server key alone
+ * refuses the fixture places this offers. .env.example has the details.
  *
- * SECURITY: none of the above is a control. It shapes what the picker offers;
- * it does not stop a direct POST with any place ID at all. resolvePlace()
+ * NEXT_PUBLIC_ values are inlined at build time, so the server render and
+ * the browser always take the same branch. It is read in the component, not
+ * at module scope, only so tests can switch it with vi.stubEnv.
+ *
+ * SECURITY: none of this is a control. It shapes what the picker offers; it
+ * does not stop a direct POST with any place ID at all. resolvePlace()
  * re-checks the radius and place type on the server before anything is
  * stored (data/README.md, "The constraint that does not change").
- *
- * STUB (W4): a plain <select> of FIXTURE_PLACES, whose ids are fake
- * (`ChIJ-FAKE-...`) and resolve only against the fixture locations.
  */
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
+import PlacesPicker from "@/components/PlacesPicker";
 import { SELECT } from "@/components/ui/styles";
 import { FIXTURE_PLACES } from "@/lib/fixtures";
 
@@ -71,7 +73,13 @@ export type LocationPickerProps = {
   "aria-describedby"?: string;
 };
 
-export default function LocationPicker({
+export default function LocationPicker(props: LocationPickerProps) {
+  const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+  return apiKey ? <PlacesPicker apiKey={apiKey} {...props} /> : <FixturePlacePicker {...props} />;
+}
+
+/** W4's stub, kept as the no-key body. */
+function FixturePlacePicker({
   name = "placeId",
   id,
   defaultValue,
@@ -90,8 +98,7 @@ export default function LocationPicker({
   // option is `defaultSelected`, and React does not update that. Mirroring
   // the selection into defaultSelected makes the reset a no-op, so a failed
   // submit does not clear the host's choice. (Found by
-  // LocationPicker.test.tsx; an autocomplete text input plus a hidden
-  // input, as M2 will likely build, does not need this.)
+  // LocationPicker.test.tsx. <PlacesPicker>'s hidden inputs do not need it.)
   useEffect(() => {
     for (const option of selectRef.current?.options ?? []) {
       option.defaultSelected = option.value === placeId;
@@ -125,7 +132,7 @@ export default function LocationPicker({
       className={SELECT}
     >
       <option value="">Choose a location</option>
-      <optgroup label="Fixture places (stub until M2)">
+      <optgroup label="Test places (Google Maps not connected)">
         {FIXTURE_PLACES.map((place) => (
           <option key={place.placeId} value={place.placeId}>
             {place.label}

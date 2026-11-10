@@ -43,9 +43,14 @@ function pointAtLocalSupabase(): void {
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = status.ANON_KEY;
   process.env.TEST_DATABASE_URL = status.DB_URL;
   process.env.MAILPIT_URL = mailpitUrl;
-  // No Google key: the stub picker's fixture places resolve without Google
-  // (src/lib/places.ts), and global-setup.ts gives them location rows.
-  delete process.env.GOOGLE_MAPS_SERVER_API_KEY;
+  // No Google keys: the picker offers the fixture places (LocationPicker.tsx),
+  // which resolve without Google (src/lib/places.ts), and global-setup.ts
+  // gives them location rows. Set to "" rather than deleted: Next.js fills a
+  // MISSING variable from .env.local, so a developer with real keys there
+  // would otherwise build the Google picker -- and a production build with
+  // the server key refuses the fixture places.
+  process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY = "";
+  process.env.GOOGLE_MAPS_SERVER_API_KEY = "";
 }
 
 pointAtLocalSupabase();
