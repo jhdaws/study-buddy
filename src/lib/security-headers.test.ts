@@ -86,7 +86,7 @@ describe("contentSecurityPolicy", () => {
 
   it("names no Google host without a Maps key", () => {
     const policy = contentSecurityPolicy(HOSTED);
-    expect(policy).not.toMatch(/google|gstatic/);
+    expect(policy).not.toMatch(/google|gstatic|wasm/);
     // Left out rather than empty: an empty directive would mean 'none'.
     expect(parse(policy)).not.toHaveProperty("worker-src");
     expect(parse(policy)).not.toHaveProperty("frame-src");
@@ -113,8 +113,14 @@ describe("contentSecurityPolicy", () => {
     expect(policy["style-src"]).toContain("https://fonts.googleapis.com");
     expect(policy["worker-src"]).toEqual(["blob:"]);
     expect(policy["frame-src"]).toEqual(["https://*.google.com"]);
-    // 'strict-dynamic' lets the loader's scripts in: no Google host, no eval.
-    expect(policy["script-src"]).toEqual(["'self'", "'nonce-bm9uY2Utb2YtdGhlLWRheQ=='", "'strict-dynamic'"]);
+    // 'strict-dynamic' lets the loader's scripts in: no Google host. The
+    // vector map compiles WebAssembly, and that is all: no 'unsafe-eval'.
+    expect(policy["script-src"]).toEqual([
+      "'self'",
+      "'nonce-bm9uY2Utb2YtdGhlLWRheQ=='",
+      "'strict-dynamic'",
+      "'wasm-unsafe-eval'",
+    ]);
     // And the Supabase sources are still there.
     expect(policy["connect-src"]).toContain("wss://abcdefgh.supabase.co");
   });
