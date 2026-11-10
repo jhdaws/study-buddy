@@ -121,6 +121,28 @@ const SQLSTATE_MESSAGES: Record<string, string> = {
   "42501": "You don't have permission to do that.",
 };
 
+/**
+ * What the security log records for a database error (SEC-09,
+ * src/lib/security-log.ts): the name databaseErrorMessage() matched it by --
+ * a raised name such as `session_full`, a constraint name, or
+ * `sqlstate_<code>` -- and never Postgres's text. `unmapped` is an error
+ * with nothing to name it by; `none` is no error at all. Checks in the same
+ * order as databaseErrorMessage(), so the two always agree (errors.test.ts).
+ */
+export function databaseErrorReason(error: DatabaseErrorLike | null | undefined): string {
+  if (!error) return "none";
+  if (error.message && Object.hasOwn(RAISED_MESSAGES, error.message)) return error.message;
+  const text = `${error.message ?? ""} ${error.details ?? ""}`;
+  for (const constraint of Object.keys(CONSTRAINT_MESSAGES)) {
+    if (text.includes(`"${constraint}"`)) return constraint;
+  }
+  // A SQLSTATE (5 characters) or PostgREST code (PGRST116) is a code, not text.
+  if (error.code && /^[0-9A-Za-z]{5,8}$/.test(error.code)) {
+    return `sqlstate_${error.code.toLowerCase()}`;
+  }
+  return "unmapped";
+}
+
 /** A message for a database error, safe to show a student. */
 export function databaseErrorMessage(error: DatabaseErrorLike | null | undefined): string {
   if (!error) return GENERIC_ERROR_MESSAGE;
@@ -179,6 +201,20 @@ export type AuthErrorLike = {
   status?: number | null;
   message?: string | null;
 };
+
+/**
+ * What the security log records for a Supabase Auth error (SEC-09): its
+ * `code` -- auth-js's ErrorCode, such as `invalid_credentials` or
+ * `otp_expired` -- or `http_<status>` when an older server sent none. Never
+ * the message. `no_user` is Supabase answering without an error but without
+ * a user either.
+ */
+export function authErrorReason(error: AuthErrorLike | null | undefined): string {
+  if (!error) return "no_user";
+  if (error.code && /^[a-z0-9_]{1,64}$/.test(error.code)) return error.code;
+  if (typeof error.status === "number") return `http_${error.status}`;
+  return "unmapped";
+}
 
 export const SIGN_IN_RATE_LIMITED_MESSAGE =
   "Too many sign-in emails have gone out recently. Try again in a few minutes.";
