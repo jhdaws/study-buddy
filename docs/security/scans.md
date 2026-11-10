@@ -6,9 +6,12 @@ request and every push to main, beside `verify`. Finding IDs (`SEC-nn`, `Tn`) co
 `docs/security/threat-model.md` (#86).
 
 Triage labels: **TP** true positive · **FP** false positive (with a reason) · **AR** accepted
-risk (with a reason and an owner). **No suppressions exist.** Nothing adds a `nosemgrep`
-comment, a `.semgrepignore`, a `.gitleaksignore` or a gitleaks config. If you add one later,
-give it a comment saying why, and add a row here.
+risk (with a reason and an owner).
+
+**Suppressions: one.** `.gitleaks.toml` allowlists a single fake test value (FP-1 under
+§3 "gitleaks", added 2026-11-10). There is no `nosemgrep` comment, `.semgrepignore` or
+`.gitleaksignore`. If you add a suppression, give it a comment saying why, scope it as narrowly
+as you can, and add a row here.
 
 ## 1. Tools and commands
 
@@ -43,7 +46,7 @@ high). The two high rows are `sharp` and `source-map-js`.
 
 | Scan | Findings | Result |
 | --- | --- | --- |
-| gitleaks, full history | 0 | passes |
+| gitleaks, full history | 0 (2026-11-08); 3 on 2026-11-10, all one false positive (FP-1 in §3) | passes with `.gitleaks.toml` |
 
 ## 3. Triage
 
@@ -88,7 +91,32 @@ limits:
 
 ### gitleaks
 
-There were no findings, so there is no `.gitleaksignore`.
+The 2026-11-08 run had no findings.
+
+**FP-1 (added 2026-11-10): a fake Places session token in M2's tests.** This is a false
+positive, suppressed in `.gitleaks.toml`.
+- **What failed.** After #88 merged, the `security` job went red on main and on #90. It found
+  3 `generic-api-key` hits, all in commit `82741f4` on `m2-us-02-places-picker` (#96):
+  `src/lib/places.test.ts:121`, `src/app/sessions/actions.test.ts:120` and
+  `src/lib/validation.test.ts:276`. The job scans every branch on purpose, so one commit on any
+  branch fails every PR.
+- **Why it is not a secret.** All three hits are the same made-up value,
+  `0b6c8a52-3f0e-4c1d-9d55-6f1d3c0a9e21`, a Google Places Autocomplete *session token* in a
+  test fixture. A session token is a random UUID the browser generates to group Autocomplete
+  requests into one billing session. It is not a credential and opens nothing. The rule
+  matched because the variable is named `token`, and a UUID's entropy (3.9) clears its 3.5 bar.
+- **Why not `.gitleaksignore`.** Its fingerprints include the commit SHA, so the next rebase or
+  squash of #96 would fail every PR again. An allowlist on the value survives both.
+- **Scope.** The allowlist applies only to the `generic-api-key` rule, only to this one literal
+  value, and only in `*.test.ts` and `*.test.tsx` files.
+- **Checked** with gitleaks 8.30.1 in a scratch repo that used the same config:
+  - this value in a test file: allowed;
+  - a different UUID in a test file: still reported;
+  - this value outside a test file: still reported;
+  - a `ghp_`-format token in a test file: still reported (`github-pat`).
+
+  Over the real history (107 non-merge commits, every branch), the scan reported 3 findings
+  before the config and 0 after it.
 
 **SEC-01 (T1): gitleaks does not catch the demo password.** The old demo password for
 `njpm@vanderbilt.edu` is a six-digit number. It appears at `HANDOFF.md` lines 354, 382 and 393

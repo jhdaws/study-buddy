@@ -1,0 +1,26 @@
+# gitleaks configuration for the CI `security` job (.github/workflows/ci.yml).
+# Every result and its triage: docs/security/scans.md, section 3 ("gitleaks").
+#
+# The default rules apply unchanged. This file only adds allowlists, and each
+# one must say why it is a false positive and be scoped as narrowly as possible.
+[extend]
+useDefault = true
+
+# FALSE POSITIVE, triaged 2026-11-10.
+#
+# 0b6c8a52-3f0e-4c1d-9d55-6f1d3c0a9e21 is a made-up Google Places Autocomplete
+# session token in the M2 picker's unit tests (#96, commit 82741f4:
+# src/lib/places.test.ts, src/app/sessions/actions.test.ts,
+# src/lib/validation.test.ts). A session token is a random UUID the browser
+# generates to group Autocomplete requests into one billing session. It is not a
+# credential and grants no access to anything. generic-api-key matches it only
+# because the variable holding it is called `token`.
+#
+# Scoped to that rule, that one literal value, AND test files. A different
+# value in a test file, or this value outside a test, is still reported.
+[[allowlists]]
+description = "Fake Places Autocomplete session token in unit tests (not a credential)"
+targetRules = ["generic-api-key"]
+condition = "AND"
+paths = ['''\.test\.tsx?$''']
+regexes = ['''^0b6c8a52-3f0e-4c1d-9d55-6f1d3c0a9e21$''']
