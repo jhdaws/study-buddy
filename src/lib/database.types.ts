@@ -109,6 +109,38 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"reports": {
+                  Row: {
+                    "created_at": string,"id": string,"note": string | null,"reason": Database["public"]['Enums']["report_reason"],"reported_user_id": string | null,"reporter_id": string | null,"session_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"note"?: string | null,"reason": Database["public"]['Enums']["report_reason"],"reported_user_id"?: string | null,"reporter_id"?: string | null,"session_id"?: string | null
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"note"?: string | null,"reason"?: Database["public"]['Enums']["report_reason"],"reported_user_id"?: string | null,"reporter_id"?: string | null,"session_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "reports_reported_user_id_fkey"
+      columns: ["reported_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "reports_reporter_id_fkey"
+      columns: ["reporter_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "reports_session_id_fkey"
+      columns: ["session_id"]
+isOneToOne: false
+      referencedRelation: "sessions"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"session_attendees": {
                   Row: {
                     "joined_at": string,"session_id": string,"user_id": string
@@ -288,7 +320,7 @@ isOneToOne: false
       } }
           }
           Enums: {
-            "session_status": "open"|"cancelled"
+            "report_reason": "harassment"|"spam"|"safety"|"other","session_status": "open"|"cancelled"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -408,7 +440,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "session_status": ["open", "cancelled"]
+            "report_reason": ["harassment", "spam", "safety", "other"],"session_status": ["open", "cancelled"]
           }
         }
 } as const

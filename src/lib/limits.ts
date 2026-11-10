@@ -101,3 +101,18 @@ export const SESSION_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
 /** The cookie options every Supabase client in the app passes. */
 export const SUPABASE_COOKIE_OPTIONS = { maxAge: SESSION_COOKIE_MAX_AGE_SECONDS } as const;
+
+/**
+ * US-18: a report's optional note, at most 500 characters after trimming
+ * (blank is saved as null). Mirrored as `reports_note_length` in
+ * *_reports.sql.
+ */
+export const REPORT_NOTE_MAX_LENGTH = 500;
+
+/**
+ * US-18: how many reports one student may send in any rolling 24 hours.
+ * THE DATABASE IS THE ENFORCEMENT -- the `reports_limit` trigger in
+ * *_reports.sql, which a direct API call cannot skip. This copy only words
+ * the error message. Change one, change the other.
+ */
+export const REPORTS_PER_DAY = 5;

@@ -26,6 +26,7 @@
 //     than a SECURITY DEFINER function, so nothing there `raise exception`s:
 //     a refusal arrives as 42501 (already mapped below) or as a constraint
 //     name, which is why both new entries are in CONSTRAINT_MESSAGES.
+//   - P3 (US-18): the reports table's limit and note check (*_reports.sql).
 // Still to come:
 //   - Later: chat (US-05).
 
@@ -67,6 +68,9 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   departments_code_normalised: "That department code isn't valid.",
   departments_code_length: "Department codes are at most 10 letters or digits.",
   courses_number_normalised: "Enter a 4-digit course number, like 3251 or 2100W.",
+  // P3 (US-18): mirror reportUserSchema.
+  reports_note_length: "Keep the note to 500 characters or fewer.",
+  reports_not_self: "You can't report yourself.",
   // R1 (US-16): one live request per student per course, so asking twice is
   // a unique violation rather than a second vote. Reached from two sides --
   // two tabs, or a direct API call -- so it needs a message either way.
@@ -95,6 +99,9 @@ const RAISED_MESSAGES: Record<string, string> = {
   session_full: "This session is full.",
   not_joined: "You're not on the roster for this session.",
   host_cannot_leave: "As the host, you can't leave — cancel the session instead.",
+  // P3 (US-18): the reports_limit trigger (SQLSTATE PT429, REPORTS_PER_DAY).
+  report_limit_reached:
+    "You've sent 5 reports in the last day, which is the limit. If you are in danger right now, call 911.",
   // S7: update_session and cancel_session (US-09).
   not_session_host: "Only the host can change or cancel this session.",
   capacity_below_roster:
