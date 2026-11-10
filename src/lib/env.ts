@@ -74,6 +74,30 @@ export function googleMapsBrowserKey(): string {
   );
 }
 
+/**
+ * The browser key, or null when this deployment has none -- CI and Vercel
+ * previews, for a start. For UI that must work without Google: the session
+ * map (M4) shows "Map unavailable" instead, and the list never needs it.
+ * Like googleMapsBrowserKey(), inlined into the client bundle at build time.
+ */
+export function optionalGoogleMapsBrowserKey(): string | null {
+  return process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || null;
+}
+
+/**
+ * Google's public test map ID. Advanced Markers need *a* map ID; this one
+ * works with any key, with Google's default styling.
+ */
+export const DEMO_MAP_ID = "DEMO_MAP_ID";
+
+/**
+ * The map ID for the session map (M4), from the Google Cloud console (Map
+ * Management). Not a secret. Optional: without one the map uses DEMO_MAP_ID.
+ */
+export function googleMapsMapId(): string {
+  return process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || DEMO_MAP_ID;
+}
+
 /** Server-side Places key. Server only; restrict it by API and a daily quota, not IP (ADR 0008). */
 export function googleMapsServerKey(): string {
   return required(

@@ -19,6 +19,8 @@
 //   - S7 (US-09): what update_session and cancel_session raise
 //     (*_s7_edit_cancel_session.sql). The CHECKs they can trip are S1's,
 //     already mapped above -- an edit goes through the same constraints.
+//   - M2 (#23): the location picker's searches, sent from the browser to
+//     Places Autocomplete (src/lib/place-search.ts).
 // Still to come:
 //   - Later: chat (US-05).
 
@@ -111,6 +113,34 @@ export function databaseErrorMessage(error: DatabaseErrorLike | null | undefined
     return SQLSTATE_MESSAGES[error.code];
   }
   return GENERIC_ERROR_MESSAGE;
+}
+
+// ---------------------------------------------------------------------------
+// Place search (M2) -- the picker's Autocomplete calls to Google, from the
+// browser. Google's own error text is never shown; only the HTTP status (or
+// its absence, for a network failure) picks the wording.
+// ---------------------------------------------------------------------------
+
+export const PLACE_SEARCH_FAILED_MESSAGE =
+  "We couldn't search places just now. Try again in a moment.";
+export const PLACE_SEARCH_BUSY_MESSAGE =
+  "Place search is busy right now. Try again in a minute.";
+export const PLACE_SEARCH_OFFLINE_MESSAGE =
+  "We couldn't reach Google Maps. Check your connection and try again.";
+
+/**
+ * A message for a failed place search, safe to show. 429 is Google's quota
+ * (per minute, or the daily cap set in M1). Any other status -- 403 for a
+ * key restricted to other sites, 5xx -- is ours or Google's to fix, not the
+ * student's. No status at all -- fetch's own TypeError -- means the request
+ * never got an answer. Takes whatever the search threw.
+ */
+export function placeSearchErrorMessage(error: unknown): string {
+  const status =
+    typeof error === "object" && error !== null && "status" in error ? error.status : undefined;
+  if (typeof status !== "number") return PLACE_SEARCH_OFFLINE_MESSAGE;
+  if (status === 429) return PLACE_SEARCH_BUSY_MESSAGE;
+  return PLACE_SEARCH_FAILED_MESSAGE;
 }
 
 // ---------------------------------------------------------------------------
@@ -253,4 +283,30 @@ export function setPasswordErrorMessage(error: AuthErrorLike | null | undefined)
   }
   if (error.status === 429) return CODE_RATE_LIMITED_MESSAGE;
   return GENERIC_ERROR_MESSAGE;
+}
+
+// ---------------------------------------------------------------------------
+// The session map (M4) -- when Google Maps cannot be shown. Never Google's own
+// text: its errors name the key, the referrer and the billing account, and
+// none of that helps a student find a session. The list always works, so
+// every message points there.
+// ---------------------------------------------------------------------------
+
+/**
+ * Why the map is not showing: this deployment has no browser key (CI, Vercel
+ * previews), or the Maps script failed to load or refused the key.
+ */
+export type MapUnavailableReason = "not_configured" | "load_failed";
+
+/** The heading the map shows in place of itself. */
+export const MAP_UNAVAILABLE_TITLE = "Map unavailable";
+
+const MAP_UNAVAILABLE_MESSAGES: Record<MapUnavailableReason, string> = {
+  not_configured: "The map isn't switched on for this version of Study Buddy. Every session is in the list.",
+  load_failed: "Google Maps didn't load. Check your connection and reload, or use the list — it has every session.",
+};
+
+/** A message for a map that cannot be shown, safe to show. */
+export function mapUnavailableMessage(reason: MapUnavailableReason): string {
+  return MAP_UNAVAILABLE_MESSAGES[reason];
 }

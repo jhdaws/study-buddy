@@ -40,9 +40,10 @@ export type CreateSessionState = FormState<CreateSessionField>;
  * Create a study session from the create-session form (US-02).
  *
  * `requireUser()` (A4) redirects anyone signed out or without a display
- * name; both RPCs below check `auth.uid()` again for themselves. Until M2's
- * real picker lands, the stub's fixture places resolve to location ids that
- * are not rows, so create_session fails its foreign key (M5, #36).
+ * name; both RPCs below check `auth.uid()` again for themselves. Without a
+ * Maps key the picker offers only the fixture places, whose location ids are
+ * rows in local and CI databases only (M5, #36): anywhere else
+ * create_session fails its foreign key.
  */
 export async function createSession(
   _prev: CreateSessionState,
@@ -57,7 +58,11 @@ export async function createSession(
 
   let locationId: string;
   try {
-    ({ locationId } = await resolvePlace(parsed.data.placeId));
+    // The picker's session token, if it sent one, ends Google's Autocomplete
+    // session with this lookup (M2).
+    ({ locationId } = await resolvePlace(parsed.data.placeId, {
+      sessionToken: parsed.data.placeSessionToken,
+    }));
   } catch (error) {
     if (error instanceof PlaceError) {
       return {

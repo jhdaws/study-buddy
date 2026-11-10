@@ -1,13 +1,56 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { mapUnavailableMessage } from "@/lib/errors";
 import { fixtureSessionList } from "@/lib/fixtures";
 import type { SessionListItem } from "@/lib/sessions";
 
 import SessionBrowser from "./SessionBrowser";
 import SessionCard from "./SessionCard";
 
-afterEach(cleanup);
+// next/navigation, as far as the List / Map toggle uses it: useSearchParams()
+// over jsdom's real address bar, re-rendering when history.replaceState()
+// moves it. That is what Next's router does for real -- it folds native
+// pushState/replaceState into useSearchParams ("Native History API",
+// node_modules/next/dist/docs/01-app/01-getting-started/04-linking-and-navigating.md).
+const addressBar = vi.hoisted(() => ({ listeners: new Set<() => void>() }));
+vi.mock("next/navigation", async () => {
+  const { useSyncExternalStore } = await import("react");
+  const subscribe = (listener: () => void) => {
+    addressBar.listeners.add(listener);
+    return () => addressBar.listeners.delete(listener);
+  };
+  return {
+    useSearchParams: () =>
+      new URLSearchParams(useSyncExternalStore(subscribe, () => window.location.search)),
+  };
+});
+
+// The real map needs Google; SessionMap.test.tsx tests it with a fake one.
+// Here it only has to show what it was given.
+vi.mock("@/components/SessionMap", () => ({
+  default: ({ sessions, apiKey }: { sessions: SessionListItem[]; apiKey: string }) => (
+    <div data-testid="session-map" data-api-key={apiKey}>
+      {sessions.map((item) => item.id).join(",")}
+    </div>
+  ),
+}));
+
+const replaceState = window.history.replaceState.bind(window.history);
+
+beforeEach(() => {
+  replaceState(null, "", "/sessions");
+  vi.spyOn(window.history, "replaceState").mockImplementation((...args) => {
+    replaceState(...args);
+    addressBar.listeners.forEach((listener) => listener());
+  });
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllEnvs();
+});
 
 // Thursday 1 Oct 2026, 10 AM in Nashville.
 const now = new Date("2026-10-01T15:00:00Z");
@@ -19,6 +62,8 @@ function session(overrides: Partial<SessionListItem> = {}): SessionListItem {
     topic: "Design patterns review",
     locationLabel: "Featheringill Hall",
     room: "2nd floor study area",
+    lat: 36.1445,
+    lng: -86.8035,
     startsAt: "2026-10-01T19:00:00.000Z",
     endsAt: "2026-10-01T21:00:00.000Z",
     capacity: 4,
@@ -194,5 +239,122 @@ describe("<SessionBrowser> search and filters", () => {
     expect(screen.queryByRole("article")).toBeNull();
     expect(screen.getByRole("heading", { name: /No sessions for .ECON 3012. yet/ })).toBeTruthy();
     expect(screen.getByRole("link", { name: "Host a session" }).getAttribute("href")).toBe("/sessions/new");
+  });
+});
+
+describe("<SessionBrowser> List / Map toggle (M4)", () => {
+  const sessions = [
+    session({ id: "a" }),
+    session({
+      id: "b",
+      course: { departmentCode: "MATH", number: "2410", title: "Methods of Linear Algebra" },
+      topic: "Exam 2 practice problems",
+    }),
+  ];
+  const toggle = () => screen.getByRole("group", { name: "Show sessions as" });
+  const listButton = () => within(toggle()).getByRole("button", { name: "List" });
+  const mapButton = () => within(toggle()).getByRole("button", { name: "Map" });
+
+  it("opens on the list, with List pressed (ADR 0004)", () => {
+    render(<SessionBrowser sessions={sessions} now={now} />);
+
+    expect(listButton().getAttribute("aria-pressed")).toBe("true");
+    expect(mapButton().getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getAllByRole("article")).toHaveLength(2);
+  });
+
+  it("gives both buttons a 44px tap target", () => {
+    render(<SessionBrowser sessions={sessions} now={now} />);
+
+    for (const button of [listButton(), mapButton()]) {
+      expect(button.className).toContain("min-h-11");
+    }
+  });
+
+  it("switches to the map and back, keeping the choice in the URL", () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", "");
+    render(<SessionBrowser sessions={sessions} now={now} />);
+
+    fireEvent.click(mapButton());
+    expect(window.location.search).toBe("?view=map");
+    expect(mapButton().getAttribute("aria-pressed")).toBe("true");
+    expect(listButton().getAttribute("aria-pressed")).toBe("false");
+    expect(screen.queryByRole("article")).toBeNull();
+
+    fireEvent.click(listButton());
+    expect(window.location.pathname).toBe("/sessions");
+    expect(window.location.search).toBe("");
+    expect(screen.getAllByRole("article")).toHaveLength(2);
+  });
+
+  it("replaces the history entry rather than adding one per tap", () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", "");
+    const push = vi.spyOn(window.history, "pushState");
+    render(<SessionBrowser sessions={sessions} now={now} />);
+
+    fireEvent.click(mapButton());
+    fireEvent.click(listButton());
+
+    expect(window.history.replaceState).toHaveBeenCalledTimes(2);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("opens on the map when the URL asks for it, as after a reload", () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", "");
+    replaceState(null, "", "/sessions?view=map");
+    render(<SessionBrowser sessions={sessions} now={now} />);
+
+    expect(mapButton().getAttribute("aria-pressed")).toBe("true");
+    expect(screen.queryByRole("article")).toBeNull();
+  });
+
+  it("keeps any other query parameters", () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", "");
+    replaceState(null, "", "/sessions?course=CS");
+    render(<SessionBrowser sessions={sessions} now={now} />);
+
+    fireEvent.click(mapButton());
+    expect(window.location.search).toBe("?course=CS&view=map");
+    fireEvent.click(listButton());
+    expect(window.location.search).toBe("?course=CS");
+  });
+
+  it("without a browser key, says the map is unavailable and never loads it", () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", "");
+    replaceState(null, "", "/sessions?view=map");
+    render(<SessionBrowser sessions={sessions} now={now} />);
+
+    expect(screen.getByRole("heading", { name: "Map unavailable" })).toBeTruthy();
+    expect(screen.getByText(mapUnavailableMessage("not_configured"))).toBeTruthy();
+    expect(screen.queryByTestId("session-map")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+
+    // The list is a tap away, and unharmed.
+    fireEvent.click(screen.getByRole("button", { name: "Show the list" }));
+    expect(listButton().getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getAllByRole("article")).toHaveLength(2);
+  });
+
+  it("with a key, loads the map with the key and the sessions the filters leave", async () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", "test-browser-key");
+    render(<SessionBrowser sessions={sessions} now={now} />);
+
+    fireEvent.change(screen.getByLabelText("Search sessions"), { target: { value: "linear" } });
+    fireEvent.click(mapButton());
+
+    const map = await screen.findByTestId("session-map");
+    expect(map.textContent).toBe("b");
+    expect(map.getAttribute("data-api-key")).toBe("test-browser-key");
+    expect(screen.queryByRole("heading", { name: "Map unavailable" })).toBeNull();
+  });
+
+  it("says nothing matches, rather than showing an empty map", () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", "test-browser-key");
+    replaceState(null, "", "/sessions?view=map");
+    render(<SessionBrowser sessions={sessions} now={now} />);
+
+    fireEvent.change(screen.getByLabelText("Search sessions"), { target: { value: "ECON 3012" } });
+    expect(screen.getByRole("heading", { name: /No sessions for .ECON 3012. yet/ })).toBeTruthy();
+    expect(screen.queryByTestId("session-map")).toBeNull();
   });
 });

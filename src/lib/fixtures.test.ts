@@ -155,6 +155,20 @@ describe("fixtureSessionList() -- listSessions()'s stub body", () => {
     });
     expect(list.some((item) => item.room === null)).toBe(true);
   });
+
+  it("puts each session at its location row's coordinates, on campus (M4)", () => {
+    const rows = new Map(fixtureSessions(NOW).map((row) => [row.id, row]));
+    for (const item of list) {
+      const location = FIXTURE_LOCATIONS.find((row) => row.id === rows.get(item.id)?.location_id);
+      expect([item.lat, item.lng]).toEqual([location?.lat, location?.lng]);
+      expect(metresBetween(CAMPUS_CENTER, item)).toBeLessThanOrEqual(CAMPUS_RADIUS_METERS);
+    }
+  });
+
+  it("has two sessions at one place, so the map's shared pin is exercised", () => {
+    const places = new Set(list.map((item) => `${item.lat},${item.lng}`));
+    expect(places.size).toBeLessThan(list.length);
+  });
 });
 
 describe("fixtureDepartments() -- listDepartments()'s stub body", () => {
