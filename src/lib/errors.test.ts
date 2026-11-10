@@ -138,6 +138,12 @@ describe("databaseErrorMessage: joining and leaving a session (S5)", () => {
     ["session_full", "This session is full."],
     ["not_joined", "You're not on the roster for this session."],
     ["host_cannot_leave", "As the host, you can't leave — cancel the session instead."],
+    // S7 (US-09): update_session and cancel_session.
+    ["not_session_host", "Only the host can change or cancel this session."],
+    [
+      "capacity_below_roster",
+      "That's fewer seats than the students already coming. Nobody is removed by an edit.",
+    ],
   ])("maps the raised message %j", (message, expected) => {
     expect(databaseErrorMessage({ message, code: "P0001" })).toBe(expected);
   });

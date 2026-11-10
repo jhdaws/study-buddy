@@ -10,6 +10,7 @@ import {
   START_GRACE_MINUTES,
   createSessionSchema,
   displayNameSchema,
+  editSessionSchema,
   passwordSignInSchema,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
@@ -476,3 +477,65 @@ describe("setPasswordSchema (A6)", () => {
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// editSessionSchema (S7, US-09) -- the create rules, plus one allowance.
+// ---------------------------------------------------------------------------
+
+describe("editSessionSchema", () => {
+  const now = NOW;
+
+  /** The same submission validSession() builds, with the times overridden. */
+  const edit = (startsAt: string, endsAt: string) => validSession({ startsAt, endsAt });
+
+  const future = iso(1 * HOUR);
+  const laterStill = iso(3 * HOUR);
+  const past = iso(-1 * HOUR);
+  const longerAgo = iso(-2 * HOUR);
+
+  it("accepts a start that has passed when the host did not move it", () => {
+    // The session is already in progress; the host is fixing the topic.
+    const result = editSessionSchema(new Date(past), now).safeParse(edit(past, laterStill));
+    expect(result.success).toBe(true);
+  });
+
+  it("still refuses a start the host moved into the past", () => {
+    const result = editSessionSchema(new Date(past), now).safeParse(edit(longerAgo, laterStill));
+
+    expect(result.success).toBe(false);
+    expect(fieldErrors(result)).toMatchObject({ startsAt: ["The start time has already passed."] });
+  });
+
+  it("compares the instant, not the string: a different offset for the same moment counts as unmoved", () => {
+    // The stored start as PostgREST returns it (+00:00) and the same instant
+    // written with a Central offset. The host did not move it.
+    const sameMomentElsewhere = new Date(past).toISOString().replace("Z", "+00:00");
+    const result = editSessionSchema(new Date(past), now).safeParse(
+      edit(sameMomentElsewhere, laterStill),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it("keeps every other create rule", () => {
+    const result = editSessionSchema(new Date(future), now).safeParse({
+      ...edit(future, laterStill),
+      topic: "   ",
+      capacity: "1",
+    });
+
+    expect(result.success).toBe(false);
+    expect(fieldErrors(result)).toMatchObject({
+      topic: ["Say what you'll be studying."],
+      capacity: ["At least 2 — you count as one."],
+    });
+  });
+
+  it("still refuses an end at or before the start", () => {
+    const result = editSessionSchema(new Date(future), now).safeParse(edit(future, future));
+
+    expect(result.success).toBe(false);
+    expect(fieldErrors(result)).toMatchObject({
+      endsAt: ["The end time must be after the start time."],
+    });
+  });
+});

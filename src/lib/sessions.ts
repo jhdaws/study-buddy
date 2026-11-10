@@ -97,6 +97,12 @@ export type SessionDetail = SessionListItem & {
   hostId: string | null;
   /** The host first, then everyone else in the order they joined. */
   attendees: Attendee[];
+  /**
+   * The Google Places id behind `locationLabel`. Only the edit form uses it
+   * (S7, US-09): <LocationPicker> needs the current place to prefill, or a
+   * host who edits the topic would silently clear their own location.
+   */
+  placeId: string;
 };
 
 /** A department for the create-session department picker. */
@@ -224,6 +230,7 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
     .select(
       `id, topic, location_label, room, starts_at, ends_at, capacity, status, host_id,
        courses!inner (department_code, number, title),
+       locations!inner (place_id),
        profiles!sessions_host_id_fkey (display_name),
        session_attendees (user_id, joined_at, profiles (display_name))`,
     )
@@ -265,6 +272,7 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
     status: data.status,
     hostId: data.host_id,
     attendees,
+    placeId: data.locations.place_id,
   };
 }
 

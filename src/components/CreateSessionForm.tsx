@@ -113,16 +113,30 @@ export type CreateSessionFormProps = {
   departments: Department[];
   /**
    * useActionState's starting state. `{}` on the page; tests pass one with
-   * errors and values to check how it renders.
+   * errors and values to check how it renders. S7 (US-09) also uses it to
+   * prefill the form with a session's current values for editing -- every
+   * field below already reads its initial value from here.
    */
   initialState?: CreateSessionState;
+  /**
+   * The action behind the form. Defaults to createSession(). S7 passes
+   * `editSession.bind(null, sessionId)`, which has the same shape because
+   * editSessionSchema has the same fields (src/lib/validation.ts).
+   */
+  action?: (state: CreateSessionState, formData: FormData) => Promise<CreateSessionState>;
+  /** The submit button, idle and pending. Defaults to creating a session. */
+  submitLabel?: string;
+  pendingLabel?: string;
 };
 
 export default function CreateSessionForm({
   departments,
   initialState = {},
+  action = createSession,
+  submitLabel = "Create session",
+  pendingLabel = "Creating session…",
 }: CreateSessionFormProps) {
-  const [state, formAction, pending] = useActionState(createSession, initialState);
+  const [state, formAction, pending] = useActionState(action, initialState);
   const values = state.values ?? {};
   const prefix = useId();
 
@@ -526,7 +540,7 @@ export default function CreateSessionForm({
           disabled={pending}
           className={`${BUTTON_PRIMARY} h-12 w-full disabled:cursor-wait`}
         >
-          {pending ? "Creating session…" : "Create session"}
+          {pending ? pendingLabel : submitLabel}
         </button>
       </div>
     </form>

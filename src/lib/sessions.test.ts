@@ -209,10 +209,14 @@ const HOST = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const EARLY = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const LATE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
+const PLACE_ID = "ChIJ-central-library";
+
 const detailRow = (overrides: Record<string, unknown> = {}) =>
   sessionRow({
     status: "open",
     host_id: HOST,
+    // S7 (US-09): the edit form prefills <LocationPicker> from this.
+    locations: { place_id: PLACE_ID },
     // Deliberately out of order: the late joiner first, the host in the middle.
     session_attendees: [
       { user_id: LATE, joined_at: "2026-10-01T18:00:00+00:00", profiles: { display_name: "Sam" } },
@@ -251,6 +255,7 @@ describe("getSession", () => {
         { userId: EARLY, displayName: "Alex", isHost: false },
         { userId: LATE, displayName: "Sam", isHost: false },
       ],
+      placeId: PLACE_ID,
     });
   });
 
@@ -280,6 +285,10 @@ describe("getSession", () => {
     const select = String(callTo("select")?.[0]);
     expect(select).toContain("profiles!sessions_host_id_fkey");
     expect(select).toContain("session_attendees (user_id, joined_at, profiles (display_name))");
+    // S7 (US-09): the place id the edit form prefills from. `!inner` because
+    // location_id is NOT NULL -- every session has exactly one location, and
+    // the embed should not make the row optional.
+    expect(select).toContain("locations!inner (place_id)");
     // US-25: the roster is names only.
     expect(select).not.toContain("email");
   });

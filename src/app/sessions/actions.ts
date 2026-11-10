@@ -9,20 +9,22 @@
 // (Next's "Server Actions" guide): authenticate, validate, and authorise
 // inside the action every time.
 //
-// Later sprints, not stubbed yet: cancelSession() (US-09, host only),
-// sendMessage() (US-05).
+// Later sprints, not stubbed yet: sendMessage() (US-05).
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { databaseErrorMessage, type DatabaseErrorLike } from "@/lib/errors";
 import { PlaceError, resolvePlace } from "@/lib/places";
+import { getSession } from "@/lib/sessions";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import {
   createSessionSchema,
+  editSessionSchema,
   formValues,
   invalidFormState,
   type CreateSessionField,
+  type EditSessionField,
   type FormState,
 } from "@/lib/validation";
 
@@ -106,6 +108,122 @@ export async function createSession(
 }
 
 /**
+ * What editSession() hands back to `useActionState` when it does not
+ * redirect. Same field names as creating a session -- the form and its rules
+ * are the same (editSessionSchema). Start from `{}`.
+ */
+export type EditSessionState = FormState<EditSessionField>;
+
+/**
+ * Save a host's edits to their own session (US-09).
+ *
+ * Bind the session id: `useActionState(editSession.bind(null, sessionId), {})`.
+ *
+ * `requireUser()` redirects anyone signed out or without a display name, but
+ * it says nothing about *this* session -- S7's update_session() is what
+ * compares auth.uid() against the stored host_id, and it is the only thing
+ * that can: there is no UPDATE policy on `sessions`. This action must never
+ * update the table directly.
+ *
+ * The session's stored start time is read here, from the database, and handed
+ * to editSessionSchema so an unmoved start that has already passed is still
+ * accepted (a host fixing a typo mid-session). It is deliberately NOT taken
+ * from the form: a client could otherwise claim any "unchanged" start and
+ * talk this layer into accepting a past one. update_session() compares
+ * against the stored value regardless, so this only keeps the message honest.
+ */
+export async function editSession(
+  sessionId: string,
+  _prev: EditSessionState,
+  formData: FormData,
+): Promise<EditSessionState> {
+  await requireUser();
+
+  const session = await getSession(sessionId);
+  if (!session) {
+    return { formError: databaseErrorMessage({ message: "session_not_found" }) };
+  }
+
+  const parsed = editSessionSchema(new Date(session.startsAt)).safeParse(
+    Object.fromEntries(formData),
+  );
+  if (!parsed.success) {
+    return invalidFormState(parsed.error, formData);
+  }
+
+  let locationId: string;
+  try {
+    ({ locationId } = await resolvePlace(parsed.data.placeId));
+  } catch (error) {
+    if (error instanceof PlaceError) {
+      return { fieldErrors: { placeId: [error.message] }, values: formValues(formData) };
+    }
+    throw error;
+  }
+
+  const supabase = await createClient();
+
+  const { data: courseId, error: courseError } = await supabase.rpc("get_or_create_course", {
+    p_department_code: parsed.data.departmentCode,
+    p_course_number: parsed.data.courseNumber,
+  });
+  if (courseError) {
+    return editFailure("get_or_create_course", courseError, formData);
+  }
+
+  const { error: updateError } = await supabase.rpc("update_session", {
+    p_session_id: sessionId,
+    p_course_id: courseId,
+    p_location_id: locationId,
+    p_location_label: parsed.data.locationLabel,
+    // The generated types mark every argument non-null; the function turns a
+    // blank room back into null, as create_session does.
+    p_room: parsed.data.room ?? "",
+    p_topic: parsed.data.topic,
+    p_starts_at: parsed.data.startsAt.toISOString(),
+    p_ends_at: parsed.data.endsAt.toISOString(),
+    p_capacity: parsed.data.capacity,
+  });
+  if (updateError) {
+    return editFailure("update_session", updateError, formData);
+  }
+
+  revalidatePath(`/sessions/${sessionId}`);
+  revalidatePath("/sessions");
+  redirect(`/sessions/${sessionId}`);
+}
+
+/**
+ * Cancel a session as its host (US-09). Same binding pattern as joinSession().
+ *
+ * Nothing is deleted: cancel_session() sets the status, so attendees holding
+ * a link still see what happened, and listSessions() drops it. The host
+ * cannot leave their own session (`host_cannot_leave`) -- this is what that
+ * message points at.
+ */
+export async function cancelSession(
+  sessionId: string,
+  _prev: SessionActionState,
+  _formData: FormData,
+): Promise<SessionActionState> {
+  await requireUser();
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("cancel_session", { p_session_id: sessionId });
+  if (error) {
+    console.error("cancelSession: cancel_session failed", {
+      code: error.code,
+      message: error.message,
+    });
+    return { error: databaseErrorMessage(error) };
+  }
+
+  revalidatePath(`/sessions/${sessionId}`);
+  revalidatePath("/sessions");
+  return {};
+}
+
+/**
  * What joinSession()/leaveSession() hand back when they do not redirect --
  * there is nothing to refill, only a message for S6's roster to show beside
  * the button. Start from `{}`.
@@ -176,5 +294,15 @@ function databaseFailure(
   formData: FormData,
 ): CreateSessionState {
   console.error(`createSession: ${rpc} failed`, { code: error.code, message: error.message });
+  return { formError: databaseErrorMessage(error), values: formValues(formData) };
+}
+
+/** The same, for editSession() (US-09). */
+function editFailure(
+  rpc: string,
+  error: DatabaseErrorLike,
+  formData: FormData,
+): EditSessionState {
+  console.error(`editSession: ${rpc} failed`, { code: error.code, message: error.message });
   return { formError: databaseErrorMessage(error), values: formValues(formData) };
 }
