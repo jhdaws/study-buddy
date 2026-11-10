@@ -20,21 +20,38 @@
  * "nothing here": with no sessions, the only way the list fills is someone
  * starting one (the cold-start problem, US-16).
  *
+ * List / Map toggle (M4, #25). The list is the DEFAULT, the map one tap away
+ * (ADR 0004). The view lives in the URL -- `/sessions?view=map` -- so it
+ * survives a reload, comes back with the browser's Back button from a
+ * session page, and can be shared. It is read with useSearchParams() (the
+ * page is dynamic, so the server renders the right view first time) and
+ * written with history.replaceState(), which Next folds into the router:
+ * switching views re-renders here without a request to the server, and
+ * without adding a history entry per tap. The filters apply to both views.
+ *
+ * The map is <SessionMap>, loaded with next/dynamic (ssr: false) and only
+ * when the map view is shown: Google's script and the map code stay out of
+ * the list's first load. With no NEXT_PUBLIC_GOOGLE_MAPS_API_KEY (CI, Vercel
+ * previews) its chunk is never fetched -- <MapUnavailable> says so instead,
+ * and the list is untouched.
+ *
  * Later:
- *   - List / map toggle (M4, #25, stretch). List stays the DEFAULT view, the
- *     map one tap away (ADR 0004): load <SessionMap> with next/dynamic
- *     (ssr: false) beside the list below; the filters apply to both.
  *   - Filtering by course across sessions not yet loaded (US-06) needs the
  *     query in listSessions(). The campus-zone filter (US-12) has no data to
  *     filter on now that there is no building list (ADR 0008).
  */
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useId, useMemo, useState } from "react";
 
+import MapUnavailable from "@/components/MapUnavailable";
 import SessionCard from "@/components/SessionCard";
 import Icon from "@/components/ui/Icon";
-import { BUTTON_PRIMARY, BUTTON_SECONDARY, PANEL } from "@/components/ui/styles";
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, MAP_HEIGHT, PANEL } from "@/components/ui/styles";
+import { optionalGoogleMapsBrowserKey } from "@/lib/env";
+import { sessionView, VIEW_PARAM, type SessionView } from "@/lib/session-map";
 import {
   filterSessions,
   groupByDay,
@@ -57,11 +74,42 @@ const CHIP =
 const CHIP_ON = `${CHIP} border-brand bg-brand text-white`;
 const CHIP_OFF = `${CHIP} border-line bg-white text-ink hover:border-field`;
 
+const VIEW_BUTTON =
+  "inline-flex min-h-11 items-center gap-1.5 rounded-[10px] px-3.5 text-sm font-semibold whitespace-nowrap transition-colors";
+const VIEW_ON = `${VIEW_BUTTON} bg-brand text-white`;
+const VIEW_OFF = `${VIEW_BUTTON} text-ink hover:bg-paper`;
+
+/**
+ * Fetched the first time the map view renders, never before. If the chunk
+ * itself cannot be fetched (offline, or a deploy replaced it), the student
+ * gets the same "Map unavailable" as a failed Google script -- not the
+ * route's error page in place of everything.
+ */
+const SessionMap = dynamic(
+  () =>
+    import("@/components/SessionMap").catch(() => ({
+      default: function MapChunkFailed({ onShowList }: { onShowList?: () => void }) {
+        return <MapUnavailable reason="load_failed" onShowList={onShowList} />;
+      },
+    })),
+  { ssr: false, loading: MapLoading },
+);
+
 export default function SessionBrowser({ sessions, now }: SessionBrowserProps) {
   const [filters, setFilters] = useState<SessionFilters>(NO_FILTERS);
   const searchId = useId();
+  const searchParams = useSearchParams();
+  const view = sessionView(searchParams.get(VIEW_PARAM));
   const visible = useMemo(() => filterSessions(sessions, filters, now), [sessions, filters, now]);
   const groups = useMemo(() => groupByDay(visible, now), [visible, now]);
+
+  const showView = (next: SessionView) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "map") params.set(VIEW_PARAM, "map");
+    else params.delete(VIEW_PARAM);
+    const query = params.toString();
+    window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname);
+  };
 
   if (sessions.length === 0) {
     return <EmptyState />;
@@ -119,28 +167,33 @@ export default function SessionBrowser({ sessions, now }: SessionBrowserProps) {
             Has seats
           </button>
         </div>
-        <p aria-live="polite" className="text-sm text-ink-2">
-          {filtered
-            ? `Showing ${visible.length} of ${sessions.length} ${sessions.length === 1 ? "session" : "sessions"}`
-            : `${sessions.length} open ${sessions.length === 1 ? "session" : "sessions"}`}
-          {filtered && (
-            <>
-              {" · "}
-              <button
-                type="button"
-                onClick={() => setFilters(NO_FILTERS)}
-                className="inline-flex min-h-11 items-center font-semibold text-signal hover:underline"
-              >
-                Clear filters
-              </button>
-            </>
-          )}
-        </p>
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <p aria-live="polite" className="text-sm text-ink-2">
+            {filtered
+              ? `Showing ${visible.length} of ${sessions.length} ${sessions.length === 1 ? "session" : "sessions"}`
+              : `${sessions.length} open ${sessions.length === 1 ? "session" : "sessions"}`}
+            {filtered && (
+              <>
+                {" · "}
+                <button
+                  type="button"
+                  onClick={() => setFilters(NO_FILTERS)}
+                  className="inline-flex min-h-11 items-center font-semibold text-signal hover:underline"
+                >
+                  Clear filters
+                </button>
+              </>
+            )}
+          </p>
+          <ViewToggle view={view} onChange={showView} />
+        </div>
       </div>
 
       {/* ---- Results ------------------------------------------------------ */}
       {visible.length === 0 ? (
         <NoMatches query={filters.query} onClear={() => setFilters(NO_FILTERS)} />
+      ) : view === "map" ? (
+        <MapView sessions={visible} now={now} onShowList={() => showView("list")} />
       ) : (
         <div className="flex flex-col gap-8">
           {groups.map((group) => (
@@ -162,6 +215,68 @@ export default function SessionBrowser({ sessions, now }: SessionBrowserProps) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function ViewToggle({
+  view,
+  onChange,
+}: {
+  view: SessionView;
+  onChange: (view: SessionView) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Show sessions as"
+      className="inline-flex shrink-0 rounded-xl border border-line bg-white p-0.5"
+    >
+      <button
+        type="button"
+        aria-pressed={view === "list"}
+        onClick={() => onChange("list")}
+        className={view === "list" ? VIEW_ON : VIEW_OFF}
+      >
+        <Icon name="list" className="size-4" />
+        List
+      </button>
+      <button
+        type="button"
+        aria-pressed={view === "map"}
+        onClick={() => onChange("map")}
+        className={view === "map" ? VIEW_ON : VIEW_OFF}
+      >
+        <Icon name="pin" className="size-4" />
+        Map
+      </button>
+    </div>
+  );
+}
+
+function MapView({
+  sessions,
+  now,
+  onShowList,
+}: {
+  sessions: SessionListItem[];
+  now: Date;
+  onShowList: () => void;
+}) {
+  const apiKey = optionalGoogleMapsBrowserKey();
+  if (!apiKey) {
+    return <MapUnavailable reason="not_configured" onShowList={onShowList} />;
+  }
+  return <SessionMap sessions={sessions} now={now} apiKey={apiKey} onShowList={onShowList} />;
+}
+
+function MapLoading() {
+  return (
+    <div
+      role="status"
+      className={`${PANEL} ${MAP_HEIGHT} flex items-center justify-center text-[15px] text-ink-2`}
+    >
+      Loading the map…
     </div>
   );
 }

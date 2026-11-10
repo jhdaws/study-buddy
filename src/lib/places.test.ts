@@ -84,6 +84,8 @@ describe("resolvePlace: a real place", () => {
       "X-Goog-FieldMask": "location,types",
     });
     expect(init.cache).toBe("no-store");
+    // A timeout, so a hung Google call cannot hold the form's pending state.
+    expect(init.signal).toBeInstanceOf(AbortSignal);
 
     expect(admin.from).toHaveBeenCalledWith("locations");
     const [row, options] = admin.upsert.mock.calls[0];
@@ -107,6 +109,20 @@ describe("resolvePlace: a real place", () => {
     expect(new URL(String(fetchMock.mock.calls[1][0])).searchParams.has("sessionToken")).toBe(
       false,
     );
+  });
+});
+
+describe("resolvePlace: in a production build", () => {
+  it("looks a place up for a signed-in student, closing the picker's session", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    googleReplies(200, { location: ON_CAMPUS, types: LIBRARY_TYPES });
+
+    await expect(
+      resolvePlace(PLACE_ID, { sessionToken: "0b6c8a52-3f0e-4c1d-9d55-6f1d3c0a9e21" }),
+    ).resolves.toEqual({ locationId: "loc-1" });
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(url.searchParams.get("sessionToken")).toBe("0b6c8a52-3f0e-4c1d-9d55-6f1d3c0a9e21");
+    expect(admin.upsert).toHaveBeenCalledOnce();
   });
 });
 
@@ -167,6 +183,25 @@ describe("resolvePlace: Google's failures", () => {
     expect((await refusal(resolvePlace(PLACE_ID))).reason).toBe("lookup_failed");
   });
 
+  it("treats a body that is not JSON as lookup_failed, whatever the status", async () => {
+    for (const status of [200, 400, 502]) {
+      fetchMock.mockResolvedValue({
+        ok: status < 400,
+        status,
+        json: async () => {
+          throw new SyntaxError("Unexpected token <");
+        },
+      });
+      expect((await refusal(resolvePlace(PLACE_ID))).reason).toBe("lookup_failed");
+    }
+    expect(admin.from).not.toHaveBeenCalled();
+  });
+
+  it("copes with fetch throwing something that is not an Error", async () => {
+    fetchMock.mockRejectedValue("socket hang up");
+    expect((await refusal(resolvePlace(PLACE_ID))).reason).toBe("lookup_failed");
+  });
+
   it("treats a reply with no usable location as lookup_failed", async () => {
     googleReplies(200, { types: LIBRARY_TYPES });
     expect((await refusal(resolvePlace(PLACE_ID))).reason).toBe("lookup_failed");
@@ -186,6 +221,19 @@ describe("resolvePlace: storing", () => {
     expect(error.reason).toBe("lookup_failed");
     expect(error.message).not.toMatch(/permission|locations/);
   });
+
+  it("turns a client that throws (the database unreachable) into lookup_failed", async () => {
+    googleReplies(200, { location: ON_CAMPUS, types: LIBRARY_TYPES });
+    admin.upsert.mockImplementation(() => {
+      throw new TypeError("fetch failed");
+    });
+    expect((await refusal(resolvePlace(PLACE_ID))).reason).toBe("lookup_failed");
+
+    admin.upsert.mockImplementation(() => {
+      throw "not an Error";
+    });
+    expect((await refusal(resolvePlace(PLACE_ID))).reason).toBe("lookup_failed");
+  });
 });
 
 describe("resolvePlace: fixture places (the stub picker, until M2)", () => {
@@ -201,6 +249,11 @@ describe("resolvePlace: fixture places (the stub picker, until M2)", () => {
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("GOOGLE_MAPS_SERVER_API_KEY", "");
     await expect(resolvePlace(fixture.place_id)).resolves.toEqual({ locationId: fixture.id });
+  });
+
+  it("refuses a fake id that is not one of the fixtures, without calling Google", async () => {
+    expect((await refusal(resolvePlace("ChIJ-FAKE-somewhere-else"))).reason).toBe("unknown_place");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("refuses one in production once the server key is set, still without calling Google", async () => {

@@ -5,8 +5,13 @@ import {
   CODE_REJECTED_MESSAGE,
   databaseErrorMessage,
   GENERIC_ERROR_MESSAGE,
+  mapUnavailableMessage,
   PASSWORD_REJECTED_MESSAGE,
   passwordSignInErrorMessage,
+  PLACE_SEARCH_BUSY_MESSAGE,
+  PLACE_SEARCH_FAILED_MESSAGE,
+  PLACE_SEARCH_OFFLINE_MESSAGE,
+  placeSearchErrorMessage,
   setPasswordErrorMessage,
   SIGN_IN_RATE_LIMITED_MESSAGE,
   signInErrorMessage,
@@ -143,6 +148,34 @@ describe("databaseErrorMessage: joining and leaving a session (S5)", () => {
   });
 });
 
+describe("placeSearchErrorMessage (M2)", () => {
+  it("says the search is busy when Google's quota answers 429", () => {
+    expect(placeSearchErrorMessage({ status: 429 })).toBe(PLACE_SEARCH_BUSY_MESSAGE);
+  });
+
+  it.each([400, 403, 500, 503])("gives HTTP %i the general message", (status) => {
+    expect(placeSearchErrorMessage({ status })).toBe(PLACE_SEARCH_FAILED_MESSAGE);
+  });
+
+  it("blames the connection when no answer came back at all", () => {
+    expect(placeSearchErrorMessage(new TypeError("Failed to fetch"))).toBe(
+      PLACE_SEARCH_OFFLINE_MESSAGE,
+    );
+    expect(placeSearchErrorMessage({ status: null })).toBe(PLACE_SEARCH_OFFLINE_MESSAGE);
+    expect(placeSearchErrorMessage(null)).toBe(PLACE_SEARCH_OFFLINE_MESSAGE);
+  });
+
+  it("never mentions Google's own error text", () => {
+    for (const message of [
+      PLACE_SEARCH_BUSY_MESSAGE,
+      PLACE_SEARCH_FAILED_MESSAGE,
+      PLACE_SEARCH_OFFLINE_MESSAGE,
+    ]) {
+      expect(message).not.toMatch(/API|key|PERMISSION|referer|quota/i);
+    }
+  });
+});
+
 describe("signInErrorMessage", () => {
   it("maps both rate limits to the same message", () => {
     expect(
@@ -272,3 +305,22 @@ describe("setPasswordErrorMessage (A6)", () => {
   });
 });
 
+
+describe("mapUnavailableMessage (M4)", () => {
+  it("points every reason at the list, which always works", () => {
+    for (const reason of ["not_configured", "load_failed"] as const) {
+      expect(mapUnavailableMessage(reason)).toMatch(/list/);
+    }
+  });
+
+  it("tells a load failure apart from a deployment without a map", () => {
+    expect(mapUnavailableMessage("load_failed")).toMatch(/reload/);
+    expect(mapUnavailableMessage("not_configured")).not.toMatch(/reload/);
+  });
+
+  it("never mentions keys, referrers or Google's error codes", () => {
+    for (const reason of ["not_configured", "load_failed"] as const) {
+      expect(mapUnavailableMessage(reason)).not.toMatch(/key|referr|billing|RefererNotAllowed|ApiNotActivated/i);
+    }
+  });
+});

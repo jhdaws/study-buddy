@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSession, type CreateSessionState } from "@/app/sessions/actions";
 import { fetchCourseSuggestions } from "@/lib/course-search";
 import { fixtureDepartments } from "@/lib/fixtures";
+import { AUTOCOMPLETE_URL } from "@/lib/place-search";
 import type { CourseSuggestion } from "@/lib/sessions";
 import { formValues } from "@/lib/validation";
 
@@ -14,6 +15,8 @@ import CreateSessionForm from "./CreateSessionForm";
 // be driven in jsdom.
 vi.mock("@/app/sessions/actions", () => ({ createSession: vi.fn() }));
 vi.mock("@/lib/course-search", () => ({ fetchCourseSuggestions: vi.fn() }));
+// The Google picker's map loads the Maps JavaScript API; jsdom has no use for it.
+vi.mock("@/components/LocationMap", () => ({ default: () => null }));
 
 const createSessionMock = vi.mocked(createSession);
 const fetchSuggestionsMock = vi.mocked(fetchCourseSuggestions);
@@ -24,6 +27,8 @@ beforeEach(() => {
   // The form reads and shows campus (Nashville) time whatever the device's
   // zone is. Run in a far-away zone so a regression to device time fails.
   vi.stubEnv("TZ", "Asia/Tokyo");
+  // The fixture <select> picker unless a test turns the Google one on.
+  vi.stubEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", "");
   fetchSuggestionsMock.mockResolvedValue([]);
 });
 
@@ -31,6 +36,7 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
 });
 
 function form(): HTMLFormElement {
@@ -409,5 +415,65 @@ describe("<CreateSessionForm> capacity stepper and preview", () => {
     expect(preview().textContent).toContain("CS");
     expect(preview().textContent).toContain("2 seats left");
     expect(preview().textContent).toContain("Hosted by you");
+  });
+});
+
+describe("<CreateSessionForm> with the Google picker (M2)", () => {
+  const FEATHERINGILL_ID = "ChIJQVdfNb1mZIgRoCFoSaNt4Do";
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", "test-browser-key");
+    vi.stubGlobal("fetch", fetchMock);
+    // Google, faked: one Autocomplete answer, and a pin for Place Details.
+    fetchMock.mockImplementation(async (url: string) => ({
+      ok: true,
+      status: 200,
+      json: async () =>
+        url === AUTOCOMPLETE_URL
+          ? {
+              suggestions: [
+                {
+                  placePrediction: {
+                    placeId: FEATHERINGILL_ID,
+                    text: { text: "Featheringill Hall, 24th Avenue South" },
+                    structuredFormat: {
+                      mainText: { text: "Featheringill Hall" },
+                      secondaryText: { text: "24th Avenue South" },
+                    },
+                  },
+                },
+              ],
+            }
+          : { location: { latitude: 36.1445, longitude: -86.8037 } },
+    }));
+  });
+
+  it("prefills the label, and the pick survives the re-renders later typing causes (BUG-15)", async () => {
+    createSessionMock.mockResolvedValue({});
+    render(<CreateSessionForm departments={departments} />);
+
+    const place = field("Place");
+    fireEvent.focus(place);
+    fireEvent.input(place, { target: { value: "Feath" } });
+    fireEvent.click(await screen.findByRole("option", { name: /Featheringill Hall/ }));
+    expect(field("Location name").value).toBe("Featheringill Hall");
+    const token = submitted().get("placeSessionToken");
+    expect(token).toMatch(/^[0-9a-f-]{36}$/);
+
+    // Real typing fires `input`, which refreshes the preview and re-renders
+    // the whole form -- the event that undid BUG-15's department picks.
+    fireEvent.input(field("What are you studying?"), { target: { value: "Exam 2" } });
+    fireEvent.input(field(/^Room/), { target: { value: "Room 100" } });
+
+    expect(field("Place").value).toBe("Featheringill Hall");
+    // Only the search box answers to "Place", even loosely matched the way
+    // Playwright's getByLabel() does -- not the list, not the clear button.
+    expect(screen.getAllByLabelText(/place/i)).toEqual([field("Place")]);
+    await submit();
+    const sent = createSessionMock.mock.calls[0][1] as FormData;
+    expect(sent.get("placeId")).toBe(FEATHERINGILL_ID);
+    expect(sent.get("placeSessionToken")).toBe(token);
+    expect(sent.get("locationLabel")).toBe("Featheringill Hall");
   });
 });

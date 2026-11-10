@@ -75,6 +75,7 @@ const sessionRow = (overrides: Record<string, unknown> = {}) => ({
   ends_at: "2026-10-01T21:00:00+00:00",
   capacity: 6,
   courses: { department_code: "CS", number: "3251", title: "Intermediate Software Design" },
+  locations: { lat: 36.1452, lng: -86.8006 },
   profiles: { display_name: "Priya" },
   session_attendees: [{ count: 3 }],
   ...overrides,
@@ -100,6 +101,8 @@ describe("listSessions", () => {
         topic: "Dynamic programming",
         locationLabel: "Central Library",
         room: "418",
+        lat: 36.1452,
+        lng: -86.8006,
         startsAt: "2026-10-01T19:30:00+00:00",
         endsAt: "2026-10-01T21:00:00+00:00",
         capacity: 6,
@@ -155,6 +158,25 @@ describe("listSessions", () => {
     // array measured here -- that is a row per attendee, per session, per
     // page load.
     expect(String(callTo("select")?.[0])).toContain("session_attendees (count)");
+  });
+
+  it("embeds each session's stored coordinates for the map (M4)", async () => {
+    respond([]);
+    await listSessions();
+
+    // The pin goes where resolvePlace() stored Google's coordinates -- the
+    // `locations` row -- never anywhere the host typed. `!inner`, like
+    // `courses!inner`: location_id is NOT NULL, so an empty embed can only
+    // mean a broken policy, and that session is better left out than pinned
+    // without coordinates.
+    expect(String(callTo("select")?.[0])).toContain("locations!inner (lat, lng)");
+  });
+
+  it("puts each session's coordinates on the list item, unrounded", async () => {
+    respond([sessionRow({ locations: { lat: 36.144_512_3, lng: -86.802_745_6 } })]);
+
+    const [session] = await listSessions();
+    expect([session.lat, session.lng]).toEqual([36.144_512_3, -86.802_745_6]);
   });
 
   it("derives seats left from the roster", async () => {

@@ -16,7 +16,9 @@
  *                   name (the select then has no name). S2 normalises it.
  *   courseNumber    <CourseNumberInput>, a typeahead; suggestions only.
  *   topic, room     text; room optional.
- *   placeId         <LocationPicker> submits it itself.
+ *   placeId         <LocationPicker> submits it itself -- and, with a Maps
+ *                   key, `placeSessionToken` beside it (M2), which
+ *                   createSession() hands to resolvePlace().
  *   locationLabel   text, prefilled from the picker's onSelect label unless
  *                   the host has typed their own (ADR 0008 rule 14).
  *   startsAt/endsAt HIDDEN inputs carrying ISO 8601 with an offset. The
@@ -55,6 +57,8 @@
  * too updates the state in the same render. Playwright's selectOption()
  * fires both events from one script call, which hides this; the journeys
  * choose by keyboard instead (tests/e2e/helpers.ts, chooseByKeyboard).
+ * (With a Maps key the place picker is a text combobox instead, and React's
+ * onChange on a text input already runs on `input`: see PlacesPicker.tsx.)
  *
  * `noValidate`: the browser's own validation bubbles are skipped so every
  * message comes from createSessionSchema, worded once. `required`, `min` and
