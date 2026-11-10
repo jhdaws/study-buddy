@@ -36,10 +36,16 @@ export type SecurityEventName =
   | "sign_in_password_failed"
   // verifyCode(): Supabase refused the emailed one-time code.
   | "sign_in_code_failed"
+  // confirmSignIn(): Supabase refused the emailed link's token (#94).
+  | "sign_in_link_failed"
   // joinSession(): join_session refused (session_full, already_joined, ...).
   | "session_join_refused"
   // createSession(): the place, get_or_create_course or create_session refused.
-  | "session_create_refused";
+  | "session_create_refused"
+  // editSession() / cancelSession() (US-09): refused -- not_session_host is
+  // someone trying to change a session that is not theirs.
+  | "session_edit_refused"
+  | "session_cancel_refused";
 
 export type SecurityEvent = {
   event: SecurityEventName;

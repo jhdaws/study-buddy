@@ -208,6 +208,9 @@ export async function confirmSignIn(formData: FormData): Promise<void> {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
   if (error || !data.user) {
+    // SEC-09: the reason code only. A link carries no email, and the token
+    // hash is a credential, so neither is logged.
+    logSecurityEvent({ event: "sign_in_link_failed", reason: authErrorReason(error) });
     redirect(loginWithLinkError(next));
   }
 

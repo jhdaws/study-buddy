@@ -158,7 +158,7 @@ export async function editSession(
   _prev: EditSessionState,
   formData: FormData,
 ): Promise<EditSessionState> {
-  await requireUser();
+  const user = await requireUser();
 
   const session = await getSession(sessionId);
   if (!session) {
@@ -176,7 +176,7 @@ export async function editSession(
   // can call Google too. Refused, or the check itself failing: no lookup.
   const limitError = await consumeRateLimit("place_lookup");
   if (limitError) {
-    return editFailure("consume_rate_limit", limitError, formData);
+    return editFailure("consume_rate_limit", limitError, formData, user.id, sessionId);
   }
 
   let locationId: string;
@@ -184,6 +184,12 @@ export async function editSession(
     ({ locationId } = await resolvePlace(parsed.data.placeId));
   } catch (error) {
     if (error instanceof PlaceError) {
+      logSecurityEvent({
+        event: "session_edit_refused",
+        reason: error.reason,
+        userId: user.id,
+        sessionId,
+      });
       return { fieldErrors: { placeId: [error.message] }, values: formValues(formData) };
     }
     throw error;
@@ -196,7 +202,7 @@ export async function editSession(
     p_course_number: parsed.data.courseNumber,
   });
   if (courseError) {
-    return editFailure("get_or_create_course", courseError, formData);
+    return editFailure("get_or_create_course", courseError, formData, user.id, sessionId);
   }
 
   const { error: updateError } = await supabase.rpc("update_session", {
@@ -213,7 +219,7 @@ export async function editSession(
     p_capacity: parsed.data.capacity,
   });
   if (updateError) {
-    return editFailure("update_session", updateError, formData);
+    return editFailure("update_session", updateError, formData, user.id, sessionId);
   }
 
   revalidatePath(`/sessions/${sessionId}`);
@@ -234,7 +240,7 @@ export async function cancelSession(
   _prev: SessionActionState,
   _formData: FormData,
 ): Promise<SessionActionState> {
-  await requireUser();
+  const user = await requireUser();
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("cancel_session", { p_session_id: sessionId });
@@ -242,6 +248,12 @@ export async function cancelSession(
     console.error("cancelSession: cancel_session failed", {
       code: error.code,
       message: error.message,
+    });
+    logSecurityEvent({
+      event: "session_cancel_refused",
+      reason: databaseErrorReason(error),
+      userId: user.id,
+      sessionId,
     });
     return { error: databaseErrorMessage(error) };
   }
@@ -461,7 +473,15 @@ function editFailure(
   rpc: string,
   error: DatabaseErrorLike,
   formData: FormData,
+  userId: string,
+  sessionId: string,
 ): EditSessionState {
   console.error(`editSession: ${rpc} failed`, { code: error.code, message: error.message });
+  logSecurityEvent({
+    event: "session_edit_refused",
+    reason: databaseErrorReason(error),
+    userId,
+    sessionId,
+  });
   return { formError: databaseErrorMessage(error), values: formValues(formData) };
 }

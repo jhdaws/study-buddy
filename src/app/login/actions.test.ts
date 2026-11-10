@@ -524,6 +524,25 @@ describe("security log (SEC-09)", () => {
     expect(warned).not.toContain("Token has expired");
   });
 
+  it("logs a refused emailed link once: the reason only, never the token hash", async () => {
+    auth.verifyOtp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { code: "otp_expired", status: 403, message: "Email link is invalid or has expired" },
+    });
+    await redirectOf(
+      confirmSignIn(form({ token_hash: "abc123", type: "email", next: "/sessions" })),
+    );
+
+    expect(securityLine()).toMatchObject({
+      log: "security",
+      event: "sign_in_link_failed",
+      reason: "otp_expired",
+    });
+    const warned = everythingWarned();
+    expect(warned).not.toContain("abc123");
+    expect(warned).not.toContain("Email link is invalid");
+  });
+
   it("logs a sign-in that came back with no user and no error as no_user", async () => {
     auth.signInWithPassword.mockResolvedValue({ data: { user: null, session: null }, error: null });
     await signInWithPassword({}, form({ email: "jane@vanderbilt.edu", password: "pw" }));

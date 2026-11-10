@@ -892,4 +892,32 @@ describe("security log (SEC-09)", () => {
     await createSession({}, form({ capacity: "1" }));
     expect(console.warn).not.toHaveBeenCalled();
   });
+
+  it("logs a cancel by someone who is not the host, with the session", async () => {
+    server.rpc.mockResolvedValue({ data: null, error: { code: "P0001", message: "not_session_host" } });
+    await cancelSession(SESSION, {}, new FormData());
+
+    expect(securityLine()).toMatchObject({
+      event: "session_cancel_refused",
+      reason: "not_session_host",
+      userId: USER,
+      sessionId: SESSION,
+    });
+  });
+
+  it("logs an edit by someone who is not the host, with the session", async () => {
+    rpcReplies(
+      { data: "course-1", error: null },
+      { data: null, error: { code: "P0001", message: "not_session_host" } },
+    );
+    await editSession(SESSION, {}, form());
+
+    expect(securityLine()).toMatchObject({
+      event: "session_edit_refused",
+      reason: "not_session_host",
+      userId: USER,
+      sessionId: SESSION,
+    });
+  });
+
 });
