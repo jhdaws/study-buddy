@@ -96,8 +96,6 @@ export default function AuthScene({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </div>
-
-      <style>{`@keyframes sb-glow{0%,100%{opacity:1}50%{opacity:.85}}`}</style>
     </div>
   );
 }
