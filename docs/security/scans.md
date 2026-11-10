@@ -119,18 +119,42 @@ not help: it stays in the history of a public repo.
 
 ## 4. Outside the gate
 
-After this change, `npm audit` over the whole tree, dev dependencies included, reports
-0 critical, 2 high and 11 moderate. All of them are in dev-only packages:
+This section covers `npm audit` over the whole tree, dev dependencies included. Every package
+it lists is dev-only: test and lint tools that run on laptops and in CI, are never deployed,
+and are never given untrusted input.
 
-- **High:** undici 8.11.2 (through jsdom) and vite 8.3.0 (through vitest and
-  `@vitejs/plugin-react`). These are test tools that run on laptops and in CI. They are never
-  deployed and never given untrusted input.
-- **Moderate:** vitest and `@vitest/mocker`, and minimatch under typescript-eslint (through
-  eslint-config-next).
+| When | Critical | High | Moderate |
+| --- | --- | --- | --- |
+| After the Next.js upgrade (SEC-06) | 0 | 2 | 11 |
+| After the dev-dependency refresh | 0 | 0 | 8 |
 
-**AR (owner: Jack, A03).** These are outside SEC-06's scope. They are left for Dependabot or a
-follow-up PR. npm's suggested fix for the eslint chain is a *downgrade* of eslint-config-next
-to 15.5.29. Do not take it.
+**Fixed in the dev-dependency refresh (TP, fixed):**
+
+| Package | Was | Now | Pulled in by |
+| --- | --- | --- | --- |
+| undici (high) | 8.11.2 | 8.12.4 | jsdom |
+| vite (high) | 8.3.0 | 8.3.6 | vitest and `@vitejs/plugin-react` |
+| vitest, `@vitest/mocker`, `@vitest/coverage-v8` (moderate) | 4.1.11 | 4.1.12 | direct |
+
+vitest and `@vitest/coverage-v8` must move together, because coverage-v8 declares an exact
+peer on vitest's version. Their floor in `package.json` is now `^4.1.12`.
+
+**Still open: minimatch (moderate, AR, owner: Jack, A03).** All 8 remaining rows are one
+advisory, [GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249), a
+"globparts amplification" denial of service:
+- It is in minimatch 10.2.6, which typescript-eslint uses through eslint-config-next. The other
+  seven rows are packages that depend on it.
+- Only minimatch 11.0.1 and later are fixed. No patched 10.x exists, and typescript-eslint
+  (8.72.1 at the time of writing) still requires `^10.2.2`.
+- **Why we accept it:** minimatch here only ever sees glob patterns from our own lint and
+  TypeScript config, never user input.
+- **Why we don't override it:** forcing minimatch 11 with `overrides` would run typescript-eslint
+  on a major version it has not been tested with.
+- **When it goes away:** once typescript-eslint moves to minimatch 11, Dependabot will offer the
+  update.
+
+npm's suggested fix for this chain is a *downgrade* of eslint-config-next to 15.5.29. Do not
+take it.
 
 ## 5. Running the scans locally
 
