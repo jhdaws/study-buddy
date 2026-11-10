@@ -314,12 +314,13 @@ The other half of the core loop: a student can host and browse, but not yet join
 **M · US-04, US-23 · Sprint 3 · after S4 · Nate; built by Jack for the Sprint 3 deadline · DONE**
 
 - [x] `/sessions/[id]`: the session in campus time, seats left; a 404 when it does not exist (or the id is not a uuid). `getSession()` in `src/lib/sessions.ts`; cancelled and ended sessions still render, with a notice instead of a button
-- [x] `<SessionRoster>`: attendees by display name (US-23, never email — US-25), host marked, the viewer marked "(you)", seat count fresh on every load and after every join or leave. **Not yet:** a realtime subscription, so it also changes while you watch — needs `session_attendees` in the `supabase_realtime` publication (a migration); see the comment in `SessionRoster.tsx`
+- [x] `<SessionRoster>`: attendees by display name (US-23, never email — US-25), host marked, the viewer marked "(you)", seat count fresh on every load and after every join or leave
 - [x] Join and Leave wired to S5's actions; "Session full", disabled, with the reason; "You're hosting" for the host. Which one to offer is `rosterAction()` (`src/lib/roster.ts`); a refused join refreshes the stale roster
 - [x] A notice when the host has cancelled
 - [x] The home page's and cards' "View" links point here: each card's course heading is the link, stretched over the card
 - [x] "Add to calendar" on the page, so US-19's download is reachable from the UI
 - [x] Tests: `roster.test.ts`, `SessionRoster.test.tsx`, `getSession` in `sessions.test.ts`, and W8's journey 4 (a second student opens the session, joins, sees the list agree, and leaves)
+- [x] **Live roster (follow-up, 2026-10-26, Nate):** the roster and seat count change while you watch. `session_attendees` is in the `supabase_realtime` publication (`*_live_roster.sql`, which also revokes `anon`'s default grant on the table — Realtime sends DELETEs without RLS, and a signed-out listener was receiving every leave's ids); `src/lib/live-roster.ts` listens and `<SessionRoster>` calls `router.refresh()`, never applying a payload itself. Tests: `live-roster.test.ts`, `SessionRoster.test.tsx`, `tests/db/live-roster.test.ts`, and journey 5 (one student watches the page while another joins and leaves) — CI's `e2e` job now starts Realtime for it
 
 ---
 
