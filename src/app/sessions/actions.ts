@@ -161,14 +161,27 @@ export async function editSession(
     return invalidFormState(parsed.error, formData);
   }
 
+  // The place is only looked up again if the host picked a different one.
+  // The stored location was validated when the session was created, and a
+  // Place Details call is billed (and, with SEC-05, rate limited) -- a host
+  // fixing a typo in the topic should cost neither. The id compared against
+  // and the locationId reused both come from the database, not the form.
   let locationId: string;
-  try {
-    ({ locationId } = await resolvePlace(parsed.data.placeId));
-  } catch (error) {
-    if (error instanceof PlaceError) {
-      return { fieldErrors: { placeId: [error.message] }, values: formValues(formData) };
+  if (parsed.data.placeId === session.placeId) {
+    locationId = session.locationId;
+  } else {
+    try {
+      // As in createSession(): the picker's token ends Google's Autocomplete
+      // session with this lookup (M2).
+      ({ locationId } = await resolvePlace(parsed.data.placeId, {
+        sessionToken: parsed.data.placeSessionToken,
+      }));
+    } catch (error) {
+      if (error instanceof PlaceError) {
+        return { fieldErrors: { placeId: [error.message] }, values: formValues(formData) };
+      }
+      throw error;
     }
-    throw error;
   }
 
   const supabase = await createClient();
@@ -349,11 +362,18 @@ export async function requestSession(
     return studyRequestFailure("get_or_create_course", courseError, formData);
   }
 
-  await supabase
+  // Re-asking refreshes the request: delete the old row, insert a new one (no
+  // UPDATE policy, so the trigger always sets a fresh expiry). A failed
+  // delete must stop here -- the insert would then hit the unique constraint
+  // and report "already asked" for a request that may be about to lapse.
+  const { error: deleteError } = await supabase
     .from("study_requests")
     .delete()
     .eq("course_id", courseId)
     .eq("author_id", user.id);
+  if (deleteError) {
+    return studyRequestFailure("study_requests delete", deleteError, formData);
+  }
 
   const { error } = await supabase.from("study_requests").insert({
     course_id: courseId,
@@ -362,7 +382,10 @@ export async function requestSession(
     author_id: user.id,
     note: parsed.data.note,
   });
-  if (error) {
+  // The two steps are not atomic, so a double tap or a second tab can insert
+  // between this call's delete and insert. The unique violation then means
+  // this student's request exists, which is what they asked for: success.
+  if (error && !isOwnRequestAlreadyThere(error)) {
     return studyRequestFailure("study_requests insert", error, formData);
   }
 
@@ -403,6 +426,14 @@ export async function withdrawRequest(
 
   revalidatePath("/sessions");
   return {};
+}
+
+/** A concurrent re-ask of the same course won the race (see requestSession). */
+function isOwnRequestAlreadyThere(error: DatabaseErrorLike): boolean {
+  return (
+    error.code === "23505" &&
+    (error.message ?? "").includes("study_requests_course_id_author_id_key")
+  );
 }
 
 /** databaseFailure's twin for the study-request form's field names. */

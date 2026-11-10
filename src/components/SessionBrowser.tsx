@@ -72,6 +72,13 @@ export type SessionBrowserProps = {
    * empty state when the query matched nothing.
    */
   courseFilter?: CourseFilter | null;
+  /**
+   * Every course with an open session (listSessionCourses). The page passes
+   * it while a course filter is active, because `sessions` then holds only
+   * that course and the other chips would disappear. Omitted otherwise: the
+   * chips come from `sessions`.
+   */
+  courses?: CourseFilter[];
 };
 
 const CHIP =
@@ -109,6 +116,7 @@ export default function SessionBrowser({
   sessions,
   now,
   courseFilter = null,
+  courses,
 }: SessionBrowserProps) {
   const [filters, setFilters] = useState<SessionFilters>(NO_FILTERS);
   const searchId = useId();
@@ -123,11 +131,13 @@ export default function SessionBrowser({
   // (otherwise there would be no chip to clear).
   const courseChips = useMemo(() => {
     const byKey = new Map<string, CourseFilter>();
-    for (const session of sessions) {
-      const course = {
+    const available =
+      courses ??
+      sessions.map((session) => ({
         departmentCode: session.course.departmentCode,
         number: session.course.number,
-      };
+      }));
+    for (const course of available) {
       byKey.set(courseKey(course), course);
     }
     if (courseFilter) byKey.set(courseKey(courseFilter), courseFilter);
@@ -135,7 +145,7 @@ export default function SessionBrowser({
       (a, b) =>
         a.departmentCode.localeCompare(b.departmentCode) || a.number.localeCompare(b.number),
     );
-  }, [sessions, courseFilter]);
+  }, [sessions, courseFilter, courses]);
 
   const showView = (next: SessionView) => {
     const params = new URLSearchParams(searchParams.toString());

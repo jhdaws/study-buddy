@@ -32,7 +32,7 @@ import SessionBrowser from "@/components/SessionBrowser";
 import StudyRequests from "@/components/StudyRequests";
 import { BUTTON_PRIMARY, PAGE_LEAD, PAGE_TITLE } from "@/components/ui/styles";
 import { COURSE_PARAM, parseCourseParam } from "@/lib/session-course";
-import { listDepartments, listSessions } from "@/lib/sessions";
+import { listDepartments, listSessionCourses, listSessions } from "@/lib/sessions";
 import { listStudyRequests } from "@/lib/study-requests";
 
 export const metadata: Metadata = {
@@ -61,15 +61,20 @@ export default async function SessionsPage({ searchParams }: SessionsPageProps) 
 
   const params = await searchParams;
   const course = parseCourseParam(one(params, COURSE_PARAM));
-  // In parallel: three independent reads, and the page shows all three. Run
-  // in series this would be three round trips deep before anything renders.
+  // In parallel: independent reads, and the page shows all of them. Run
+  // in series this would be several round trips deep before anything renders.
   // Promise.all, not allSettled: if any one fails the page's error boundary
   // (./error.tsx) offers a retry, which is better than a list with a silently
   // missing half.
-  const [sessions, requests, departments] = await Promise.all([
+  //
+  // With a course filter the list holds one course, so the chips need the
+  // full set of courses separately (listSessionCourses); without one they
+  // come from the list itself.
+  const [sessions, requests, departments, courses] = await Promise.all([
     listSessions(course ? { course } : {}),
     listStudyRequests(),
     listDepartments(),
+    course ? listSessionCourses() : undefined,
   ]);
   const now = new Date();
 
@@ -89,7 +94,7 @@ export default async function SessionsPage({ searchParams }: SessionsPageProps) 
           </Link>
         </div>
       </div>
-      <SessionBrowser sessions={sessions} now={now} courseFilter={course} />
+      <SessionBrowser sessions={sessions} now={now} courseFilter={course} courses={courses} />
       {/* Below the list on purpose: a student who found their session never
           needs this, and one who did not has just read "no sessions match". */}
       <StudyRequests requests={requests} departments={departments} />

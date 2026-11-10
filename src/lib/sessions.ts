@@ -114,6 +114,11 @@ export type SessionDetail = Omit<SessionListItem, "lat" | "lng"> & {
    * host who edits the topic would silently clear their own location.
    */
   placeId: string;
+  /**
+   * `locations.id` for that place. editSession() reuses it when the host
+   * leaves the place alone, instead of asking Google again (S7 review).
+   */
+  locationId: string;
 };
 
 /** A department for the create-session department picker. */
@@ -192,6 +197,37 @@ export type ListSessionsOptions = {
    */
   course?: CourseFilter;
 };
+
+/**
+ * Every course with an open session that has not ended, sorted by code (US-06).
+ *
+ * The course chips on /sessions are built from the loaded list, which is
+ * fine until a course is picked: then the list holds only that course and
+ * every other chip would vanish. The page asks for this only while a course
+ * filter is active. Same filters as listSessions(), so a chip never leads to
+ * an empty list.
+ */
+export async function listSessionCourses(): Promise<CourseFilter[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("sessions")
+    .select("courses!inner (department_code, number)")
+    .eq("status", "open")
+    .gt("ends_at", "now");
+
+  if (error) {
+    throw new Error(`Could not load the session courses: ${error.message}`);
+  }
+
+  const byKey = new Map<string, CourseFilter>();
+  for (const row of data ?? []) {
+    const course = { departmentCode: row.courses.department_code, number: row.courses.number };
+    byKey.set(`${course.departmentCode}-${course.number}`, course);
+  }
+  return [...byKey.values()].sort(
+    (a, b) => a.departmentCode.localeCompare(b.departmentCode) || a.number.localeCompare(b.number),
+  );
+}
 
 /** Open sessions that have not ended, soonest first (US-03). */
 export async function listSessions(
@@ -281,6 +317,7 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
     .from("sessions")
     .select(
       `id, topic, location_label, room, starts_at, ends_at, capacity, status, host_id,
+       location_id,
        courses!inner (department_code, number, title),
        locations!inner (place_id),
        profiles!sessions_host_id_fkey (display_name),
@@ -325,6 +362,7 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
     hostId: data.host_id,
     attendees,
     placeId: data.locations.place_id,
+    locationId: data.location_id,
   };
 }
 
