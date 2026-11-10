@@ -109,6 +109,10 @@ const RAISED_MESSAGES: Record<string, string> = {
   not_session_host: "Only the host can change or cancel this session.",
   capacity_below_roster:
     "That's fewer seats than the students already coming. Nobody is removed by an edit.",
+  // SEC-05: consume_rate_limit() (*_place_lookup_rate_limit.sql, SQLSTATE
+  // PT429), which createSession() calls before every place lookup.
+  place_lookup_rate_limited:
+    "You've tried a lot of places in the last few minutes. Wait a few minutes, then try again.",
 };
 
 /** SQLSTATE codes with one meaning wherever they come from. */
