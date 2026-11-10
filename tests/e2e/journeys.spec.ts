@@ -144,6 +144,44 @@ test("journey 4: another student opens the session, joins it, and leaves again (
   await expect(roster).not.toContainText("Jordan Joiner");
 });
 
+test("map view (M4, US-03): a student switches the session list to the map and back, and a reload keeps it", async ({
+  page,
+}) => {
+  await signInAsNewStudent(page, newStudentEmail("map"), "Morgan Map", "/sessions");
+
+  // Journey 2's session, at least, is open, so the list -- and the toggle --
+  // are there. The list is the default (ADR 0004).
+  const toggle = page.getByRole("group", { name: "Show sessions as" });
+  const listButton = toggle.getByRole("button", { name: "List" });
+  const mapButton = toggle.getByRole("button", { name: "Map" });
+  await expect(listButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("article").first()).toBeVisible();
+
+  await mapButton.click();
+  await expect(page).toHaveURL("/sessions?view=map");
+  await expect(mapButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("article")).toHaveCount(0);
+
+  // CI builds without NEXT_PUBLIC_GOOGLE_MAPS_API_KEY, so it sees the
+  // fallback. A build with a key shows the map -- or, on a port the key's
+  // referrer restriction refuses (this one, 3100), the fallback again once
+  // Google says so. Either way, never an error page.
+  const mapOrFallback = page
+    .getByRole("region", { name: "Map of study sessions" })
+    .or(page.getByRole("heading", { name: "Map unavailable" }));
+  await expect(mapOrFallback).toBeVisible();
+
+  // The view is in the URL, so it survives a reload.
+  await page.reload();
+  await expect(mapButton).toHaveAttribute("aria-pressed", "true");
+  await expect(mapOrFallback).toBeVisible();
+
+  await listButton.click();
+  await expect(page).toHaveURL("/sessions");
+  await expect(listButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("article").first()).toBeVisible();
+});
+
 test("returning student (A6): signs back in with email and password, and no email is sent", async ({
   page,
 }) => {

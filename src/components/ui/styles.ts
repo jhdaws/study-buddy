@@ -48,6 +48,12 @@ export const LINK =
 /** A white panel with a hairline border -- lists, form sections. */
 export const PANEL = "rounded-2xl border border-line bg-white";
 
+/**
+ * The session map's height (M4), shared with its loading box so nothing jumps
+ * when the map arrives. Most of a phone screen, never the whole of a desktop.
+ */
+export const MAP_HEIGHT = "h-[min(60vh,560px)] min-h-80";
+
 export const PAGE_TITLE = "text-[28px] leading-tight font-bold tracking-tight text-ink";
 export const PAGE_LEAD = "mt-1 text-[15px] text-ink-2";
 export const SECTION_TITLE = "text-[17px] font-bold text-ink";
