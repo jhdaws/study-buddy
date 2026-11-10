@@ -160,3 +160,34 @@ database, has RLS switched on everywhere, that the generated files are
 current, that the form rules behave, and that the screens render fixture
 data as intended — nothing more. Say that plainly in the report rather than letting
 "CI passing" do unearned work.
+
+## Security fixes (Sprint 4, #129)
+
+What each fix is proven to do, and what is still assumed. Severity, threat and
+evidence are in [`security/findings.md`](./security/findings.md).
+
+- **SEC-03 (T5), catalogue insert limit.** *Verified* in real Postgres
+  (`tests/db/catalogue-insert-limit.test.ts`): a direct insert past 10 an hour
+  or 30 a day is refused with `PT429`; students are counted separately; the
+  window rolls; backdating `created_at` is ignored; `get_or_create_course` still
+  resolves existing courses at the limit; two concurrent inserts cannot share
+  the last slot. HTTP 429 through PostgREST was checked by hand once.
+- **SEC-05 (T8), place lookup limit.** *Verified* in real Postgres
+  (`tests/db/place-lookup-rate-limit.test.ts`): the 21st call in 10 minutes is
+  refused, students are counted separately, the window rolls, unknown buckets
+  are refused. Unit tests: `createSession()` and `editSession()` never call
+  Google once refused, or when the check itself fails.
+- **SEC-09 (T12), security log.** *Verified* by unit tests at every call site
+  (password, code and link sign-in; join; create; edit; cancel): one line is
+  written, and the password, code, token hash, address and Postgres text never
+  appear. Seen in a real server log during `npm run test:e2e`.
+  *Not covered:* alerting, and how long Vercel keeps the logs.
+- **SEC-10 (T13), security headers.** *Verified* by unit tests
+  (`security-headers.test.ts`, `src/proxy.test.ts`) and e2e: the headers are
+  present, and every journey fails on a CSP refusal (mutation-checked). The live
+  map, the place picker and realtime were checked by hand in Chromium under the
+  production CSP. *Assumed:* Safari and Firefox, Vercel's own headers (HSTS),
+  and Maps features we did not open (Street View, user photos).
+- **BUG-19, Google key pair.** *Verified* by running `next.config.ts` with each
+  combination of the two keys; a Vercel production build with only one fails.
+
