@@ -224,6 +224,32 @@ describe("listSessions", () => {
 
     await expect(listSessions()).rejects.toThrow(/connection terminated/);
   });
+
+  // US-06: the course filter is the reason this function takes options. The
+  // assertion is on the REQUEST -- a mock can return any rows, so the only
+  // way to see that the database was asked for one course is to look at the
+  // filters. Ticket: "src/lib/sessions.test.ts asserts the exact query".
+  it("asks the database for one course when a course filter is set", async () => {
+    respond([]);
+    await listSessions({ course: { departmentCode: "CS", number: "3251" } });
+
+    expect(calls.filter((call) => call.method === "eq").map((call) => call.args)).toEqual([
+      ["status", "open"],
+      ["courses.department_code", "CS"],
+      ["courses.number", "3251"],
+    ]);
+  });
+
+  it("does not add course filters when none were asked for", async () => {
+    respond([]);
+    await listSessions();
+
+    // Only the status filter -- a stray courses.* eq would silently narrow
+    // every unfiltered visit.
+    expect(calls.filter((call) => call.method === "eq").map((call) => call.args)).toEqual([
+      ["status", "open"],
+    ]);
+  });
 });
 
 // S6 (#52). Ids are uuids in the 4/8 variant, which is what Postgres hands out.

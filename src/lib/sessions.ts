@@ -23,8 +23,11 @@
 
 import "server-only";
 
+import type { CourseFilter } from "@/lib/session-course";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeCourseNumber, normalizeDepartmentCode } from "@/lib/validation";
+
+export type { CourseFilter };
 
 // ---------------------------------------------------------------------------
 // Types -- what the UI reads. Deliberately not database rows: camelCase,
@@ -171,13 +174,32 @@ export const COURSE_SUGGESTION_LIMIT = 8;
 //     "Watch"). The query runs through the cookie-bound client, so S1's
 //     policies apply as the signed-in user; signed out it returns nothing,
 //     which is checked in tests/db/session-lists.test.ts.
+//
+//   - The optional course filter (US-06) is applied HERE, on the embedded
+//     `courses` columns, not afterwards in the browser. Filtering a result
+//     the page already has cannot drop sessions that were never loaded; the
+//     URL is what makes a filtered view shareable. `courses.department_code`
+//     / `courses.number` are PostgREST's embed filters -- they need the
+//     `!inner` above or a missing course would quietly leave the session in.
 // ===========================================================================
 
+/** Options for listSessions(). All optional; omit for the unfiltered list. */
+export type ListSessionsOptions = {
+  /**
+   * Restrict to one course (US-06). From `?course=CS-3251` via
+   * parseCourseParam(); never a free-text string -- the parser has already
+   * normalised and validated it.
+   */
+  course?: CourseFilter;
+};
+
 /** Open sessions that have not ended, soonest first (US-03). */
-export async function listSessions(): Promise<SessionListItem[]> {
+export async function listSessions(
+  options: ListSessionsOptions = {},
+): Promise<SessionListItem[]> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("sessions")
     .select(
       `id, topic, location_label, room, starts_at, ends_at, capacity,
@@ -187,8 +209,18 @@ export async function listSessions(): Promise<SessionListItem[]> {
        session_attendees (count)`,
     )
     .eq("status", "open")
-    .gt("ends_at", "now")
-    .order("starts_at", { ascending: true });
+    .gt("ends_at", "now");
+
+  if (options.course) {
+    // Embed filters: PostgREST applies these to the joined courses row.
+    // Two eq() calls, not an or(), because both halves of the course must
+    // match -- "CS" alone would return every CS session.
+    query = query
+      .eq("courses.department_code", options.course.departmentCode)
+      .eq("courses.number", options.course.number);
+  }
+
+  const { data, error } = await query.order("starts_at", { ascending: true });
 
   if (error) {
     throw new Error(`Could not load the session list: ${error.message}`);
