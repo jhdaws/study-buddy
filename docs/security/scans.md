@@ -16,7 +16,7 @@ give it a comment saying why, and add a row here.
 | --- | --- | --- | --- | --- |
 | npm audit | npm 10.9, bundled with Node 22 (local run: Node 22.23.4, npm 10.9.9) | `npm audit --omit=dev --audit-level=high` | any High or Critical advisory | the production tree of `package-lock.json`. It needs no install. |
 | Semgrep CE | 1.184.0 (`pipx install semgrep==1.184.0`) | `semgrep scan --metrics=off --config p/javascript --config p/typescript --config p/react --config p/nextjs --json-output=…`, then `jq` counts the results with `extra.severity == "ERROR"` | any ERROR finding. WARNING and INFO findings are printed but do not fail the job. | the 97 JS/TS files git tracks. Semgrep's default ignore skips `tests/` (13 files); the colocated `src/**/*.test.ts` files are scanned. |
-| gitleaks | 8.30.1 (release tarball, SHA-256 checked) | `gitleaks git --redact --verbose --exit-code 1 .`, after `actions/checkout` with `fetch-depth: 0` | any finding | every commit on every branch and tag. The local run covered 95 non-merge commits on 36 branches and the tag `sprint3`. Merge commits carry no patch, so there is nothing in them to scan. |
+| gitleaks | 8.30.1 (release tarball, SHA-256 checked) | `gitleaks git --log-opts=HEAD --redact --verbose --exit-code 1 .`, after `actions/checkout` with `fetch-depth: 0` | any finding | the full history of what the run checks: main on a push, the PR merged into main on a pull request (scope narrowed from `--all` on 2026-11-10, BUG-18). The local run covered 95 non-merge commits on 36 branches and the tag `sprint3`. Merge commits carry no patch, so there is nothing in them to scan. |
 
 I also checked that each gate fails when it should:
 - `npm audit` exits 1 on main's lockfile.
@@ -88,7 +88,17 @@ limits:
 
 ### gitleaks
 
-There were no findings, so there is no `.gitleaksignore`.
+The first scan had no findings. On 2026-11-10, after #88 merged, `main` went red with 3 findings, all in commit `82741f4` on the M2 picker branch (#96), not on `main`:
+
+| Location (commit 82741f4) | Rule | Triage |
+| --- | --- | --- |
+| `src/lib/validation.test.ts:276` | generic-api-key | **False positive.** A made-up Places Autocomplete session token in a test. Session tokens are random strings the browser generates per search; they grant nothing. |
+| `src/app/sessions/actions.test.ts:120` | generic-api-key | False positive: the same made-up token. |
+| `src/lib/places.test.ts:121` | generic-api-key | False positive: the same made-up token. |
+
+They are listed in `.gitleaksignore` with that reason. Two lessons:
+- **Scope.** With `fetch-depth: 0`, gitleaks' default (`--all`) scanned every open branch, so one branch's test value failed `main` and every PR (BUG-18). The step now passes `--log-opts=HEAD`: the full history of what that run checks.
+- **Fingerprints are per commit.** If #96 is rebased, its commit hashes change and the three entries must be redone.
 
 **SEC-01 (T1): gitleaks does not catch the demo password.** The old demo password for
 `njpm@vanderbilt.edu` is a six-digit number. It appears at `HANDOFF.md` lines 354, 382 and 393

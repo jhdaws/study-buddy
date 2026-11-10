@@ -1,0 +1,10 @@
+# gitleaks suppressions. Each needs a reason (Sprint 4 brief; docs/security/scans.md).
+# A fingerprint is commit:file:rule:line, so it covers exactly one historical line.
+# If a branch with a listed commit is rebased, the hash changes and the entry must be redone.
+
+# M2 (#96), commit 82741f4: a made-up Places Autocomplete session token in three tests.
+# Session tokens are random strings the browser generates per search; they grant
+# nothing and are not secrets, but this one is random enough for generic-api-key.
+82741f456cd95a03bde6620197ef5d6a827dc4e5:src/lib/validation.test.ts:generic-api-key:276
+82741f456cd95a03bde6620197ef5d6a827dc4e5:src/app/sessions/actions.test.ts:generic-api-key:120
+82741f456cd95a03bde6620197ef5d6a827dc4e5:src/lib/places.test.ts:generic-api-key:121
