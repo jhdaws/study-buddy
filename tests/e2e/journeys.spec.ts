@@ -59,6 +59,13 @@ test("security headers (SEC-10): a page carries the CSP and the other headers, a
     .evaluateAll((scripts) => scripts.map((script) => (script as HTMLScriptElement).nonce));
   expect(scriptNonces.length).toBeGreaterThan(0);
   expect(new Set(scriptNonces)).toEqual(new Set([nonce]));
+  // The Maps API copies its <style> nonce from the first style[nonce]
+  // (src/app/layout.tsx); CI has no Maps key, so check the carrier itself.
+  const styleNonce = await page
+    .locator("style[nonce]")
+    .first()
+    .evaluate((style) => (style as HTMLStyleElement).nonce);
+  expect(styleNonce).toBe(nonce);
 
   // And the scripts ran: this switch is client-side state.
   await page.getByRole("button", { name: "Get a sign-in code by email" }).click();
