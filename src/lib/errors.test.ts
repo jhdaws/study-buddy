@@ -5,6 +5,7 @@ import {
   CODE_REJECTED_MESSAGE,
   databaseErrorMessage,
   GENERIC_ERROR_MESSAGE,
+  mapUnavailableMessage,
   PASSWORD_REJECTED_MESSAGE,
   passwordSignInErrorMessage,
   PLACE_SEARCH_BUSY_MESSAGE,
@@ -304,3 +305,22 @@ describe("setPasswordErrorMessage (A6)", () => {
   });
 });
 
+
+describe("mapUnavailableMessage (M4)", () => {
+  it("points every reason at the list, which always works", () => {
+    for (const reason of ["not_configured", "load_failed"] as const) {
+      expect(mapUnavailableMessage(reason)).toMatch(/list/);
+    }
+  });
+
+  it("tells a load failure apart from a deployment without a map", () => {
+    expect(mapUnavailableMessage("load_failed")).toMatch(/reload/);
+    expect(mapUnavailableMessage("not_configured")).not.toMatch(/reload/);
+  });
+
+  it("never mentions keys, referrers or Google's error codes", () => {
+    for (const reason of ["not_configured", "load_failed"] as const) {
+      expect(mapUnavailableMessage(reason)).not.toMatch(/key|referr|billing|RefererNotAllowed|ApiNotActivated/i);
+    }
+  });
+});
