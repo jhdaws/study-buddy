@@ -313,9 +313,11 @@ describe("A01: a signed-out visitor with the public anon key", () => {
     expect(sessions.error).toBeUndefined();
     expect(sessions.rows).toEqual([]);
 
+    // Live roster revokes anon on session_attendees (same pattern as A2 on
+    // profiles): Realtime does not apply RLS to DELETE events, so a grant
+    // would leak leave payloads to signed-out listeners.
     const attendees = await as(null, () => attempt("select user_id from public.session_attendees"));
-    expect(attendees.error).toBeUndefined();
-    expect(attendees.rows).toEqual([]);
+    expect(attendees.error?.code).toBe("42501");
 
     const profiles = await as(null, () => attempt("select id from public.profiles"));
     expect(profiles.error?.code).toBe("42501");
