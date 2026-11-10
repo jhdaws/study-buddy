@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { safeNext } from "@/lib/safe-next";
 
 import {
+  confirmSignIn,
   saveDisplayName,
   setPassword,
   signIn,
@@ -203,6 +204,53 @@ describe("verifyCode", () => {
     expect(state.formError).toMatch(/didn't work/);
     expect(state.formError).not.toMatch(/Token/);
     expect(state.values?.code).toBe("123456");
+  });
+});
+
+describe("confirmSignIn (the button on /login/continue, A7)", () => {
+  const link = (entries: Record<string, string> = {}) =>
+    form({ token_hash: "abc123", type: "email", next: "/sessions/new", ...entries });
+
+  it("spends the token only when asked, then goes on via the name and password steps", async () => {
+    auth.verifyOtp.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    const path = await redirectOf(confirmSignIn(link()));
+
+    expect(auth.verifyOtp).toHaveBeenCalledWith({ type: "email", token_hash: "abc123" });
+    expect(server.pathAfterSignIn).toHaveBeenCalledWith(
+      expect.anything(),
+      { id: "u1" },
+      "/sessions/new",
+      { choosePassword: true },
+    );
+    expect(path).toBe("/sessions/new");
+  });
+
+  it("sends a used or expired link back to /login with the error flag, keeping next", async () => {
+    auth.verifyOtp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { code: "otp_expired", status: 403, message: "Email link is invalid or has expired" },
+    });
+    const path = new URL(await redirectOf(confirmSignIn(link())), "https://x.example");
+
+    expect(path.pathname).toBe("/login");
+    expect(path.searchParams.get("error")).toBe("link");
+    expect(path.searchParams.get("next")).toBe("/sessions/new");
+    expect(path.search).not.toMatch(/expired|invalid/i);
+  });
+
+  it.each([
+    ["no token", { token_hash: "" }],
+    ["a type we never send", { type: "recovery" }],
+  ])("refuses %s without calling Supabase", async (_case, entries) => {
+    const path = await redirectOf(confirmSignIn(link(entries)));
+    expect(auth.verifyOtp).not.toHaveBeenCalled();
+    expect(path).toBe("/login?error=link&next=%2Fsessions%2Fnew");
+  });
+
+  it("never redirects off-site", async () => {
+    auth.verifyOtp.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    const path = await redirectOf(confirmSignIn(link({ next: "https://evil.example" })));
+    expect(path).toBe("/sessions");
   });
 });
 

@@ -20,9 +20,9 @@
  *      replaces this one.
  *   2. CODE -- "Check your inbox", naming the address, with a field for the
  *      one-time code from the email: `useActionState(verifyCode, {})`,
- *      which redirects on success. The same email has a link that signs in
- *      without the code; why both, and the catch (they are one token), is
- *      at verifyCode() in src/app/login/actions.ts. "Use a different email"
+ *      which redirects on success. The same email has a link to
+ *      /auth/confirm that signs in without the code. They are one token:
+ *      whichever is used first works, and the other then fails. "Use a different email"
  *      goes back to step 1 without a round trip. "Resend code" posts the
  *      same address to signIn again, after a countdown.
  *
@@ -372,10 +372,10 @@ function CodeStep({
       </h1>
       {/* role="status" so a screen reader announces the change of step. */}
       <p role="status" className="mt-2 mb-6 text-center text-base text-white/80">
-        We sent a sign-in code to{" "}
+        We sent a sign-in link and code to{" "}
         <strong className="block font-bold text-white [overflow-wrap:anywhere]">{email}</strong>
         <span className="mt-1 block text-sm text-white/72">
-          Enter the code from that email below.
+          Tap the link in that email, or enter its code below.
         </span>
       </p>
 
@@ -476,7 +476,7 @@ function CodeStep({
         </button>
       </div>
       <p className="mt-2 border-t border-white/10 pt-4 text-center text-sm text-white/72">
-        Codes work once, for an hour.
+        Links and codes work once, for 10 minutes.
       </p>
     </section>
   );

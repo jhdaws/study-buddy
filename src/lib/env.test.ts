@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { googleMapsServerKey, supabaseEnv, supabaseSecretKey } from "./env";
+import {
+  DEMO_MAP_ID,
+  googleMapsMapId,
+  googleMapsServerKey,
+  optionalGoogleMapsBrowserKey,
+  supabaseEnv,
+  supabaseSecretKey,
+} from "./env";
 
 const URL_VAR = "NEXT_PUBLIC_SUPABASE_URL";
 const KEY_VAR = "NEXT_PUBLIC_SUPABASE_ANON_KEY";
@@ -40,6 +47,34 @@ describe("googleMapsServerKey", () => {
     vi.stubEnv("GOOGLE_MAPS_SERVER_API_KEY", "");
 
     expect(() => googleMapsServerKey()).toThrow("GOOGLE_MAPS_SERVER_API_KEY");
+  });
+});
+
+describe("optionalGoogleMapsBrowserKey (M4)", () => {
+  it("returns the key when set", () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", "test-browser-key");
+
+    expect(optionalGoogleMapsBrowserKey()).toBe("test-browser-key");
+  });
+
+  it("returns null rather than throwing when unset, so the map can fall back", () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", "");
+
+    expect(optionalGoogleMapsBrowserKey()).toBeNull();
+  });
+});
+
+describe("googleMapsMapId (M4)", () => {
+  it("returns the configured map ID", () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID", "test-map-id");
+
+    expect(googleMapsMapId()).toBe("test-map-id");
+  });
+
+  it("falls back to Google's demo map ID", () => {
+    vi.stubEnv("NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID", "");
+
+    expect(googleMapsMapId()).toBe(DEMO_MAP_ID);
   });
 });
 

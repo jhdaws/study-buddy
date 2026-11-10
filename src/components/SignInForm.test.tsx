@@ -205,7 +205,7 @@ describe("<SignInForm> code step", () => {
     expect(hidden("email")?.value).toBe("jane@vanderbilt.edu");
     expect(hidden("next")?.value).toBe("/sessions/new");
     // Both ways in are explained.
-    expect(screen.getByRole("status").textContent).toMatch(/Enter the code from that email below/);
+    expect(screen.getByRole("status").textContent).toMatch(/Tap the link in that email, or enter its code below/);
   });
 
   it("submits email, code and next to verifyCode", async () => {
