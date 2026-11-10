@@ -81,6 +81,7 @@ beforeEach(() => {
   places.resolvePlace.mockResolvedValue({ locationId: "loc-1" });
   rpcReplies({ data: "course-1", error: null }, { data: { id: "s1" }, error: null });
   vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -299,5 +300,105 @@ describe("leaveSession: database refusals", () => {
 
     expect(state).toEqual({ error: "As the host, you can't leave — cancel the session instead." });
     expect(cache.revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The security log (SEC-09, src/lib/security-log.ts): one line per refused
+// join or create, with the name the refusal was mapped by -- never
+// Postgres's own text. (console.error above keeps that, for debugging.)
+// ---------------------------------------------------------------------------
+
+const USER = "0b6f7a52-3c1d-4e2f-9a8b-7c6d5e4f3a2b";
+const SESSION = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
+
+/** The one security line logged, parsed. */
+function securityLine(): Record<string, string> {
+  expect(console.warn).toHaveBeenCalledTimes(1);
+  const args = vi.mocked(console.warn).mock.calls[0];
+  expect(args).toHaveLength(1);
+  return JSON.parse(args[0] as string);
+}
+
+describe("security log (SEC-09)", () => {
+  beforeEach(() => {
+    server.requireUser.mockResolvedValue({ id: USER, displayName: "Priya" });
+  });
+
+  it("logs a refused join once, with the mapped reason, the student and the session", async () => {
+    server.rpc.mockResolvedValue({ data: null, error: { code: "P0001", message: "session_full" } });
+    await joinSession(SESSION, {}, new FormData());
+
+    expect(securityLine()).toMatchObject({
+      log: "security",
+      event: "session_join_refused",
+      reason: "session_full",
+      userId: USER,
+      sessionId: SESSION,
+    });
+  });
+
+  it("logs an unmapped join failure by its SQLSTATE, never Postgres's text", async () => {
+    server.rpc.mockResolvedValue({
+      data: null,
+      error: { code: "55P03", message: 'could not obtain lock on row in relation "sessions"' },
+    });
+    await joinSession(SESSION, {}, new FormData());
+
+    expect(securityLine().reason).toBe("sqlstate_55p03");
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toMatch(/lock|relation/);
+  });
+
+  it("logs nothing for a join that worked", async () => {
+    server.rpc.mockResolvedValue({ data: null, error: null });
+    await joinSession(SESSION, {}, new FormData());
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it("logs a refused place once, with the place's reason", async () => {
+    places.resolvePlace.mockRejectedValue(new PlaceError("outside_campus", "ChIJN1t_tDeuEmsRUsoyG83frY4"));
+    await createSession({}, form());
+
+    expect(securityLine()).toMatchObject({
+      event: "session_create_refused",
+      reason: "outside_campus",
+      userId: USER,
+    });
+  });
+
+  it("logs a refused course once, by the raised name", async () => {
+    rpcReplies({ data: null, error: { code: "P0001", message: "invalid_course_number" } }, null);
+    await createSession({}, form());
+    expect(securityLine()).toMatchObject({ event: "session_create_refused", reason: "invalid_course_number" });
+  });
+
+  it("logs a refused session once, by constraint name, never Postgres's text or the form", async () => {
+    rpcReplies(
+      { data: "course-1", error: null },
+      {
+        data: null,
+        error: {
+          code: "23514",
+          message: 'new row for relation "sessions" violates check constraint "sessions_capacity_min"',
+          details: "Failing row contains (Design patterns review, …).",
+        },
+      },
+    );
+    await createSession({}, form());
+
+    expect(securityLine()).toMatchObject({
+      event: "session_create_refused",
+      reason: "sessions_capacity_min",
+      userId: USER,
+    });
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toMatch(
+      /violates|Failing row|Design patterns/,
+    );
+  });
+
+  it("logs nothing for a session that was created, or a form refused before the database", async () => {
+    await redirectOf(createSession({}, form()));
+    await createSession({}, form({ capacity: "1" }));
+    expect(console.warn).not.toHaveBeenCalled();
   });
 });

@@ -15,8 +15,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { databaseErrorMessage, type DatabaseErrorLike } from "@/lib/errors";
+import { databaseErrorMessage, databaseErrorReason, type DatabaseErrorLike } from "@/lib/errors";
 import { PlaceError, resolvePlace } from "@/lib/places";
+import { logSecurityEvent } from "@/lib/security-log";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import {
   createSessionSchema,
@@ -46,7 +47,7 @@ export async function createSession(
   _prev: CreateSessionState,
   formData: FormData,
 ): Promise<CreateSessionState> {
-  await requireUser();
+  const user = await requireUser();
 
   const parsed = createSessionSchema().safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
@@ -58,6 +59,7 @@ export async function createSession(
     ({ locationId } = await resolvePlace(parsed.data.placeId));
   } catch (error) {
     if (error instanceof PlaceError) {
+      logSecurityEvent({ event: "session_create_refused", reason: error.reason, userId: user.id });
       return {
         fieldErrors: { placeId: [error.message] },
         values: formValues(formData),
@@ -78,7 +80,7 @@ export async function createSession(
     },
   );
   if (courseError) {
-    return databaseFailure("get_or_create_course", courseError, formData);
+    return databaseFailure("get_or_create_course", courseError, formData, user.id);
   }
 
   // S1's create_session: inserts the session and the host as an attendee in
@@ -99,7 +101,7 @@ export async function createSession(
     capacity: parsed.data.capacity,
   });
   if (sessionError) {
-    return databaseFailure("create_session", sessionError, formData);
+    return databaseFailure("create_session", sessionError, formData, user.id);
   }
 
   redirect("/sessions");
@@ -128,12 +130,19 @@ export async function joinSession(
   _prev: SessionActionState,
   _formData: FormData,
 ): Promise<SessionActionState> {
-  await requireUser();
+  const user = await requireUser();
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("join_session", { session_id: sessionId });
   if (error) {
     console.error("joinSession: join_session failed", { code: error.code, message: error.message });
+    // SEC-09: e.g. session_full, already_joined -- the name, not the text.
+    logSecurityEvent({
+      event: "session_join_refused",
+      reason: databaseErrorReason(error),
+      userId: user.id,
+      sessionId,
+    });
     return { error: databaseErrorMessage(error) };
   }
 
@@ -168,13 +177,16 @@ export async function leaveSession(
 
 /**
  * The student sees our own message; the server log keeps Postgres's code
- * and text, so a generic "Something went wrong" can still be traced.
+ * and text, so a generic "Something went wrong" can still be traced. The
+ * security log (SEC-09) gets only the name the error was mapped by.
  */
 function databaseFailure(
   rpc: string,
   error: DatabaseErrorLike,
   formData: FormData,
+  userId: string,
 ): CreateSessionState {
   console.error(`createSession: ${rpc} failed`, { code: error.code, message: error.message });
+  logSecurityEvent({ event: "session_create_refused", reason: databaseErrorReason(error), userId });
   return { formError: databaseErrorMessage(error), values: formValues(formData) };
 }
