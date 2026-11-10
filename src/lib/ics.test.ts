@@ -15,6 +15,8 @@ const session: SessionListItem = {
   topic: "Dynamic programming",
   locationLabel: "Central Library",
   room: "418",
+  lat: 36.1452,
+  lng: -86.8006,
   startsAt: "2026-10-01T19:30:00.000Z",
   endsAt: "2026-10-01T21:00:00.000Z",
   capacity: 6,
