@@ -451,6 +451,46 @@ describe("editSession", () => {
     );
   });
 
+  it("reuses the stored location, without asking Google, when the place is unchanged", async () => {
+    sessions.getSession.mockResolvedValue({
+      id: "s1",
+      startsAt: new Date(Date.now() + HOUR).toISOString(),
+      placeId: "ChIJN1t_tDeuEmsRUsoyG83frY4",
+      locationId: "stored-loc",
+    });
+
+    expect(await redirectOf(editSession("s1", {}, form()))).toBe("/sessions/s1");
+
+    expect(places.resolvePlace).not.toHaveBeenCalled();
+    // Nothing to look up, so nothing spent from the SEC-05 budget either.
+    expect(rateLimit.consumeRateLimit).not.toHaveBeenCalled();
+    expect(server.rpc).toHaveBeenCalledWith(
+      "update_session",
+      expect.objectContaining({ p_location_id: "stored-loc" }),
+    );
+  });
+
+  it("looks up a newly picked place, passing the picker's session token", async () => {
+    sessions.getSession.mockResolvedValue({
+      id: "s1",
+      startsAt: new Date(Date.now() + HOUR).toISOString(),
+      placeId: "ChIJ-a-different-place-0000",
+      locationId: "stored-loc",
+    });
+    // Low-entropy on purpose: a random-looking one trips gitleaks (BUG-18).
+    const token = "edit-test-session-token";
+
+    await redirectOf(editSession("s1", {}, form({ placeSessionToken: token })));
+
+    expect(places.resolvePlace).toHaveBeenCalledWith("ChIJN1t_tDeuEmsRUsoyG83frY4", {
+      sessionToken: token,
+    });
+    expect(server.rpc).toHaveBeenCalledWith(
+      "update_session",
+      expect.objectContaining({ p_location_id: "loc-1" }),
+    );
+  });
+
   it("revalidates the session page and the list", async () => {
     await redirectOf(editSession("s1", {}, form()));
 
@@ -727,7 +767,10 @@ describe("requestSession", () => {
     expect(server.from).not.toHaveBeenCalled();
   });
 
-  it("explains a second ask for the same course in the student's words", async () => {
+  it("treats a duplicate from a racing second ask as success: the request exists", async () => {
+    // A double tap or a second tab can insert between this call's delete and
+    // its insert. The unique violation then means the student's request is
+    // there, which is what they asked for.
     tableReplies({
       onInsert: {
         error: {
@@ -740,9 +783,17 @@ describe("requestSession", () => {
 
     const state = await requestSession({}, askForm());
 
-    // Reachable from two tabs even though the action deletes first.
-    expect(state.formError).toBe("You've already asked for this course. Classmates can see it.");
-    // The form comes back filled in, not blank.
+    expect(state).toEqual({});
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/sessions");
+  });
+
+  it("stops before inserting when clearing the earlier ask fails", async () => {
+    tableReplies({ onDelete: { error: { code: "42P01", message: "relation does not exist" } } });
+
+    const state = await requestSession({}, askForm());
+
+    expect(state.formError).toBe("Something went wrong on our side. Try again in a moment.");
+    expect(tableCalls.some((call) => call.method === "insert")).toBe(false);
     expect(state.values?.courseNumber).toBe("3251");
   });
 

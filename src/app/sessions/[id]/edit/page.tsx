@@ -80,9 +80,9 @@ export default async function EditSessionPage({ params }: { params: Promise<{ id
       </Link>
       <h1 className={PAGE_TITLE}>Edit your session</h1>
       <p className={`${PAGE_LEAD} mb-6`}>
-        Everyone on the roster sees the change straight away. Lowering the
-        seats below the students already coming isn&apos;t possible — nobody is
-        removed by an edit.
+        Everyone on the roster sees the change next time they open the
+        session. Lowering the seats below the students already coming
+        isn&apos;t possible — nobody is removed by an edit.
       </p>
 
       <CreateSessionForm

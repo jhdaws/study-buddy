@@ -8,6 +8,7 @@ import {
   listDepartments,
   listMySessions,
   listPastSessions,
+  listSessionCourses,
   listSessions,
   PAST_SESSIONS_LIMIT,
   searchCourses,
@@ -721,3 +722,35 @@ describe("listPastSessions (US-15)", () => {
   });
 });
 
+describe("listSessionCourses (US-06 chips)", () => {
+  it("returns each course with an open session once, sorted by code", async () => {
+    respond([
+      { courses: { department_code: "MATH", number: "2300" } },
+      { courses: { department_code: "CS", number: "3251" } },
+      { courses: { department_code: "CS", number: "3251" } },
+      { courses: { department_code: "CS", number: "2201" } },
+    ]);
+
+    expect(await listSessionCourses()).toEqual([
+      { departmentCode: "CS", number: "2201" },
+      { departmentCode: "CS", number: "3251" },
+      { departmentCode: "MATH", number: "2300" },
+    ]);
+  });
+
+  it("applies the same open-and-not-ended filters as listSessions()", async () => {
+    respond([]);
+    await listSessionCourses();
+
+    expect(callTo("from")).toEqual(["sessions"]);
+    expect(calls.filter((call) => call.method === "eq").map((call) => call.args)).toEqual([
+      ["status", "open"],
+    ]);
+    expect(callTo("gt")).toEqual(["ends_at", "now"]);
+  });
+
+  it("throws rather than returning an empty list when the read fails", async () => {
+    respond(null, { message: "boom" });
+    await expect(listSessionCourses()).rejects.toThrow("Could not load the session courses");
+  });
+});
