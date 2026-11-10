@@ -251,17 +251,17 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# A1 (#14): the sign-in email -- a one-time code only (the link was dropped 2026-10-12).
+# A1 (#14): the sign-in email -- a link to /auth/confirm (token_hash) plus the same one-time code (2026-11-09).
 # signInWithOtp() sends "magic_link" to an existing user and "confirmation" to a new one, so
 # both use the same template. The hosted project needs the same HTML pasted into its dashboard
 # (supabase/README.md, "Hosted auth settings (A1)"); this file is the source for both.
 # Local emails land in Mailpit: http://127.0.0.1:54324
 [auth.email.template.magic_link]
-subject = "Your Study Buddy sign-in code"
+subject = "Your Study Buddy sign-in link"
 content_path = "./supabase/templates/magic_link.html"
 
 [auth.email.template.confirmation]
-subject = "Your Study Buddy sign-in code"
+subject = "Your Study Buddy sign-in link"
 content_path = "./supabase/templates/magic_link.html"
 
 # Uncomment to customize email template
