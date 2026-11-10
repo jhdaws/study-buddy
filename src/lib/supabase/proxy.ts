@@ -2,7 +2,7 @@
 // matched request.
 //
 // 1. Refresh the Supabase session cookie (getUser() triggers it).
-// 2. Signed out and asking for a page under /sessions: redirect to
+// 2. Signed out and asking for a page under /sessions or /account: redirect to
 //    /login?next=<that path> (A4, #17). Only GET and HEAD -- a POST is a
 //    Server Action, which checks for itself with requireUser() and redirects
 //    properly; a proxy redirect would turn it into a broken fetch.
@@ -32,7 +32,13 @@ import { loginPath, REQUEST_PATH_HEADER } from "@/lib/safe-next";
 
 /** Pages a signed-out visitor is sent to /login from. */
 export function isProtectedPath(pathname: string): boolean {
-  return pathname === "/sessions" || pathname.startsWith("/sessions/");
+  return (
+    pathname === "/sessions" ||
+    pathname.startsWith("/sessions/") ||
+    // US-24: /account/delete, and any later account page.
+    pathname === "/account" ||
+    pathname.startsWith("/account/")
+  );
 }
 
 export async function updateSession(request: NextRequest) {

@@ -550,3 +550,64 @@ test("course filter (US-06, S8): filtering by course keeps only that course, and
   await expect(page.locator("article").filter({ hasText: topicA })).toBeVisible();
   await expect(page.locator("article").filter({ hasText: topicB })).toBeVisible();
 });
+
+test("delete my account (US-24): the account and its data go, hosted sessions are cancelled, the password stops working", async ({
+  page,
+}) => {
+  const email = newStudentEmail("delete");
+  await signInAsNewStudent(page, email, "Dana Delete");
+
+  // Host a session first, so there is something deleting must cancel.
+  const topic = `E2E deletion journey ${Date.now()}`;
+  await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
+  await page.getByLabel("Course number").fill("3251");
+  await page.getByLabel("What are you studying?").fill(topic);
+  await chooseByKeyboard(page.getByLabel("Place"), "Feath", "ChIJ-FAKE-featheringill-hall");
+  await page.getByLabel("Starts").fill(campusTime(2));
+  await page.getByLabel("Ends").fill(campusTime(4));
+  await page.getByLabel("How many people, including you?").fill("4");
+  await page.getByRole("button", { name: "Create session" }).click();
+  await expect(page).toHaveURL("/sessions");
+
+  // From the account sheet to the confirm step, which says what goes.
+  await page.getByRole("button", { name: "Account" }).click();
+  await page.getByRole("link", { name: "Delete my account" }).click();
+  await expect(page).toHaveURL("/account/delete");
+  await expect(page.getByRole("heading", { name: "What's deleted" })).toBeVisible();
+
+  // Nothing happens without the box ticked.
+  await page.getByRole("button", { name: "Delete my account" }).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("Tick the box");
+  await expect(page).toHaveURL("/account/delete");
+
+  await page.getByLabel(/can't be recovered/).check();
+  await page.getByRole("button", { name: "Delete my account" }).click();
+  await expect(page).toHaveURL("/?account=deleted");
+  await expect(page.getByRole("status").filter({ hasText: "have been deleted" })).toBeVisible();
+  // Signed out on this device.
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+  await page.goto("/sessions");
+  await expect(page).toHaveURL(/\/login/);
+
+  // In the database: no account, no profile, and the hosted session cancelled
+  // with no host ("Deleted user") -- the trigger, in the same transaction.
+  const db = await connect();
+  try {
+    const { rows: users } = await db.query("select 1 from auth.users where email = $1", [email]);
+    expect(users).toEqual([]);
+    const { rows: sessions } = await db.query<{ status: string; host_id: string | null }>(
+      "select status, host_id from public.sessions where topic = $1",
+      [topic],
+    );
+    expect(sessions).toEqual([{ status: "cancelled", host_id: null }]);
+  } finally {
+    await db.end();
+  }
+
+  // The old password no longer signs anyone in.
+  await page.goto("/login");
+  await page.getByLabel("Vanderbilt email").fill(email);
+  await page.getByLabel("Password").fill(E2E_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("don't match");
+});

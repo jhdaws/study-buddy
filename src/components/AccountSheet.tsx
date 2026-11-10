@@ -19,8 +19,12 @@
  * it works before JavaScript loads... except that opening the sheet needs
  * JavaScript. The desktop sidebar's sign-out button (SidebarAccount) does
  * not. No email is shown anywhere here (US-25).
+ *
+ * Below Cancel, a quiet link to deleting the account (US-24). It only goes to
+ * /account/delete, which explains what is deleted and asks to confirm.
  */
 
+import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -117,6 +121,13 @@ export default function AccountSheet({
               >
                 Cancel
               </button>
+              <Link
+                href="/account/delete"
+                onClick={() => setOpen(false)}
+                className="mt-2 flex min-h-11 w-full items-center justify-center text-sm font-semibold text-danger-on-light underline-offset-4 hover:underline"
+              >
+                Delete my account
+              </Link>
             </div>
           </div>,
           document.body,

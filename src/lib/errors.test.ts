@@ -4,6 +4,8 @@ import {
   CODE_RATE_LIMITED_MESSAGE,
   CODE_REJECTED_MESSAGE,
   databaseErrorMessage,
+  DELETE_ACCOUNT_FAILED_MESSAGE,
+  deleteAccountErrorMessage,
   GENERIC_ERROR_MESSAGE,
   mapUnavailableMessage,
   PASSWORD_REJECTED_MESSAGE,
@@ -362,5 +364,23 @@ describe("databaseErrorMessage: study requests (R1, US-16)", () => {
     });
 
     expect(message).toBe("You don't have permission to do that.");
+  });
+});
+describe("deleteAccountErrorMessage (US-24)", () => {
+  it("says nothing was deleted, without Supabase's text", () => {
+    for (const error of [
+      { status: 500, code: "unexpected_failure", message: "Database error deleting user" },
+      { status: 403, code: "not_admin", message: "User not allowed" },
+      null,
+    ]) {
+      expect(deleteAccountErrorMessage(error)).toBe(DELETE_ACCOUNT_FAILED_MESSAGE);
+    }
+  });
+
+  it("asks a rate-limited student to wait", () => {
+    expect(deleteAccountErrorMessage({ status: 429 })).toBe(CODE_RATE_LIMITED_MESSAGE);
+    expect(deleteAccountErrorMessage({ code: "over_request_rate_limit" })).toBe(
+      CODE_RATE_LIMITED_MESSAGE,
+    );
   });
 });

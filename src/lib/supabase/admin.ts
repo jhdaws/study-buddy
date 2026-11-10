@@ -1,9 +1,13 @@
 // Supabase client authenticated with the SECRET key. Owner: Track M -- M3 (#24).
 //
-// It bypasses Row Level Security on EVERY table. ADR 0008 rule 12 allows it
-// for one job: resolvePlace() (src/lib/places.ts) writing `locations` after
-// it has checked the place with Google. Nothing else may import this --
-// sessions, rosters, profiles and courses go through the per-request client
+// It bypasses Row Level Security on EVERY table. Two jobs may use it, and no
+// others:
+//   - resolvePlace() (src/lib/places.ts) writing `locations` after it has
+//     checked the place with Google (ADR 0008 rule 12);
+//   - deleteAccount() (src/app/account/actions.ts) deleting the CALLER's own
+//     auth user, the id taken from requireUser() and never from the request
+//     (US-24, ADR 0010). Supabase Auth only deletes users for the secret key.
+// Sessions, rosters, profiles and courses go through the per-request client
 // in server.ts, under RLS, as the signed-in user. If you need it for anything
 // else, that is an ADR change, not an import.
 //

@@ -49,7 +49,8 @@ export function supabaseEnv(): { url: string; anonKey: string } {
 /**
  * Supabase secret key. SERVER ONLY: it bypasses Row Level Security on every
  * table. Read by src/lib/supabase/admin.ts and nowhere else, which uses it
- * only to write `locations` (ADR 0008 rule 12).
+ * only to write `locations` (ADR 0008 rule 12) and to delete the signed-in
+ * student's own account (US-24, ADR 0010).
  */
 export function supabaseSecretKey(): string {
   const key = required("SUPABASE_SECRET_KEY", process.env.SUPABASE_SECRET_KEY);

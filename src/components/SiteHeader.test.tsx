@@ -65,12 +65,24 @@ describe("<AccountMenu>", () => {
     render(<AccountMenu signedIn displayName="Moses" />);
     fireEvent.click(screen.getByRole("button", { name: "Account" }));
     const signOutButton = screen.getByRole("button", { name: "Sign out" });
-    const cancel = screen.getByRole("button", { name: "Cancel" });
+    // The sheet's last control since US-24: the link to delete the account.
+    const deleteLink = screen.getByRole("link", { name: "Delete my account" });
 
+    deleteLink.focus();
     fireEvent.keyDown(document, { key: "Tab" });
     expect(document.activeElement).toBe(signOutButton);
     fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
-    expect(document.activeElement).toBe(cancel);
+    expect(document.activeElement).toBe(deleteLink);
+  });
+
+  it("links to deleting the account, which asks to confirm there (US-24)", () => {
+    render(<AccountMenu signedIn displayName="Moses" />);
+    fireEvent.click(screen.getByRole("button", { name: "Account" }));
+    const link = screen.getByRole("link", { name: "Delete my account" });
+    expect(link.getAttribute("href")).toBe("/account/delete");
+    expect(link.className).toContain("min-h-11");
+    // Focus still starts on Cancel: Enter straight after opening deletes nothing.
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
   });
 
   it("falls back to a neutral avatar without a display name", () => {
