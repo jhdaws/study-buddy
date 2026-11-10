@@ -199,7 +199,28 @@ isOneToOne: false
             [_ in never]: never
           }
           Functions: {
-            "create_session":
+            "cancel_session":
+{ Args: { "p_session_id": string }; Returns: {
+              "capacity": number,
+"course_id": string,
+"created_at": string,
+"ends_at": string,
+"host_id": string | null,
+"id": string,
+"location_id": string,
+"location_label": string,
+"room": string | null,
+"starts_at": string,
+"status": Database["public"]['Enums']["session_status"],
+"topic": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "sessions"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"create_session":
 { Args: { "capacity": number,"course_id": string,"ends_at": string,"location_id": string,"location_label": string,"room": string,"starts_at": string,"topic": string }; Returns: {
               "capacity": number,
 "course_id": string,
@@ -243,7 +264,28 @@ isOneToOne: false
                            },
 "normalize_department_code":
 { Args: { "raw": string }; Returns: string
-                           }
+                           },
+"update_session":
+{ Args: { "p_capacity": number,"p_course_id": string,"p_ends_at": string,"p_location_id": string,"p_location_label": string,"p_room": string,"p_session_id": string,"p_starts_at": string,"p_topic": string }; Returns: {
+              "capacity": number,
+"course_id": string,
+"created_at": string,
+"ends_at": string,
+"host_id": string | null,
+"id": string,
+"location_id": string,
+"location_label": string,
+"room": string | null,
+"starts_at": string,
+"status": Database["public"]['Enums']["session_status"],
+"topic": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "sessions"
+        isOneToOne: true
+        isSetofReturn: false
+      } }
           }
           Enums: {
             "session_status": "open"|"cancelled"

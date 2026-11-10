@@ -476,7 +476,7 @@ function CodeStep({
         </button>
       </div>
       <p className="mt-2 border-t border-white/10 pt-4 text-center text-sm text-white/72">
-        Links and codes work once, for an hour.
+        Links and codes work once, for 10 minutes.
       </p>
     </section>
   );

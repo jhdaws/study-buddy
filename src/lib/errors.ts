@@ -16,6 +16,9 @@
 //     *_session_text_limits.sql).
 //   - S5: what join_session and leave_session raise
 //     (*_join_leave_session.sql).
+//   - S7 (US-09): what update_session and cancel_session raise
+//     (*_s7_edit_cancel_session.sql). The CHECKs they can trip are S1's,
+//     already mapped above -- an edit goes through the same constraints.
 //   - M2 (#23): the location picker's searches, sent from the browser to
 //     Places Autocomplete (src/lib/place-search.ts).
 //   - R1 (US-16): the CHECK and the unique constraint on study_requests
@@ -24,7 +27,7 @@
 //     a refusal arrives as 42501 (already mapped below) or as a constraint
 //     name, which is why both new entries are in CONSTRAINT_MESSAGES.
 // Still to come:
-//   - Later: cancelling a session (US-09, host only) and chat (US-05).
+//   - Later: chat (US-05).
 
 /** For anything we have not mapped. Says nothing about the cause. */
 export const GENERIC_ERROR_MESSAGE =
@@ -92,6 +95,10 @@ const RAISED_MESSAGES: Record<string, string> = {
   session_full: "This session is full.",
   not_joined: "You're not on the roster for this session.",
   host_cannot_leave: "As the host, you can't leave — cancel the session instead.",
+  // S7: update_session and cancel_session (US-09).
+  not_session_host: "Only the host can change or cancel this session.",
+  capacity_below_roster:
+    "That's fewer seats than the students already coming. Nobody is removed by an edit.",
 };
 
 /** SQLSTATE codes with one meaning wherever they come from. */
@@ -211,7 +218,7 @@ export function signInErrorMessage(error: AuthErrorLike | null | undefined): str
 // ---------------------------------------------------------------------------
 
 export const CODE_REJECTED_MESSAGE =
-  "That code didn't work. Check it against the latest email — codes expire after an hour — or ask for a new one.";
+  "That code didn't work. Check it against the latest email — codes expire after 10 minutes — or ask for a new one.";
 
 export const CODE_RATE_LIMITED_MESSAGE =
   "Too many tries. Wait a few minutes, then try again.";
