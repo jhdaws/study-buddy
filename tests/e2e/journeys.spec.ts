@@ -243,3 +243,56 @@ test("calendar download (US-19): a session from the list downloads as an .ics ev
   expect(body.startsWith("BEGIN:VCALENDAR\r\n")).toBe(true);
   expect(body).toContain(`UID:${sessionId}@study-buddy`);
 });
+
+test("course filter (US-06, S8): filtering by course keeps only that course, and the URL is shareable", async ({
+  page,
+}) => {
+  // Two courses of our own, so the filter's effect is this journey's doing
+  // and not whatever else is open on the shared local database.
+  const courseA = String(1000 + Math.floor(Math.random() * 4000));
+  const courseB = String(5000 + Math.floor(Math.random() * 4000));
+  const topicA = `E2E filter A ${Date.now()}`;
+  const topicB = `E2E filter B ${Date.now()}`;
+
+  await signInAsNewStudent(page, newStudentEmail("filter"), "Finn Filter");
+
+  async function host(courseNumber: string, topic: string) {
+    await page.goto("/sessions/new");
+    await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
+    await page.getByLabel("Course number").fill(courseNumber);
+    await page.getByLabel("What are you studying?").fill(topic);
+    await chooseByKeyboard(page.getByLabel("Place"), "Feath", "ChIJ-FAKE-featheringill-hall");
+    await page.getByLabel("Starts").fill(campusTime(2));
+    await page.getByLabel("Ends").fill(campusTime(4));
+    await page.getByLabel("How many people, including you?").fill("4");
+    await page.getByRole("button", { name: "Create session" }).click();
+    await expect(page).toHaveURL("/sessions");
+    await expect(page.locator("article").filter({ hasText: topic })).toBeVisible();
+  }
+
+  await host(courseA, topicA);
+  await host(courseB, topicB);
+
+  // Both show before any filter.
+  await expect(page.locator("article").filter({ hasText: topicA })).toBeVisible();
+  await expect(page.locator("article").filter({ hasText: topicB })).toBeVisible();
+
+  // The chip navigates; the server re-filters. That is the whole point of
+  // putting the filter in listSessions() rather than the browser.
+  await page.getByRole("button", { name: `CS ${courseB}` }).click();
+  await expect(page).toHaveURL(new RegExp(`[?&]course=CS-${courseB}\\b`));
+  await expect(page.locator("article").filter({ hasText: topicB })).toBeVisible();
+  await expect(page.locator("article").filter({ hasText: topicA })).toHaveCount(0);
+
+  // A shared link lands on the same filtered view.
+  await page.goto(`/sessions?course=CS-${courseB}`);
+  await expect(page.locator("article").filter({ hasText: topicB })).toBeVisible();
+  await expect(page.locator("article").filter({ hasText: topicA })).toHaveCount(0);
+
+  // Clearing returns everything. The map toggle's param must also survive a
+  // course change; checked in the unit tests. Here we only need "All courses".
+  await page.getByRole("button", { name: "All courses" }).click();
+  await expect(page).toHaveURL("/sessions");
+  await expect(page.locator("article").filter({ hasText: topicA })).toBeVisible();
+  await expect(page.locator("article").filter({ hasText: topicB })).toBeVisible();
+});
