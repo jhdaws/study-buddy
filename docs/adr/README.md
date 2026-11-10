@@ -14,6 +14,7 @@ was rejected and why.
 | [0006](./0006-course-model.md) | Accepted, partly superseded | Courses: seeded departments, course numbers learned from use — departments now user-creatable (0008) |
 | [0007](./0007-map-provider.md) | Accepted, partly superseded | Google Maps + Places — its curated campus building layer and IP-restricted server key are superseded by 0008 |
 | [0008](./0008-sprint-2-schema-decisions.md) | Accepted | Sprint 2 schema: RLS deny by default, derived seats, server-written Places locations, anonymised deletion, user-created departments |
+| [0009](./0009-auth-settings-as-code.md) | **Proposed** | Security-relevant Supabase auth settings live in `config.toml` with production's values; CI checks them against the hosted project (from the Sprint 4 security review) |
 
 ## On "Proposed"
 
