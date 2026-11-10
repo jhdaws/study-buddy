@@ -73,6 +73,23 @@ spends its first hour rediscovering the same dead end.
 
 
 
+
+## 2026-11-03 · Threat model draft (ICA 15, Sprint 4 Part 2a)
+
+**Branch:** `ica15-threat-model` · **Commits made:** this PR
+
+### What changed
+- `docs/security/threat-model.md`: DFD, assets, STRIDE (T1 to T13), OWASP Top 10:2025 owners, top 3 risks. Finding IDs SEC-01 to SEC-10 are placeholders for the Sprint 4 findings table (Part 2d), which assigns severities.
+
+### Open questions for the user
+- T1 / SEC-01: does `njpm@vanderbilt.edu` still exist in the hosted Supabase project? Its password is in this public repo. If it exists, it is the first thing to fix.
+- The OWASP owner assignments are a proposal (Jack 3, Moses 2, Nate 2, Tapan 3); confirm with the team.
+- The ICA asks for GitHub issues (label `security`, milestone "Sprint 4") for the top 3 risks. The label and milestone exist now; the issues were not filed from this session.
+
+### Things the next agent should be careful about
+- `npm audit --omit=dev` on main: `next` 16.4.0 is critical (fixed in 16.4.4), `sharp` and `source-map-js` high. Dependabot #71 only goes to `next` 16.4.2.
+- Do not run scanners or attacks against Vercel or Supabase themselves (Sprint 4 brief); test only our own build and deployment.
+
 ## 2026-10-26 · Live roster: the session page updates while you watch
 
 **Branch:** `claude/jolly-ride-uvgcww` (the session's assigned branch, not a ticket-named one), from `main` at `3e89506` · **Commits made:** this PR
