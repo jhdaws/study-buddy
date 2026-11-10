@@ -171,39 +171,41 @@ Set **both "Confirm signup" and "Magic link"** — `signInWithOtp()` sends
 *Confirm signup* to a first-time address and *Magic link* to a returning
 one. Same subject and body for both:
 
-- **Subject:** `Your Study Buddy sign-in code`
+- **Subject:** `Your Study Buddy sign-in link`
 - **Body:** paste the whole of
   [`templates/magic_link.html`](./templates/magic_link.html), unchanged.
 
-What the template does: it carries **the code (`{{ .Token }}`) and nothing
-else**. Students type it into `/login` (A3's `verifyCode()`); it works on any
-device, whichever one opened the email.
+What the template does: it carries **a link and the code (`{{ .Token }}`)**.
+The link is `{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email`:
+`signIn()` sets the redirect to `<this site>/auth/confirm?next=…`, and
+`/auth/confirm` verifies the `token_hash`, so the link works on any device.
+It only reaches the site if step 1's redirect list allows it. Students can
+also type the code into `/login` (A3's `verifyCode()`).
 
-**Codes, not magic links.** Supabase has no "send codes" switch:
+**Link and code, one token.** Supabase has no "send codes" switch:
 `signInWithOtp()` always sends the *Magic link* (or *Confirm signup*)
-template, and the template alone decides whether the student gets a link,
-a code, or both. Supabase's default template contains only a link
-(`{{ .ConfirmationURL }}`), so **until this template is pasted into the
-dashboard (which needs custom SMTP first, above), production emails have no
-code in them.** Ours contains only
-`{{ .Token }}`. The link was dropped on 2026-10-12: Vanderbilt mail goes
-through Microsoft Outlook, whose link scanning can open a link before the
-student does and spend the one-time token (Supabase's email-template docs
-warn about this), and the link and the code are the same token, so a
-scanned link also broke the code. With no link in the email there is
-nothing to scan.
-
-`/auth/confirm` still exists and `signIn()` still passes `emailRedirectTo`:
-until the template can be changed, Supabase's default link email is what
-production sends, and it lands there.
+template, and the template alone decides what the student gets. Supabase's
+default template contains only a link through its own `/verify`, which the
+app can finish only in the browser that asked. Ours has a link straight to
+`/auth/confirm` (any device) and the code. History: the link was dropped on
+2026-10-12 and restored on 2026-11-09. Vanderbilt mail goes through
+Microsoft Outlook, whose link scanning can open a link before the student
+does, and the link and the code are the same one-time token. So
+`/auth/confirm` no longer verifies the link: it sends the student to
+`/login/continue`, and only the **Continue signing in** button there spends
+the token (`src/lib/email-link.ts`). A scanner opens the page and spends
+nothing; the link and the code both still work for the student.
 
 ### 3. Authentication → Sign In / Providers → Email
 
 - **Email OTP Length:** check it. The form accepts 6 to 10 digits, the
   whole range Supabase allows, so any value works; 6 matches `config.toml`.
   Some hosted projects reportedly default to 8.
-- **Email OTP Expiration:** 3600 seconds (one hour) — the default, and what
-  the email and `/login` tell students.
+- **Email OTP Expiration: 600 seconds** (10 minutes), the same as
+  `otp_expiry` in `config.toml`, and what the email and `/login` tell
+  students. Not Supabase's one-hour default: a wrong guess never uses up a
+  code, so its lifetime is the whole guessing window (SEC-12). Ten minutes
+  cuts that window to a sixth.
 - Leave **Confirm email** on — and see step 7 for the password settings.
 
 ### 4. Email delivery and rate limits — matters for the demo

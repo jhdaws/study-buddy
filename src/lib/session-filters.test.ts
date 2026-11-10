@@ -14,6 +14,8 @@ function session(overrides: Partial<SessionListItem>): SessionListItem {
     topic: "Design patterns review",
     locationLabel: "Featheringill Hall",
     room: null,
+    lat: 36.1445,
+    lng: -86.8035,
     startsAt: "2026-10-01T19:00:00.000Z", // Thu 2 PM
     endsAt: "2026-10-01T21:00:00.000Z",
     capacity: 4,

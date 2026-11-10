@@ -16,7 +16,9 @@
  *                   name (the select then has no name). S2 normalises it.
  *   courseNumber    <CourseNumberInput>, a typeahead; suggestions only.
  *   topic, room     text; room optional.
- *   placeId         <LocationPicker> submits it itself.
+ *   placeId         <LocationPicker> submits it itself -- and, with a Maps
+ *                   key, `placeSessionToken` beside it (M2), which
+ *                   createSession() hands to resolvePlace().
  *   locationLabel   text, prefilled from the picker's onSelect label unless
  *                   the host has typed their own (ADR 0008 rule 14).
  *   startsAt/endsAt HIDDEN inputs carrying ISO 8601 with an offset. The
@@ -55,6 +57,8 @@
  * too updates the state in the same render. Playwright's selectOption()
  * fires both events from one script call, which hides this; the journeys
  * choose by keyboard instead (tests/e2e/helpers.ts, chooseByKeyboard).
+ * (With a Maps key the place picker is a text combobox instead, and React's
+ * onChange on a text input already runs on `input`: see PlacesPicker.tsx.)
  *
  * `noValidate`: the browser's own validation bubbles are skipped so every
  * message comes from createSessionSchema, worded once. `required`, `min` and
@@ -113,16 +117,30 @@ export type CreateSessionFormProps = {
   departments: Department[];
   /**
    * useActionState's starting state. `{}` on the page; tests pass one with
-   * errors and values to check how it renders.
+   * errors and values to check how it renders. S7 (US-09) also uses it to
+   * prefill the form with a session's current values for editing -- every
+   * field below already reads its initial value from here.
    */
   initialState?: CreateSessionState;
+  /**
+   * The action behind the form. Defaults to createSession(). S7 passes
+   * `editSession.bind(null, sessionId)`, which has the same shape because
+   * editSessionSchema has the same fields (src/lib/validation.ts).
+   */
+  action?: (state: CreateSessionState, formData: FormData) => Promise<CreateSessionState>;
+  /** The submit button, idle and pending. Defaults to creating a session. */
+  submitLabel?: string;
+  pendingLabel?: string;
 };
 
 export default function CreateSessionForm({
   departments,
   initialState = {},
+  action = createSession,
+  submitLabel = "Create session",
+  pendingLabel = "Creating session…",
 }: CreateSessionFormProps) {
-  const [state, formAction, pending] = useActionState(createSession, initialState);
+  const [state, formAction, pending] = useActionState(action, initialState);
   const values = state.values ?? {};
   const prefix = useId();
 
@@ -526,7 +544,7 @@ export default function CreateSessionForm({
           disabled={pending}
           className={`${BUTTON_PRIMARY} h-12 w-full disabled:cursor-wait`}
         >
-          {pending ? "Creating session…" : "Create session"}
+          {pending ? pendingLabel : submitLabel}
         </button>
       </div>
     </form>

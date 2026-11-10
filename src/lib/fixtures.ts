@@ -260,6 +260,12 @@ function fixtureCourse(courseId: string): FixtureCourse {
   return course;
 }
 
+function fixtureLocation(locationId: string): Tables<"locations"> {
+  const location = FIXTURE_LOCATIONS.find((row) => row.id === locationId);
+  if (!location) throw new Error(`Fixture session uses unknown location ${locationId}`);
+  return location;
+}
+
 function fixtureDisplayName(userId: string | null): string | null {
   if (userId === null) return null;
   return FIXTURE_PROFILES.find((row) => row.id === userId)?.display_name ?? null;
@@ -267,7 +273,8 @@ function fixtureDisplayName(userId: string | null): string | null {
 
 /**
  * listSessions() on fixtures: open sessions that have not ended at `now`,
- * soonest first, with the roster count and seats left derived.
+ * soonest first, with the roster count and seats left derived, and each
+ * session's coordinates read from its `locations` row (M4).
  */
 export function fixtureSessionList(now: Date = new Date()): SessionListItem[] {
   const nowMs = now.getTime();
@@ -277,6 +284,7 @@ export function fixtureSessionList(now: Date = new Date()): SessionListItem[] {
     .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at))
     .map((row) => {
       const course = fixtureCourse(row.course_id);
+      const location = fixtureLocation(row.location_id);
       const attendeeCount = FIXTURE_ROSTERS[row.id]?.length ?? 0;
       return {
         id: row.id,
@@ -288,6 +296,8 @@ export function fixtureSessionList(now: Date = new Date()): SessionListItem[] {
         topic: row.topic,
         locationLabel: row.location_label,
         room: row.room,
+        lat: location.lat,
+        lng: location.lng,
         startsAt: row.starts_at,
         endsAt: row.ends_at,
         capacity: row.capacity,

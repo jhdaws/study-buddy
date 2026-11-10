@@ -61,6 +61,22 @@ export const MIN_CAPACITY = 2;
 export const MAX_CAPACITY = 2_147_483_647;
 
 /**
+ * R1/US-16: the optional note on a study request ("Tue or Wed evening would
+ * suit me"). A request is a nudge, not a post -- 200 is roughly two lines on
+ * a phone, which is as much as the list can show without burying the count.
+ * Mirrored as `study_requests_note_length` in *_r1_study_requests.sql.
+ */
+export const STUDY_REQUEST_NOTE_MAX_LENGTH = 200;
+
+/**
+ * How long a study request stays live. Set by the BEFORE INSERT trigger in
+ * *_r1_study_requests.sql, which is the only writer -- this constant is for
+ * the copy ("asks expire after 7 days") and the tests, NOT a second source of
+ * truth. Change both together.
+ */
+export const STUDY_REQUEST_DAYS = 7;
+
+/**
  * How far in the past a start time may be and still count as "now".
  * `datetime-local` inputs have minute precision, so a host who picks the
  * current minute is already up to 59 seconds late by the time they submit.

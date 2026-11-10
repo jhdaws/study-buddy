@@ -23,8 +23,11 @@
 
 import "server-only";
 
+import type { CourseFilter } from "@/lib/session-course";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeCourseNumber, normalizeDepartmentCode } from "@/lib/validation";
+
+export type { CourseFilter };
 
 // ---------------------------------------------------------------------------
 // Types -- what the UI reads. Deliberately not database rows: camelCase,
@@ -42,8 +45,8 @@ export type CourseLabel = {
 };
 
 /**
- * One card in the session list (US-03). Everything W5's card needs, and
- * nothing it does not -- no host id, no roster, no coordinates.
+ * One card in the session list (US-03), and one pin on its map (M4). Everything
+ * the card and the map need, and nothing they do not -- no host id, no roster.
  */
 export type SessionListItem = {
   /** `sessions.id` -- for the link to /sessions/[id] (S6). */
@@ -54,6 +57,13 @@ export type SessionListItem = {
   locationLabel: string;
   /** Null when the host left it blank -- normal for a cafe. */
   room: string | null;
+  /**
+   * Where the map puts the pin (M4): the coordinates resolvePlace() validated
+   * and stored in `locations` -- Google's, never the host's. Degrees, WGS 84.
+   */
+  lat: number;
+  /** Degrees, like `lat`. */
+  lng: number;
   /**
    * ISO 8601 in UTC (`2026-10-01T19:30:00.000Z`), as Supabase returns
    * `timestamptz`. FORMAT WITH AN EXPLICIT TIME ZONE: a Server Component on
@@ -89,14 +99,21 @@ export type Attendee = {
  * The session page (S6, #52): a list item, plus what only the page shows --
  * whether it was cancelled, who hosts it, and who is going. Unlike the list,
  * cancelled and ended sessions are returned too: someone holding a link to
- * one should be told what happened, not shown a 404.
+ * one should be told what happened, not shown a 404. No coordinates: the page
+ * has no map, so getSession() does not embed `locations`.
  */
-export type SessionDetail = SessionListItem & {
+export type SessionDetail = Omit<SessionListItem, "lat" | "lng"> & {
   status: "open" | "cancelled";
   /** Null when the host deleted their account. */
   hostId: string | null;
   /** The host first, then everyone else in the order they joined. */
   attendees: Attendee[];
+  /**
+   * The Google Places id behind `locationLabel`. Only the edit form uses it
+   * (S7, US-09): <LocationPicker> needs the current place to prefill, or a
+   * host who edits the topic would silently clear their own location.
+   */
+  placeId: string;
 };
 
 /** A department for the create-session department picker. */
@@ -125,7 +142,7 @@ export const COURSE_SUGGESTION_LIMIT = 8;
 // ===========================================================================
 // listSessions (S4, #21)
 //
-// Four things in this query are less obvious than they look:
+// Five things in this query are less obvious than they look:
 //
 //   - `profiles!sessions_host_id_fkey`. Plain `profiles` is AMBIGUOUS and
 //     fails at runtime with PGRST201: PostgREST finds two ways to get from a
@@ -144,27 +161,66 @@ export const COURSE_SUGGESTION_LIMIT = 8;
 //     attendeeCount is never read from a stored counter (ADR 0008 rule 9).
 //     PostgREST returns the aggregate as `[{ count: n }]`.
 //
+//   - `locations!inner (lat, lng)` gives the map its pins (M4). Reading it
+//     needs M3's read policy on `locations`, which allows any signed-in user
+//     -- the same reader this query already requires. `!inner`, like
+//     `courses!inner`, because `sessions.location_id` is NOT NULL: the only
+//     way the embed comes back empty is a broken policy, and then the session
+//     is left out rather than handed to the mapping below without
+//     coordinates. tests/db/session-rules.test.ts checks that a signed-in
+//     student who is not the host can read both halves.
+//
 //   - No view, so no `security_invoker` question to get wrong (ADR 0008,
 //     "Watch"). The query runs through the cookie-bound client, so S1's
 //     policies apply as the signed-in user; signed out it returns nothing,
 //     which is checked in tests/db/session-lists.test.ts.
+//
+//   - The optional course filter (US-06) is applied HERE, on the embedded
+//     `courses` columns, not afterwards in the browser. Filtering a result
+//     the page already has cannot drop sessions that were never loaded; the
+//     URL is what makes a filtered view shareable. `courses.department_code`
+//     / `courses.number` are PostgREST's embed filters -- they need the
+//     `!inner` above or a missing course would quietly leave the session in.
 // ===========================================================================
 
+/** Options for listSessions(). All optional; omit for the unfiltered list. */
+export type ListSessionsOptions = {
+  /**
+   * Restrict to one course (US-06). From `?course=CS-3251` via
+   * parseCourseParam(); never a free-text string -- the parser has already
+   * normalised and validated it.
+   */
+  course?: CourseFilter;
+};
+
 /** Open sessions that have not ended, soonest first (US-03). */
-export async function listSessions(): Promise<SessionListItem[]> {
+export async function listSessions(
+  options: ListSessionsOptions = {},
+): Promise<SessionListItem[]> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("sessions")
     .select(
       `id, topic, location_label, room, starts_at, ends_at, capacity,
        courses!inner (department_code, number, title),
+       locations!inner (lat, lng),
        profiles!sessions_host_id_fkey (display_name),
        session_attendees (count)`,
     )
     .eq("status", "open")
-    .gt("ends_at", "now")
-    .order("starts_at", { ascending: true });
+    .gt("ends_at", "now");
+
+  if (options.course) {
+    // Embed filters: PostgREST applies these to the joined courses row.
+    // Two eq() calls, not an or(), because both halves of the course must
+    // match -- "CS" alone would return every CS session.
+    query = query
+      .eq("courses.department_code", options.course.departmentCode)
+      .eq("courses.number", options.course.number);
+  }
+
+  const { data, error } = await query.order("starts_at", { ascending: true });
 
   if (error) {
     throw new Error(`Could not load the session list: ${error.message}`);
@@ -183,6 +239,8 @@ export async function listSessions(): Promise<SessionListItem[]> {
       topic: row.topic,
       locationLabel: row.location_label,
       room: row.room,
+      lat: row.locations.lat,
+      lng: row.locations.lng,
       startsAt: row.starts_at,
       endsAt: row.ends_at,
       capacity: row.capacity,
@@ -224,6 +282,7 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
     .select(
       `id, topic, location_label, room, starts_at, ends_at, capacity, status, host_id,
        courses!inner (department_code, number, title),
+       locations!inner (place_id),
        profiles!sessions_host_id_fkey (display_name),
        session_attendees (user_id, joined_at, profiles (display_name))`,
     )
@@ -265,6 +324,7 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
     status: data.status,
     hostId: data.host_id,
     attendees,
+    placeId: data.locations.place_id,
   };
 }
 

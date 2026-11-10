@@ -21,14 +21,36 @@ import CreateSessionForm from "@/components/CreateSessionForm";
 import { PAGE_LEAD, PAGE_TITLE } from "@/components/ui/styles";
 import { listDepartments } from "@/lib/sessions";
 import { requireUser } from "@/lib/supabase/server";
+import { normalizeCourseNumber, normalizeDepartmentCode } from "@/lib/validation";
 
 export const metadata: Metadata = {
   title: "Host a session",
 };
 
-export default async function NewSessionPage() {
+/**
+ * `?department=CS&course=3251` prefills the course, which is what "Host one"
+ * on a study request links to (US-16). Normalised with S2's normalisers
+ * before it reaches the form: the link is hand-editable, and the <select>
+ * only matches an option if the code is in the stored shape (`cs` -> `CS`).
+ * Anything that does not match is harmless -- the select falls back to
+ * "Choose a department", and createSession revalidates everything anyway.
+ */
+type NewSessionPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+/** The first value for `key`, since `?department=CS&department=MATH` is legal. */
+function one(params: Awaited<NewSessionPageProps["searchParams"]>, key: string): string {
+  const value = params[key];
+  return (Array.isArray(value) ? value[0] : value) ?? "";
+}
+
+export default async function NewSessionPage({ searchParams }: NewSessionPageProps) {
   await requireUser();
-  const departments = await listDepartments();
+  const [departments, params] = await Promise.all([listDepartments(), searchParams]);
+
+  const departmentCode = normalizeDepartmentCode(one(params, "department"));
+  const courseNumber = normalizeCourseNumber(one(params, "course"));
 
   return (
     <main className="min-w-0">
@@ -37,7 +59,14 @@ export default async function NewSessionPage() {
         Say what you&apos;re studying, where and when. Classmates see it in the
         session list.
       </p>
-      <CreateSessionForm departments={departments} />
+      <CreateSessionForm
+        departments={departments}
+        initialState={
+          departmentCode || courseNumber
+            ? { values: { departmentCode, courseNumber } }
+            : {}
+        }
+      />
     </main>
   );
 }

@@ -16,10 +16,12 @@
  * -- most often, the last seat went while it was open -- so it refreshes the
  * roster too, and the button then matches the message.
  *
- * Not yet: a realtime subscription, so the roster also changes while you
- * watch it. It needs session_attendees added to the supabase_realtime
- * publication (a migration), and when it lands it should call
- * router.refresh() on any change rather than apply the payload itself.
+ * Live: while the session can still change (join, full, leave, hosting), it
+ * listens for anyone else joining or leaving (src/lib/live-roster.ts) and
+ * calls router.refresh() -- the same fresh props as after your own join,
+ * never a hand-applied payload. Cancelled and ended sessions do not listen.
+ * The "N of M going" line is a polite live region, so a screen reader hears
+ * the count change too.
  */
 
 import { useRouter } from "next/navigation";
@@ -35,8 +37,10 @@ import {
   SECTION_TITLE,
 } from "@/components/ui/styles";
 import { formatInitial } from "@/lib/format";
+import { subscribeToRoster } from "@/lib/live-roster";
 import type { RosterAction } from "@/lib/roster";
 import type { Attendee } from "@/lib/sessions";
+import { createClient } from "@/lib/supabase/client";
 
 export type SessionRosterProps = {
   sessionId: string;
@@ -78,6 +82,12 @@ export default function SessionRoster({
     if (leaveState.error) router.refresh();
   }, [leaveState, router]);
 
+  const live = action === "join" || action === "full" || action === "leave" || action === "hosting";
+  useEffect(() => {
+    if (!live) return;
+    return subscribeToRoster(createClient(), sessionId, () => router.refresh());
+  }, [live, sessionId, router]);
+
   // Only the message for the button on screen: after a refused join has
   // refreshed the page into "You're going", "already on the roster" is noise.
   const error =
@@ -95,7 +105,7 @@ export default function SessionRoster({
         </h2>
         <SeatsLabel seatsLeft={seatsLeft} />
       </div>
-      <p className="mt-0.5 text-sm text-ink-2">
+      <p aria-live="polite" className="mt-0.5 text-sm text-ink-2">
         {attendees.length} of {capacity} going
       </p>
 

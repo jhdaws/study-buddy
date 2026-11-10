@@ -4,7 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PlaceError } from "@/lib/places";
 
-import { createSession, joinSession, leaveSession } from "./actions";
+import {
+  cancelSession,
+  createSession,
+  editSession,
+  joinSession,
+  leaveSession,
+  requestSession,
+  withdrawRequest,
+} from "./actions";
 
 // createSession() (S3) with everything outside it replaced: requireUser(),
 // resolvePlace(), the two RPCs and redirect(). The database's own rules are
@@ -23,10 +31,12 @@ vi.mock("next/navigation", () => ({
   },
 }));
 
-const server = vi.hoisted(() => ({ requireUser: vi.fn(), rpc: vi.fn() }));
+const server = vi.hoisted(() => ({ requireUser: vi.fn(), rpc: vi.fn(), from: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({
   requireUser: server.requireUser,
-  createClient: async () => ({ rpc: server.rpc }),
+  // `from` is only used by the study-request actions at the bottom of this
+  // file; the session actions go through RPCs alone.
+  createClient: async () => ({ rpc: server.rpc, from: server.from }),
 }));
 
 const cache = vi.hoisted(() => ({ revalidatePath: vi.fn() }));
@@ -38,6 +48,10 @@ vi.mock("@/lib/places", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/places")>()),
   resolvePlace: places.resolvePlace,
 }));
+
+// editSession() reads the session's stored start time (S7, US-09).
+const sessions = vi.hoisted(() => ({ getSession: vi.fn() }));
+vi.mock("@/lib/sessions", () => ({ getSession: sessions.getSession }));
 
 const HOUR = 60 * 60 * 1000;
 
@@ -80,6 +94,12 @@ beforeEach(() => {
   server.requireUser.mockResolvedValue({ id: "u1", displayName: "Priya" });
   places.resolvePlace.mockResolvedValue({ locationId: "loc-1" });
   rpcReplies({ data: "course-1", error: null }, { data: { id: "s1" }, error: null });
+  // A session whose start is still ahead, so editSessionSchema's allowance
+  // for an unmoved past start is not what makes a test pass by accident.
+  sessions.getSession.mockResolvedValue({
+    id: "s1",
+    startsAt: new Date(Date.now() + HOUR).toISOString(),
+  });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -87,8 +107,10 @@ afterEach(() => {
   vi.restoreAllMocks();
   server.requireUser.mockReset();
   server.rpc.mockReset();
+  server.from.mockReset();
   places.resolvePlace.mockReset();
   cache.revalidatePath.mockReset();
+  sessions.getSession.mockReset();
 });
 
 describe("createSession: success", () => {
@@ -97,7 +119,9 @@ describe("createSession: success", () => {
 
     expect(await redirectOf(createSession({}, submitted))).toBe("/sessions");
 
-    expect(places.resolvePlace).toHaveBeenCalledWith("ChIJN1t_tDeuEmsRUsoyG83frY4");
+    expect(places.resolvePlace).toHaveBeenCalledWith("ChIJN1t_tDeuEmsRUsoyG83frY4", {
+      sessionToken: undefined, // the fixture picker sends none
+    });
     expect(server.rpc).toHaveBeenNthCalledWith(1, "get_or_create_course", {
       p_department_code: "CS",
       p_course_number: "3251",
@@ -111,6 +135,14 @@ describe("createSession: success", () => {
       starts_at: submitted.get("startsAt"),
       ends_at: submitted.get("endsAt"),
       capacity: 4,
+    });
+  });
+
+  it("hands the picker's Autocomplete session token to resolvePlace() (M2)", async () => {
+    const token = "0b6c8a52-3f0e-4c1d-9d55-6f1d3c0a9e21";
+    await redirectOf(createSession({}, form({ placeSessionToken: token })));
+    expect(places.resolvePlace).toHaveBeenCalledWith("ChIJN1t_tDeuEmsRUsoyG83frY4", {
+      sessionToken: token,
     });
   });
 
@@ -299,5 +331,380 @@ describe("leaveSession: database refusals", () => {
 
     expect(state).toEqual({ error: "As the host, you can't leave — cancel the session instead." });
     expect(cache.revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// S7 (US-09): editSession() and cancelSession(). As above, the database's own
+// rules are tested against real Postgres in tests/db/edit-cancel-session.test.ts
+// -- including that a non-host is refused. These check the order of the steps,
+// what reaches update_session/cancel_session, and that no raw database text
+// reaches the student.
+// ---------------------------------------------------------------------------
+
+describe("editSession", () => {
+  it("resolves the place, normalises the course, updates, then returns to the session", async () => {
+    const submitted = form();
+
+    expect(await redirectOf(editSession("s1", {}, submitted))).toBe("/sessions/s1");
+
+    expect(server.rpc).toHaveBeenNthCalledWith(1, "get_or_create_course", {
+      p_department_code: "CS",
+      p_course_number: "3251",
+    });
+    expect(server.rpc).toHaveBeenNthCalledWith(2, "update_session", {
+      p_session_id: "s1",
+      p_course_id: "course-1",
+      p_location_id: "loc-1",
+      p_location_label: "Featheringill Hall",
+      p_room: "",
+      p_topic: "Design patterns review",
+      p_starts_at: submitted.get("startsAt"),
+      p_ends_at: submitted.get("endsAt"),
+      p_capacity: 4,
+    });
+  });
+
+  it("revalidates the session page and the list", async () => {
+    await redirectOf(editSession("s1", {}, form()));
+
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/sessions/s1");
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/sessions");
+  });
+
+  it("requires a signed-in student with a display name before anything else", async () => {
+    server.requireUser.mockRejectedValue(new Redirect("/login"));
+
+    await expect(editSession("s1", {}, form())).rejects.toBeInstanceOf(Redirect);
+    expect(server.rpc).not.toHaveBeenCalled();
+  });
+
+  it("reports a session that has gone without calling the database", async () => {
+    sessions.getSession.mockResolvedValue(null);
+
+    const state = await editSession("s1", {}, form());
+    expect(state.formError).toBe("That session doesn't exist anymore.");
+    expect(server.rpc).not.toHaveBeenCalled();
+  });
+
+  it("returns field errors without calling the database", async () => {
+    const state = await editSession("s1", {}, form({ topic: "  " }));
+
+    expect(state.fieldErrors?.topic).toEqual(["Say what you'll be studying."]);
+    expect(server.rpc).not.toHaveBeenCalled();
+    // The form is refilled with what was submitted.
+    expect(state.values?.capacity).toBe("4");
+  });
+
+  it("takes the unchanged-start allowance from the database, not the form", async () => {
+    // The stored start is in the past: this session is already in progress.
+    const stored = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    sessions.getSession.mockResolvedValue({ id: "s1", startsAt: stored });
+
+    // Submitting that same start is accepted -- the host is fixing the topic.
+    // Acceptance shows up as the redirect, so there is no state to inspect.
+    expect(await redirectOf(editSession("s1", {}, form({ startsAt: stored })))).toBe(
+      "/sessions/s1",
+    );
+
+    // A DIFFERENT past start is still refused, even though the stored one is
+    // also in the past: the allowance is "you did not move it", not "the
+    // session already started".
+    const moved = await editSession(
+      "s1",
+      {},
+      form({ startsAt: new Date(Date.now() - 90 * 60 * 1000).toISOString() }),
+    );
+    expect(moved.fieldErrors?.startsAt).toEqual(["The start time has already passed."]);
+  });
+
+  it("maps update_session's refusals to our own copy", async () => {
+    rpcReplies({ data: "course-1", error: null }, { error: { message: "not_session_host" } });
+
+    const state = await editSession("s1", {}, form());
+    expect(state.formError).toBe("Only the host can change or cancel this session.");
+  });
+
+  it("maps a capacity below the roster", async () => {
+    rpcReplies({ data: "course-1", error: null }, { error: { message: "capacity_below_roster" } });
+
+    const state = await editSession("s1", {}, form({ capacity: "2" }));
+    expect(state.formError).toBe(
+      "That's fewer seats than the students already coming. Nobody is removed by an edit.",
+    );
+  });
+
+  it("never leaks raw database text", async () => {
+    rpcReplies(
+      { data: "course-1", error: null },
+      { error: { code: "23514", message: 'violates check constraint "sessions_capacity_min"' } },
+    );
+
+    const state = await editSession("s1", {}, form());
+    expect(state.formError).toBe("Capacity must be at least 2 — you count as one.");
+    expect(state.formError).not.toContain("constraint");
+  });
+
+  it("reports a place it cannot resolve on the field, not the form", async () => {
+    places.resolvePlace.mockRejectedValue(new PlaceError("unknown_place", "whatever"));
+
+    const state = await editSession("s1", {}, form());
+    expect(state.fieldErrors?.placeId).toHaveLength(1);
+    expect(server.rpc).not.toHaveBeenCalled();
+  });
+});
+
+describe("cancelSession", () => {
+  it("calls cancel_session with the bound id and revalidates", async () => {
+    server.rpc.mockResolvedValue({ error: null });
+
+    expect(await cancelSession("s1", {}, new FormData())).toEqual({});
+    expect(server.rpc).toHaveBeenCalledWith("cancel_session", { p_session_id: "s1" });
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/sessions/s1");
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/sessions");
+  });
+
+  it("requires a signed-in student first", async () => {
+    server.requireUser.mockRejectedValue(new Redirect("/login"));
+
+    await expect(cancelSession("s1", {}, new FormData())).rejects.toBeInstanceOf(Redirect);
+    expect(server.rpc).not.toHaveBeenCalled();
+  });
+
+  it("maps a refusal and does not revalidate", async () => {
+    server.rpc.mockResolvedValue({ error: { message: "not_session_host" } });
+
+    const state = await cancelSession("s1", {}, new FormData());
+    expect(state.error).toBe("Only the host can change or cancel this session.");
+    expect(cache.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("maps an already-cancelled session", async () => {
+    server.rpc.mockResolvedValue({ error: { message: "session_cancelled" } });
+
+    const state = await cancelSession("s1", {}, new FormData());
+    expect(state.error).toBe("This session has been cancelled.");
+  });
+
+  it("never leaks raw database text", async () => {
+    server.rpc.mockResolvedValue({
+      error: { code: "42P01", message: 'relation "public.sessions" does not exist' },
+    });
+
+    const state = await cancelSession("s1", {}, new FormData());
+    expect(state.error).toBe("Something went wrong on our side. Try again in a moment.");
+    expect(state.error).not.toContain("relation");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Study requests (US-16, R1). These two actions write through RLS POLICIES
+// rather than an RPC, which moves the interesting question into TypeScript:
+// which author_id is sent, and what happens when a delete legitimately
+// matches nothing. The policies themselves are tested against real Postgres
+// in tests/db/study-requests.test.ts, including both IDOR directions.
+// ---------------------------------------------------------------------------
+
+/** Calls made through `from(...)`, in order, so a test can assert on them. */
+let tableCalls: { method: string; args: unknown[] }[];
+
+/**
+ * Stands in for the PostgREST table builder. `insert` and `delete` each set
+ * the awaited result, so one builder serves both statements requestSession
+ * makes.
+ */
+function tableReplies(
+  options: {
+    onDelete?: { error: unknown; count?: number | null };
+    onInsert?: { error: unknown };
+  } = {},
+) {
+  tableCalls = [];
+  server.from.mockImplementation((table: string) => {
+    tableCalls.push({ method: "from", args: [table] });
+    let result: unknown = { error: null };
+    const builder: Record<string, unknown> = {
+      then: (resolve: (value: unknown) => unknown) => Promise.resolve(result).then(resolve),
+    };
+    builder.delete = (...args: unknown[]) => {
+      tableCalls.push({ method: "delete", args });
+      result = options.onDelete ?? { error: null, count: 1 };
+      return builder;
+    };
+    builder.insert = (...args: unknown[]) => {
+      tableCalls.push({ method: "insert", args });
+      result = options.onInsert ?? { error: null };
+      return builder;
+    };
+    builder.eq = (...args: unknown[]) => {
+      tableCalls.push({ method: "eq", args });
+      return builder;
+    };
+    return builder;
+  });
+}
+
+/** A submission that passes studyRequestSchema, as the form posts it. */
+function askForm(overrides: Record<string, string> = {}): FormData {
+  const values: Record<string, string> = {
+    departmentCode: "cs",
+    courseNumber: "3251",
+    note: "Tue evening would suit me",
+    ...overrides,
+  };
+  const data = new FormData();
+  for (const [key, value] of Object.entries(values)) data.set(key, value);
+  return data;
+}
+
+const insertArg = () =>
+  tableCalls.find((call) => call.method === "insert")?.args[0] as Record<string, unknown>;
+
+describe("requestSession", () => {
+  beforeEach(() => {
+    tableReplies();
+  });
+
+  it("creates the course on use, then posts the request as the caller", async () => {
+    const state = await requestSession({}, askForm());
+
+    expect(state).toEqual({});
+    // Normalised the same way the create-session form normalises it, so a
+    // request and a session land on one `courses` row.
+    expect(server.rpc).toHaveBeenCalledWith("get_or_create_course", {
+      p_department_code: "CS",
+      p_course_number: "3251",
+    });
+    expect(insertArg()).toEqual({
+      course_id: "course-1",
+      // THE ONE THAT MATTERS: the caller's own id, never anything off the
+      // form. study_requests_insert refuses anything else, and
+      // tests/db/study-requests.test.ts proves it does.
+      author_id: "u1",
+      note: "Tue evening would suit me",
+    });
+  });
+
+  it("clears the caller's own earlier ask first, so asking again refreshes it", async () => {
+    await requestSession({}, askForm());
+
+    // Scoped to this course AND this author: the delete must not be able to
+    // reach anyone else's row even though the policy would stop it anyway.
+    const deleteIndex = tableCalls.findIndex((call) => call.method === "delete");
+    const insertIndex = tableCalls.findIndex((call) => call.method === "insert");
+    expect(deleteIndex).toBeGreaterThanOrEqual(0);
+    expect(deleteIndex).toBeLessThan(insertIndex);
+    expect(tableCalls.filter((call) => call.method === "eq").map((call) => call.args)).toEqual([
+      ["course_id", "course-1"],
+      ["author_id", "u1"],
+    ]);
+  });
+
+  it("refreshes the list and stays on it", async () => {
+    await requestSession({}, askForm());
+
+    // No redirect: the form is on /sessions, and the answer the student wants
+    // is their own ask appearing there.
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/sessions");
+  });
+
+  it("stores a blank note as null rather than an empty string", async () => {
+    await requestSession({}, askForm({ note: "   " }));
+
+    expect(insertArg().note).toBeNull();
+  });
+
+  it("refuses a note over the limit without touching the database", async () => {
+    const state = await requestSession({}, askForm({ note: "x".repeat(201) }));
+
+    expect(state.fieldErrors?.note?.[0]).toBe("Keep it to 200 characters or fewer.");
+    expect(server.rpc).not.toHaveBeenCalled();
+    expect(server.from).not.toHaveBeenCalled();
+  });
+
+  it("refuses a course number that is not a course number", async () => {
+    const state = await requestSession({}, askForm({ courseNumber: "32" }));
+
+    expect(state.fieldErrors?.courseNumber?.[0]).toBe(
+      "Enter a 4-digit course number, like 3251 or 2100W.",
+    );
+    expect(state.values?.courseNumber).toBe("32");
+    expect(server.from).not.toHaveBeenCalled();
+  });
+
+  it("gives up before inserting when the course cannot be created", async () => {
+    server.rpc.mockResolvedValue({ data: null, error: { message: "department_required" } });
+
+    const state = await requestSession({}, askForm());
+
+    expect(state.formError).toBe("Choose or add a department.");
+    expect(server.from).not.toHaveBeenCalled();
+  });
+
+  it("explains a second ask for the same course in the student's words", async () => {
+    tableReplies({
+      onInsert: {
+        error: {
+          code: "23505",
+          message:
+            'duplicate key value violates unique constraint "study_requests_course_id_author_id_key"',
+        },
+      },
+    });
+
+    const state = await requestSession({}, askForm());
+
+    // Reachable from two tabs even though the action deletes first.
+    expect(state.formError).toBe("You've already asked for this course. Classmates can see it.");
+    // The form comes back filled in, not blank.
+    expect(state.values?.courseNumber).toBe("3251");
+  });
+
+  it("never shows raw Postgres text", async () => {
+    tableReplies({ onInsert: { error: { code: "XX000", message: "could not write to disk" } } });
+
+    const state = await requestSession({}, askForm());
+
+    expect(state.formError).toBe("Something went wrong on our side. Try again in a moment.");
+    expect(state.formError).not.toContain("disk");
+  });
+});
+
+describe("withdrawRequest", () => {
+  it("removes the request and refreshes the list", async () => {
+    tableReplies({ onDelete: { error: null, count: 1 } });
+
+    const state = await withdrawRequest("req-1", {}, new FormData());
+
+    expect(state).toEqual({});
+    expect(tableCalls).toContainEqual({ method: "eq", args: ["id", "req-1"] });
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/sessions");
+  });
+
+  it("asks for an exact count, because RLS refuses a delete silently", async () => {
+    tableReplies({ onDelete: { error: null, count: 1 } });
+
+    await withdrawRequest("req-1", {}, new FormData());
+
+    // Without this, a delete aimed at someone else's request -- which RLS
+    // answers with no error and no rows -- would report success.
+    expect(tableCalls).toContainEqual({ method: "delete", args: [{ count: "exact" }] });
+  });
+
+  it("says so when the delete matched nothing", async () => {
+    tableReplies({ onDelete: { error: null, count: 0 } });
+
+    const state = await withdrawRequest("someone-elses", {}, new FormData());
+
+    expect(state.error).toBe("That request isn't there anymore.");
+    expect(cache.revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("maps a database error to our own message", async () => {
+    tableReplies({ onDelete: { error: { code: "42501", message: "permission denied" }, count: null } });
+
+    const state = await withdrawRequest("req-1", {}, new FormData());
+
+    expect(state.error).toBe("You don't have permission to do that.");
   });
 });

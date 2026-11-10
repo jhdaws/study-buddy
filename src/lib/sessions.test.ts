@@ -75,6 +75,7 @@ const sessionRow = (overrides: Record<string, unknown> = {}) => ({
   ends_at: "2026-10-01T21:00:00+00:00",
   capacity: 6,
   courses: { department_code: "CS", number: "3251", title: "Intermediate Software Design" },
+  locations: { lat: 36.1452, lng: -86.8006 },
   profiles: { display_name: "Priya" },
   session_attendees: [{ count: 3 }],
   ...overrides,
@@ -100,6 +101,8 @@ describe("listSessions", () => {
         topic: "Dynamic programming",
         locationLabel: "Central Library",
         room: "418",
+        lat: 36.1452,
+        lng: -86.8006,
         startsAt: "2026-10-01T19:30:00+00:00",
         endsAt: "2026-10-01T21:00:00+00:00",
         capacity: 6,
@@ -157,6 +160,25 @@ describe("listSessions", () => {
     expect(String(callTo("select")?.[0])).toContain("session_attendees (count)");
   });
 
+  it("embeds each session's stored coordinates for the map (M4)", async () => {
+    respond([]);
+    await listSessions();
+
+    // The pin goes where resolvePlace() stored Google's coordinates -- the
+    // `locations` row -- never anywhere the host typed. `!inner`, like
+    // `courses!inner`: location_id is NOT NULL, so an empty embed can only
+    // mean a broken policy, and that session is better left out than pinned
+    // without coordinates.
+    expect(String(callTo("select")?.[0])).toContain("locations!inner (lat, lng)");
+  });
+
+  it("puts each session's coordinates on the list item, unrounded", async () => {
+    respond([sessionRow({ locations: { lat: 36.144_512_3, lng: -86.802_745_6 } })]);
+
+    const [session] = await listSessions();
+    expect([session.lat, session.lng]).toEqual([36.144_512_3, -86.802_745_6]);
+  });
+
   it("derives seats left from the roster", async () => {
     respond([sessionRow({ capacity: 4, session_attendees: [{ count: 1 }] })]);
 
@@ -202,6 +224,32 @@ describe("listSessions", () => {
 
     await expect(listSessions()).rejects.toThrow(/connection terminated/);
   });
+
+  // US-06: the course filter is the reason this function takes options. The
+  // assertion is on the REQUEST -- a mock can return any rows, so the only
+  // way to see that the database was asked for one course is to look at the
+  // filters. Ticket: "src/lib/sessions.test.ts asserts the exact query".
+  it("asks the database for one course when a course filter is set", async () => {
+    respond([]);
+    await listSessions({ course: { departmentCode: "CS", number: "3251" } });
+
+    expect(calls.filter((call) => call.method === "eq").map((call) => call.args)).toEqual([
+      ["status", "open"],
+      ["courses.department_code", "CS"],
+      ["courses.number", "3251"],
+    ]);
+  });
+
+  it("does not add course filters when none were asked for", async () => {
+    respond([]);
+    await listSessions();
+
+    // Only the status filter -- a stray courses.* eq would silently narrow
+    // every unfiltered visit.
+    expect(calls.filter((call) => call.method === "eq").map((call) => call.args)).toEqual([
+      ["status", "open"],
+    ]);
+  });
 });
 
 // S6 (#52). Ids are uuids in the 4/8 variant, which is what Postgres hands out.
@@ -209,10 +257,14 @@ const HOST = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const EARLY = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const LATE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
+const PLACE_ID = "ChIJ-central-library";
+
 const detailRow = (overrides: Record<string, unknown> = {}) =>
   sessionRow({
     status: "open",
     host_id: HOST,
+    // S7 (US-09): the edit form prefills <LocationPicker> from this.
+    locations: { place_id: PLACE_ID },
     // Deliberately out of order: the late joiner first, the host in the middle.
     session_attendees: [
       { user_id: LATE, joined_at: "2026-10-01T18:00:00+00:00", profiles: { display_name: "Sam" } },
@@ -251,6 +303,7 @@ describe("getSession", () => {
         { userId: EARLY, displayName: "Alex", isHost: false },
         { userId: LATE, displayName: "Sam", isHost: false },
       ],
+      placeId: PLACE_ID,
     });
   });
 
@@ -280,6 +333,10 @@ describe("getSession", () => {
     const select = String(callTo("select")?.[0]);
     expect(select).toContain("profiles!sessions_host_id_fkey");
     expect(select).toContain("session_attendees (user_id, joined_at, profiles (display_name))");
+    // S7 (US-09): the place id the edit form prefills from. `!inner` because
+    // location_id is NOT NULL -- every session has exactly one location, and
+    // the embed should not make the row optional.
+    expect(select).toContain("locations!inner (place_id)");
     // US-25: the roster is names only.
     expect(select).not.toContain("email");
   });
