@@ -112,6 +112,8 @@ describe("proxy", () => {
     const withKey = (await proxy(request("/"))).headers.get("content-security-policy");
     expect(withKey).toContain("https://*.googleapis.com");
     expect(withKey).toContain("worker-src blob:");
+    expect(withKey).toContain("'wasm-unsafe-eval'");
+    expect(without).not.toContain("'wasm-unsafe-eval'");
   });
 
   it("allows eval only under `next dev`", async () => {

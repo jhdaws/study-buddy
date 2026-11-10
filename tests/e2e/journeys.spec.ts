@@ -21,7 +21,9 @@ let cspViolations: string[] = [];
 test.beforeEach(({ page }) => {
   cspViolations = [];
   page.on("console", (message) => {
-    if (message.text().includes("Content Security Policy")) cspViolations.push(message.text());
+    // Wording varies ("Refused to ...", "Applying inline style violates
+    // ...", "Content Security policy" for WebAssembly).
+    if (/content security policy/i.test(message.text())) cspViolations.push(message.text());
   });
 });
 test.afterEach(() => {

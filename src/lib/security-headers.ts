@@ -22,6 +22,12 @@
 //                @vis.gl/react-google-maps inserts, and Google's own). No
 //                'unsafe-inline'. 'unsafe-eval' in `next dev` only: React
 //                uses eval there for error stacks; production needs none.
+//                With a Maps key, 'wasm-unsafe-eval': the vector map's
+//                renderer compiles WebAssembly, which CSP otherwise refuses
+//                (seen in Chromium with a GPU; headless without one falls
+//                back to raster tiles and never tries). It allows compiling
+//                WebAssembly only -- not eval() or new Function() -- so it
+//                stands in for the 'unsafe-eval' in Google's CSP guide.
 //   style-src    <style> and <link> elements need the nonce too. The Maps API
 //                copies it onto the <style> elements it inserts from the
 //                first style[nonce] on the page: the empty one the root
@@ -119,7 +125,13 @@ export function contentSecurityPolicy({
 
   const directives: Record<Directive, readonly string[]> = {
     "default-src": ["'self'"],
-    "script-src": ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'", ...(dev ? ["'unsafe-eval'"] : [])],
+    "script-src": [
+      "'self'",
+      `'nonce-${nonce}'`,
+      "'strict-dynamic'",
+      ...(googleMaps ? ["'wasm-unsafe-eval'"] : []),
+      ...(dev ? ["'unsafe-eval'"] : []),
+    ],
     // A nonce would switch 'unsafe-inline' off, so dev has one or the other.
     "style-src": ["'self'", dev ? "'unsafe-inline'" : `'nonce-${nonce}'`, ...google("style-src")],
     "style-src-attr": ["'unsafe-inline'"],
