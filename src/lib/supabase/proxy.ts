@@ -27,6 +27,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import type { Database } from "@/lib/database.types";
 import { supabaseEnv } from "@/lib/env";
+import { SUPABASE_COOKIE_OPTIONS } from "@/lib/limits";
 import { loginPath, REQUEST_PATH_HEADER } from "@/lib/safe-next";
 
 /** Pages a signed-out visitor is sent to /login from. */
@@ -45,6 +46,9 @@ export async function updateSession(request: NextRequest) {
   let cacheHeaders: Record<string, string> = {};
 
   const supabase = createServerClient<Database>(url, anonKey, {
+    // 7 days unused, not 400 (SEC-16). The proxy refreshes the session, so
+    // the cookies it rewrites carry this lifetime.
+    cookieOptions: SUPABASE_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return request.cookies.getAll();

@@ -84,3 +84,20 @@ export const STUDY_REQUEST_DAYS = 7;
  * interval '5 minutes'`) or the database will reject what this accepts.
  */
 export const START_GRACE_MINUTES = 5;
+
+/**
+ * How long the Supabase auth cookies last on a device, in seconds (SEC-16,
+ * US-21). @supabase/ssr's default is 400 days, so a laptop left signed in
+ * stayed signed in for over a year. The cookies are rewritten whenever the
+ * session is refreshed, which happens on every visit after the hourly access
+ * token expires, so this is an inactivity limit: a device unused for 7 days
+ * is signed out; one in use is not.
+ *
+ * It does not end a stolen refresh token, which stays valid at Supabase
+ * until signed out. That needs Supabase's session time-box
+ * (`[auth.sessions]` in config.toml), a paid-plan feature.
+ */
+export const SESSION_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+
+/** The cookie options every Supabase client in the app passes. */
+export const SUPABASE_COOKIE_OPTIONS = { maxAge: SESSION_COOKIE_MAX_AGE_SECONDS } as const;
