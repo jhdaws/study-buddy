@@ -19,8 +19,12 @@
  * it works before JavaScript loads... except that opening the sheet needs
  * JavaScript. The desktop sidebar's sign-out button (SidebarAccount) does
  * not. No email is shown anywhere here (US-25).
+ *
+ * The sheet also links to the student's profile (US-11), which is otherwise
+ * only reachable from the desktop sidebar.
  */
 
+import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
@@ -94,6 +98,13 @@ export default function AccountSheet({
               <p className="text-[15px] text-ink-2">
                 Signed in as <span className="font-semibold text-ink">{displayName ?? "you"}</span>
               </p>
+              <Link
+                href="/profile"
+                onClick={() => setOpen(false)}
+                className={`${BUTTON_SECONDARY} mt-3 w-full`}
+              >
+                Your profile
+              </Link>
               <h2 id={titleId} className="mt-3 text-[17px] font-bold">
                 Sign out of Study Buddy?
               </h2>

@@ -101,3 +101,19 @@ export const SESSION_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
 /** The cookie options every Supabase client in the app passes. */
 export const SUPABASE_COOKIE_OPTIONS = { maxAge: SESSION_COOKIE_MAX_AGE_SECONDS } as const;
+
+/**
+ * US-11: the academic profile. Major and minor are optional free text, 1 to
+ * 80 characters after trimming (blank is saved as null); mirrored as
+ * `profiles_major_check` and `profiles_minor_check` in
+ * *_academic_profile.sql. 80 fits a double major written out in full.
+ */
+export const MAJOR_MAX_LENGTH = 80;
+export const MINOR_MAX_LENGTH = 80;
+
+/**
+ * US-11: the most current courses one profile lists. A sanity limit (a
+ * full-time load is four to six), enforced by the `profile_courses_limit`
+ * trigger in *_academic_profile.sql. Change one, change the other.
+ */
+export const PROFILE_COURSES_MAX = 8;

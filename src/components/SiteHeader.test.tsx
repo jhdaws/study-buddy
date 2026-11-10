@@ -64,13 +64,22 @@ describe("<AccountMenu>", () => {
   it("keeps Tab and Shift+Tab inside the sheet", () => {
     render(<AccountMenu signedIn displayName="Moses" />);
     fireEvent.click(screen.getByRole("button", { name: "Account" }));
-    const signOutButton = screen.getByRole("button", { name: "Sign out" });
+    // The sheet's controls, in order: the profile link (US-11), Sign out, Cancel.
+    const profile = screen.getByRole("link", { name: "Your profile" });
     const cancel = screen.getByRole("button", { name: "Cancel" });
 
     fireEvent.keyDown(document, { key: "Tab" });
-    expect(document.activeElement).toBe(signOutButton);
+    expect(document.activeElement).toBe(profile);
     fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(cancel);
+  });
+
+  it("links to the student's profile (US-11)", () => {
+    render(<AccountMenu signedIn displayName="Moses" />);
+    fireEvent.click(screen.getByRole("button", { name: "Account" }));
+    const profile = screen.getByRole("link", { name: "Your profile" });
+    expect(profile.getAttribute("href")).toBe("/profile");
+    expect(profile.className).toContain("min-h-11");
   });
 
   it("falls back to a neutral avatar without a display name", () => {

@@ -550,3 +550,34 @@ test("course filter (US-06, S8): filtering by course keeps only that course, and
   await expect(page.locator("article").filter({ hasText: topicA })).toBeVisible();
   await expect(page.locator("article").filter({ hasText: topicB })).toBeVisible();
 });
+
+test("academic profile (US-11): a student fills in their major, year and courses, and they are saved", async ({
+  page,
+}) => {
+  // /profile is protected like /sessions: signed out, it goes to sign-in first.
+  await signInAsNewStudent(page, newStudentEmail("profile"), "Morgan Major", "/profile");
+  await expect(page.getByRole("heading", { level: 1, name: "Your profile" })).toBeVisible();
+
+  await page.getByLabel("Major (optional)").fill("Computer Science");
+  await chooseByKeyboard(page.getByLabel("Year"), "Jun", "junior");
+  await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
+  await page.getByLabel("Course number").fill("3251");
+  await page.getByRole("button", { name: "Add course" }).click();
+  const courses = page.getByRole("list", { name: "Your current courses" });
+  await expect(courses).toContainText("CS 3251");
+
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Profile saved." })).toBeVisible();
+
+  // Saved in the database, not just on screen: a fresh load reads it back.
+  await page.reload();
+  await expect(page.getByLabel("Major (optional)")).toHaveValue("Computer Science");
+  await expect(page.getByLabel("Year")).toHaveValue("junior");
+  await expect(courses).toContainText("CS 3251");
+
+  // And the account sheet links here.
+  await page.goto("/sessions");
+  await page.getByRole("button", { name: "Account" }).click();
+  await page.getByRole("link", { name: "Your profile" }).click();
+  await expect(page).toHaveURL("/profile");
+});
