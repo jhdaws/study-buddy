@@ -10,6 +10,9 @@
 // inside the action every time.
 //
 // Later sprints, not stubbed yet: sendMessage() (US-05).
+//
+// R1 added requestSession() and withdrawRequest() (US-16) at the bottom --
+// the only writes here that go through RLS policies rather than an RPC.
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -23,9 +26,11 @@ import {
   editSessionSchema,
   formValues,
   invalidFormState,
+  studyRequestSchema,
   type CreateSessionField,
   type EditSessionField,
   type FormState,
+  type StudyRequestField,
 } from "@/lib/validation";
 
 /**
@@ -287,6 +292,127 @@ export async function leaveSession(
   revalidatePath(`/sessions/${sessionId}`);
   revalidatePath("/sessions");
   return {};
+}
+
+// ---------------------------------------------------------------------------
+// Study requests (US-16, R1).
+//
+// The only writes in this file that do NOT go through a SECURITY DEFINER
+// function: study_requests is written through its INSERT and DELETE policies
+// (see *_r1_study_requests.sql for why a function would buy nothing). So
+// these two actions are the place where getting the author wrong would be an
+// IDOR, and both lean on the policy rather than on their own check:
+// `author_id` is sent as the caller's own id and the policy refuses anything
+// else, and the delete names only a request id, with the policy restricting
+// it to the caller's own rows.
+// ---------------------------------------------------------------------------
+
+/** What requestSession() hands back to `useActionState`. Start from `{}`. */
+export type StudyRequestState = FormState<StudyRequestField>;
+
+/**
+ * Ask for a session in a course nobody is hosting (US-16).
+ *
+ * `requireUser()` first, as everywhere: it also means a student without a
+ * display name is sent to the name step before asking, which matches hosting
+ * (ADR 0008 rule 1) even though the request itself shows no name.
+ *
+ * Asking again REFRESHES rather than fails. The unique constraint allows one
+ * live request per student per course, so a second ask would be a 23505; but
+ * the thing a student means by asking again is "I still want this", and the
+ * row they are colliding with may be a lapsed one from last week that
+ * nothing sweeps up. Deleting their own row first -- which the DELETE policy
+ * scopes to them -- turns that into a new 7 days. The two statements are not
+ * atomic; the worst case is the delete landing and the insert not, which
+ * leaves them where they started, free to ask again.
+ */
+export async function requestSession(
+  _prev: StudyRequestState,
+  formData: FormData,
+): Promise<StudyRequestState> {
+  const user = await requireUser();
+
+  const parsed = studyRequestSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return invalidFormState(parsed.error, formData);
+  }
+
+  const supabase = await createClient();
+
+  // The same create-on-use path the create-session form takes (S2), so a
+  // request and a session for the same course land on one `courses` row.
+  const { data: courseId, error: courseError } = await supabase.rpc("get_or_create_course", {
+    p_department_code: parsed.data.departmentCode,
+    p_course_number: parsed.data.courseNumber,
+  });
+  if (courseError) {
+    return studyRequestFailure("get_or_create_course", courseError, formData);
+  }
+
+  await supabase
+    .from("study_requests")
+    .delete()
+    .eq("course_id", courseId)
+    .eq("author_id", user.id);
+
+  const { error } = await supabase.from("study_requests").insert({
+    course_id: courseId,
+    // Pinned by study_requests_insert; sent here because the trigger
+    // deliberately does not set it (see the migration).
+    author_id: user.id,
+    note: parsed.data.note,
+  });
+  if (error) {
+    return studyRequestFailure("study_requests insert", error, formData);
+  }
+
+  // No redirect: the form lives on /sessions, and the answer the student
+  // wants is their own ask appearing in the list with a Withdraw button.
+  revalidatePath("/sessions");
+  return {};
+}
+
+/**
+ * Withdraw your own study request (US-16). Bound like joinSession:
+ * `useActionState(withdrawRequest.bind(null, requestId), {})`.
+ *
+ * Asks for an exact count because RLS refuses SILENTLY: a delete aimed at
+ * someone else's request is not an error, it simply matches no rows. Without
+ * the count this would report success for a request it never touched.
+ */
+export async function withdrawRequest(
+  requestId: string,
+  _prev: SessionActionState,
+  _formData: FormData,
+): Promise<SessionActionState> {
+  await requireUser();
+
+  const supabase = await createClient();
+  const { error, count } = await supabase
+    .from("study_requests")
+    .delete({ count: "exact" })
+    .eq("id", requestId);
+
+  if (error) {
+    console.error("withdrawRequest: delete failed", { code: error.code, message: error.message });
+    return { error: databaseErrorMessage(error) };
+  }
+  if (count === 0) {
+    return { error: "That request isn't there anymore." };
+  }
+
+  revalidatePath("/sessions");
+  return {};
+}
+
+/** databaseFailure's twin for the study-request form's field names. */
+function studyRequestFailure(
+  what: string,
+  error: DatabaseErrorLike,
+  formData: FormData,
+): StudyRequestState {
+  console.error(`requestSession: ${what} failed`, { code: error.code, message: error.message });
+  return { formError: databaseErrorMessage(error), values: formValues(formData) };
 }
 
 /**

@@ -21,6 +21,11 @@
 //     already mapped above -- an edit goes through the same constraints.
 //   - M2 (#23): the location picker's searches, sent from the browser to
 //     Places Autocomplete (src/lib/place-search.ts).
+//   - R1 (US-16): the CHECK and the unique constraint on study_requests
+//     (*_r1_study_requests.sql). Those writes go through RLS policies rather
+//     than a SECURITY DEFINER function, so nothing there `raise exception`s:
+//     a refusal arrives as 42501 (already mapped below) or as a constraint
+//     name, which is why both new entries are in CONSTRAINT_MESSAGES.
 // Still to come:
 //   - Later: chat (US-05).
 
@@ -62,6 +67,12 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   departments_code_normalised: "That department code isn't valid.",
   departments_code_length: "Department codes are at most 10 letters or digits.",
   courses_number_normalised: "Enter a 4-digit course number, like 3251 or 2100W.",
+  // R1 (US-16): one live request per student per course, so asking twice is
+  // a unique violation rather than a second vote. Reached from two sides --
+  // two tabs, or a direct API call -- so it needs a message either way.
+  study_requests_course_id_author_id_key:
+    "You've already asked for this course. Classmates can see it.",
+  study_requests_note_length: "Keep your note to 200 characters or fewer.",
 };
 
 /**
