@@ -220,7 +220,7 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
-            "consume_rate_limit":
+"consume_rate_limit":
 { Args: { "p_bucket": string }; Returns: number
                            },
 "create_session":

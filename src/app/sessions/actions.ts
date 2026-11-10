@@ -68,7 +68,7 @@ export async function createSession(
   // auth.uid()). Refused, or the check itself failing: no lookup.
   const limitError = await consumeRateLimit("place_lookup");
   if (limitError) {
-    return databaseFailure("consume_rate_limit", limitError, formData);
+    return databaseFailure("consume_rate_limit", limitError, formData, user.id);
   }
 
   let locationId: string;
