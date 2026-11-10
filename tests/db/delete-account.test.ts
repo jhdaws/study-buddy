@@ -156,6 +156,25 @@ describe("deleting an account removes the student's data", () => {
     expect(rows).toEqual([]);
   });
 
+  it("deletes their study requests (US-16), so the counts stop including them", async () => {
+    await db.query("insert into public.study_requests (course_id, author_id) values ($1, $2)", [
+      courseId,
+      leaving,
+    ]);
+    await db.query("insert into public.study_requests (course_id, author_id) values ($1, $2)", [
+      courseId,
+      staying,
+    ]);
+
+    await deleteAccount(leaving);
+
+    const { rows } = await db.query<{ author_id: string }>(
+      "select author_id from public.study_requests where course_id = $1",
+      [courseId],
+    );
+    expect(rows).toEqual([{ author_id: staying }]);
+  });
+
   it("keeps courses and departments they added, without their name", async () => {
     const { rows } = await db.query<{ code: string }>(
       "insert into public.departments (code, created_by) values ('ZZP2DEL', $1) returning code",
