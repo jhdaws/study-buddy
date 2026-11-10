@@ -243,3 +243,67 @@ test("calendar download (US-19): a session from the list downloads as an .ics ev
   expect(body.startsWith("BEGIN:VCALENDAR\r\n")).toBe(true);
   expect(body).toContain(`UID:${sessionId}@study-buddy`);
 });
+
+test("study requests (US-16, R1): a student asks for a course, a host picks it up, then the ask is withdrawn", async ({
+  page,
+}) => {
+  // A course number of its own, so the count below is this journey's doing
+  // and not an earlier run's: requests live for 7 days, so a fixed number
+  // would read "2 students want..." the second time this is run locally.
+  const courseNumber = String(1000 + Math.floor(Math.random() * 9000));
+  const note = `E2E ask ${Date.now()}`;
+
+  await signInAsNewStudent(page, newStudentEmail("journey5"), "Sam Seeker", "/sessions");
+
+  await page.getByRole("button", { name: "Request a session" }).click();
+  await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
+  await page.getByLabel("Course number").fill(courseNumber);
+  await page.getByLabel(/Note/).fill(note);
+  await page.getByRole("button", { name: "Post request" }).click();
+
+  // Scoped to the waiting-list section: the course typeahead also uses <li>
+  // options, and a bare `li` filter for the course number matches both.
+  const waiting = page.getByRole("region", { name: "Students waiting for a session" });
+  const row = waiting.getByRole("listitem").filter({ hasText: `CS ${courseNumber}` });
+  // The ask appears with the student's own note, and as THEIR ask -- the
+  // Withdraw button is what viewerAsked drives.
+  await expect(row).toContainText("1 student wants");
+  await expect(row).toContainText(note);
+  await expect(row.getByRole("button", { name: "Withdraw" })).toBeVisible();
+
+  // The point of the feature: "Host one" carries the course across, so the
+  // would-be host does not retype it. Without the prefill this is where a
+  // student gives up.
+  await row.getByRole("link", { name: "Host one" }).click();
+  await expect(page).toHaveURL(`/sessions/new?department=CS&course=${courseNumber}`);
+  await expect(page.getByLabel("Department")).toHaveValue("CS");
+  await expect(page.getByLabel("Course number")).toHaveValue(courseNumber);
+
+  // Withdrawing takes it off the list for everyone.
+  await page.goto("/sessions");
+  const waitingAgain = page.getByRole("region", { name: "Students waiting for a session" });
+  await waitingAgain
+    .getByRole("listitem")
+    .filter({ hasText: `CS ${courseNumber}` })
+    .getByRole("button", { name: "Withdraw" })
+    .click();
+  await expect(
+    waitingAgain.getByRole("listitem").filter({ hasText: `CS ${courseNumber}` }),
+  ).toHaveCount(0);
+
+  const db = await connect();
+  try {
+    const { rows } = await db.query<{ count: number }>(
+      `select count(*)::int as count
+         from public.study_requests r
+         join public.courses c on c.id = r.course_id
+        where c.department_code = 'CS' and c.number = $1`,
+      [courseNumber],
+    );
+    // Withdrawing DELETES rather than hiding: nothing sweeps up expired rows,
+    // so a row left behind would keep being counted for seven days.
+    expect(rows).toEqual([{ count: 0 }]);
+  } finally {
+    await db.end();
+  }
+});

@@ -324,3 +324,37 @@ describe("mapUnavailableMessage (M4)", () => {
     }
   });
 });
+
+describe("databaseErrorMessage: study requests (R1, US-16)", () => {
+  it("explains a second ask for the same course", () => {
+    // study_requests is written through RLS policies, not a function, so a
+    // refusal arrives as a constraint name rather than a raised message.
+    const message = databaseErrorMessage({
+      code: "23505",
+      message:
+        'duplicate key value violates unique constraint "study_requests_course_id_author_id_key"',
+    });
+
+    expect(message).toBe("You've already asked for this course. Classmates can see it.");
+  });
+
+  it("explains a note that is too long", () => {
+    const message = databaseErrorMessage({
+      code: "23514",
+      message:
+        'new row for relation "study_requests" violates check constraint "study_requests_note_length"',
+    });
+
+    expect(message).toBe("Keep your note to 200 characters or fewer.");
+  });
+
+  it("falls back to the permission message when a policy refuses the write", () => {
+    // What a forged author_id looks like from PostgREST.
+    const message = databaseErrorMessage({
+      code: "42501",
+      message: 'new row violates row-level security policy for table "study_requests"',
+    });
+
+    expect(message).toBe("You don't have permission to do that.");
+  });
+});

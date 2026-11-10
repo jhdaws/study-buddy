@@ -18,6 +18,8 @@ import {
   normalizeCourseNumber,
   normalizeDepartmentCode,
   signInSchema,
+  STUDY_REQUEST_NOTE_MAX_LENGTH,
+  studyRequestSchema,
   verifyCodeSchema,
 } from "./validation";
 
@@ -492,3 +494,80 @@ describe("setPasswordSchema (A6)", () => {
   });
 });
 
+
+// ---------------------------------------------------------------------------
+
+describe("studyRequestSchema (US-16, R1)", () => {
+  const ask = (overrides: Record<string, string> = {}) =>
+    studyRequestSchema.safeParse({
+      departmentCode: "cs",
+      courseNumber: "3251",
+      note: "Tue evening would suit me",
+      ...overrides,
+    });
+
+  it("normalises the course the same way the create-session form does", () => {
+    const result = ask({ departmentCode: " c.s. ", courseNumber: " 2100-w " });
+
+    expect(result.success).toBe(true);
+    // Both forms reach the same get_or_create_course, so a request that
+    // normalised differently would ask for a course no session could satisfy.
+    expect(result.data).toMatchObject({ departmentCode: "CS", courseNumber: "2100W" });
+  });
+
+  it("keeps the note it was given", () => {
+    const result = ask({ note: "  Before the midterm  " });
+
+    expect(result.success && result.data.note).toBe("Before the midterm");
+  });
+
+  it("treats a blank note as no note", () => {
+    expect(ask({ note: "   " }).data?.note).toBeNull();
+  });
+
+  it("treats a missing note as no note", () => {
+    const result = studyRequestSchema.safeParse({ departmentCode: "CS", courseNumber: "3251" });
+
+    // Asking is the point; the note is a courtesy.
+    expect(result.success).toBe(true);
+    expect(result.data?.note).toBeNull();
+  });
+
+  it("accepts a note of exactly the limit", () => {
+    expect(ask({ note: "x".repeat(STUDY_REQUEST_NOTE_MAX_LENGTH) }).success).toBe(true);
+  });
+
+  it("refuses a note over the limit", () => {
+    expect(fieldErrors(ask({ note: "x".repeat(STUDY_REQUEST_NOTE_MAX_LENGTH + 1) })).note).toEqual([
+      `Keep it to ${STUDY_REQUEST_NOTE_MAX_LENGTH} characters or fewer.`,
+    ]);
+  });
+
+  it("asks for a department and a course number when they are missing", () => {
+    const errors = fieldErrors(studyRequestSchema.safeParse({}));
+
+    expect(errors.departmentCode).toEqual(["Choose or add a department."]);
+    expect(errors.courseNumber).toEqual(["Enter a course number."]);
+  });
+
+  it("refuses a course number that is not four digits", () => {
+    expect(fieldErrors(ask({ courseNumber: "32" })).courseNumber).toEqual([
+      "Enter a 4-digit course number, like 3251 or 2100W.",
+    ]);
+  });
+
+  it("refuses a department code that is a pasted sentence", () => {
+    expect(fieldErrors(ask({ departmentCode: "computer science and more" })).departmentCode).toEqual([
+      `Department codes are at most ${DEPARTMENT_CODE_MAX_LENGTH} letters or digits.`,
+    ]);
+  });
+
+  it("asks for nothing a request does not have", () => {
+    // No time, place or capacity: a student who knew those would be hosting.
+    expect(Object.keys(studyRequestSchema.shape).sort()).toEqual([
+      "courseNumber",
+      "departmentCode",
+      "note",
+    ]);
+  });
+});

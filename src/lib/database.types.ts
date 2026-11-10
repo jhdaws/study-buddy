@@ -167,6 +167,32 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"study_requests": {
+                  Row: {
+                    "author_id": string,"course_id": string,"created_at": string,"expires_at": string,"id": string,"note": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "author_id": string,"course_id": string,"created_at"?: string,"expires_at"?: string,"id"?: string,"note"?: string | null
+                  }
+                  Update: {
+                    "author_id"?: string,"course_id"?: string,"created_at"?: string,"expires_at"?: string,"id"?: string,"note"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "study_requests_author_id_fkey"
+      columns: ["author_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "study_requests_course_id_fkey"
+      columns: ["course_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id"]
+    }
+                  ]
                 }
           }
           Views: {
