@@ -550,3 +550,56 @@ test("course filter (US-06, S8): filtering by course keeps only that course, and
   await expect(page.locator("article").filter({ hasText: topicA })).toBeVisible();
   await expect(page.locator("article").filter({ hasText: topicB })).toBeVisible();
 });
+
+test("repeat weekly (US-20, S10): creating with repeat for 3 weeks yields 3 sessions a week apart", async ({
+  page,
+}) => {
+  const topic = `E2E weekly ${Date.now()}`;
+  await signInAsNewStudent(page, newStudentEmail("weekly"), "Wendy Weekly");
+
+  await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
+  await page.getByLabel("Course number").fill("3251");
+  await page.getByLabel("What are you studying?").fill(topic);
+  await chooseByKeyboard(page.getByLabel("Place"), "Feath", "ChIJ-FAKE-featheringill-hall");
+  await page.getByLabel("Starts").fill(campusTime(2));
+  await page.getByLabel("Ends").fill(campusTime(4));
+  await page.getByLabel("How many people, including you?").fill("4");
+
+  await page.getByLabel(/Repeat weekly/).check();
+  await page.getByLabel("For how many weeks?").fill("3");
+  await page.getByRole("button", { name: "Create session" }).click();
+
+  await expect(page).toHaveURL("/sessions");
+  // Three cards, same topic -- each copy is an ordinary session in the list.
+  await expect(page.locator("article").filter({ hasText: topic })).toHaveCount(3);
+
+  const db = await connect();
+  try {
+    const { rows } = await db.query<{
+      starts_at: Date;
+      attendees: number;
+      host: string;
+    }>(
+      `select s.starts_at,
+              (select count(*)::int from public.session_attendees a where a.session_id = s.id) as attendees,
+              p.display_name as host
+         from public.sessions s
+         join public.profiles p on p.id = s.host_id
+        where s.topic = $1
+        order by s.starts_at`,
+      [topic],
+    );
+    expect(rows).toHaveLength(3);
+    expect(rows.every((row) => row.attendees === 1 && row.host === "Wendy Weekly")).toBe(true);
+    // Spaced by about a week (DST may make it 167 or 169 hours).
+    const gap1 = rows[1]!.starts_at.getTime() - rows[0]!.starts_at.getTime();
+    const gap2 = rows[2]!.starts_at.getTime() - rows[1]!.starts_at.getTime();
+    const day = 24 * 60 * 60 * 1000;
+    expect(gap1).toBeGreaterThan(6 * day);
+    expect(gap1).toBeLessThan(8 * day);
+    expect(gap2).toBeGreaterThan(6 * day);
+    expect(gap2).toBeLessThan(8 * day);
+  } finally {
+    await db.end();
+  }
+});

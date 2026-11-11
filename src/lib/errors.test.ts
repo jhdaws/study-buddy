@@ -364,3 +364,11 @@ describe("databaseErrorMessage: study requests (R1, US-16)", () => {
     expect(message).toBe("You don't have permission to do that.");
   });
 });
+
+describe("databaseErrorMessage: repeat weekly (S10, US-20)", () => {
+  it("explains a week count outside 2..8", () => {
+    expect(databaseErrorMessage({ message: "weeks_out_of_range", code: "P0001" })).toBe(
+      "Repeat for between 2 and 8 weeks.",
+    );
+  });
+});

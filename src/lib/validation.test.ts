@@ -267,10 +267,13 @@ describe("createSessionSchema (US-02)", () => {
         topic: "Design patterns review",
         room: "Room 100",
         placeId: "ChIJ-FAKE-featheringill-hall",
+        placeSessionToken: undefined,
         locationLabel: "Featheringill Hall",
         startsAt: new Date(NOW.getTime() + 1 * HOUR),
         endsAt: new Date(NOW.getTime() + 3 * HOUR),
         capacity: 4,
+        repeatWeekly: false,
+        weeks: undefined,
       },
     });
   });
@@ -632,5 +635,45 @@ describe("studyRequestSchema (US-16, R1)", () => {
       "departmentCode",
       "note",
     ]);
+  });
+});
+
+
+describe("createSessionSchema: repeat weekly (US-20)", () => {
+  it("defaults to a single session when the box is unchecked", () => {
+    const result = createSessionSchema(NOW).safeParse(validSession());
+    expect(result.success).toBe(true);
+    expect(result.success && result.data.repeatWeekly).toBe(false);
+    expect(result.success && result.data.weeks).toBeUndefined();
+  });
+
+  it("accepts a series of 2 to 8 weeks", () => {
+    const result = createSessionSchema(NOW).safeParse(
+      validSession({ repeatWeekly: "on", weeks: "3" }),
+    );
+    expect(result.success && result.data.repeatWeekly).toBe(true);
+    expect(result.success && result.data.weeks).toBe(3);
+  });
+
+  it("demands a week count when repeating", () => {
+    expect(
+      fieldErrors(createSessionSchema(NOW).safeParse(validSession({ repeatWeekly: "on" }))).weeks,
+    ).toEqual(["Choose 2 to 8 weeks."]);
+  });
+
+  it("refuses a series longer than 8 weeks", () => {
+    expect(
+      fieldErrors(
+        createSessionSchema(NOW).safeParse(validSession({ repeatWeekly: "on", weeks: "9" })),
+      ).weeks,
+    ).toEqual(["Repeat for at most 8 weeks."]);
+  });
+
+  it("refuses a series shorter than 2 weeks", () => {
+    expect(
+      fieldErrors(
+        createSessionSchema(NOW).safeParse(validSession({ repeatWeekly: "on", weeks: "1" })),
+      ).weeks,
+    ).toEqual(["Repeat for at least 2 weeks."]);
   });
 });

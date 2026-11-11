@@ -77,6 +77,16 @@ export const STUDY_REQUEST_NOTE_MAX_LENGTH = 200;
 export const STUDY_REQUEST_DAYS = 7;
 
 /**
+ * S10/US-20: how many weekly copies a host may create in one go, inclusive.
+ * 2 is the smallest series that is actually a repeat; 8 is about two months
+ * of the same slot, enough for a midterm stretch without a host locking the
+ * room for a whole semester. Enforced in create_sessions_weekly() as well as
+ * the form -- a direct RPC call cannot skip it.
+ */
+export const MIN_REPEAT_WEEKS = 2;
+export const MAX_REPEAT_WEEKS = 8;
+
+/**
  * How far in the past a start time may be and still count as "now".
  * `datetime-local` inputs have minute precision, so a host who picks the
  * current minute is already up to 59 seconds late by the time they submit.

@@ -99,6 +99,9 @@ const RAISED_MESSAGES: Record<string, string> = {
   not_session_host: "Only the host can change or cancel this session.",
   capacity_below_roster:
     "That's fewer seats than the students already coming. Nobody is removed by an edit.",
+  // S10: create_sessions_weekly (US-20).
+  weeks_out_of_range: "Repeat for between 2 and 8 weeks.",
+  ends_before_starts: "The session has to end after it starts.",
 };
 
 /** SQLSTATE codes with one meaning wherever they come from. */

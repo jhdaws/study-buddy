@@ -93,25 +93,43 @@ export async function createSession(
     return databaseFailure("get_or_create_course", courseError, formData);
   }
 
-  // S1's create_session: inserts the session and the host as an attendee in
-  // one transaction, and rechecks the rules the form already applied (start
-  // not in the past, end after start, capacity >= 2, display name set).
-  // host_id comes from the session cookie inside the function -- never from
-  // the form.
-  const { error: sessionError } = await supabase.rpc("create_session", {
-    course_id: courseId,
-    location_id: locationId,
-    location_label: parsed.data.locationLabel,
-    // The generated types mark every function argument non-null; the
-    // function itself turns a blank room back into null.
-    room: parsed.data.room ?? "",
-    topic: parsed.data.topic,
-    starts_at: parsed.data.startsAt.toISOString(),
-    ends_at: parsed.data.endsAt.toISOString(),
-    capacity: parsed.data.capacity,
-  });
-  if (sessionError) {
-    return databaseFailure("create_session", sessionError, formData);
+  // Place is validated ONCE above (US-20): every weekly copy reuses this
+  // location_id. host_id comes from the session cookie inside the RPC --
+  // never from the form.
+  if (parsed.data.repeatWeekly && parsed.data.weeks != null) {
+    // S10's create_sessions_weekly: N independent sessions in one
+    // transaction, a week apart at the same Chicago wall-clock time.
+    const { error: seriesError } = await supabase.rpc("create_sessions_weekly", {
+      p_course_id: courseId,
+      p_location_id: locationId,
+      p_location_label: parsed.data.locationLabel,
+      p_room: parsed.data.room ?? "",
+      p_topic: parsed.data.topic,
+      p_starts_at: parsed.data.startsAt.toISOString(),
+      p_ends_at: parsed.data.endsAt.toISOString(),
+      p_capacity: parsed.data.capacity,
+      p_weeks: parsed.data.weeks,
+    });
+    if (seriesError) {
+      return databaseFailure("create_sessions_weekly", seriesError, formData);
+    }
+  } else {
+    // S1's create_session: one session and the host as its first attendee.
+    const { error: sessionError } = await supabase.rpc("create_session", {
+      course_id: courseId,
+      location_id: locationId,
+      location_label: parsed.data.locationLabel,
+      // The generated types mark every function argument non-null; the
+      // function itself turns a blank room back into null.
+      room: parsed.data.room ?? "",
+      topic: parsed.data.topic,
+      starts_at: parsed.data.startsAt.toISOString(),
+      ends_at: parsed.data.endsAt.toISOString(),
+      capacity: parsed.data.capacity,
+    });
+    if (sessionError) {
+      return databaseFailure("create_session", sessionError, formData);
+    }
   }
 
   redirect("/sessions");

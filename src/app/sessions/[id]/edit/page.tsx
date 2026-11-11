@@ -90,6 +90,9 @@ export default async function EditSessionPage({ params }: { params: Promise<{ id
         action={editSession.bind(null, session.id)}
         submitLabel="Save changes"
         pendingLabel="Saving…"
+        // One copy of a series at a time (US-20): editing must not invent
+        // further weekly copies.
+        showRepeat={false}
         // The form's field names are the schema's keys, and every field reads
         // its initial value from here. The times are ISO with an offset, the
         // shape the hidden inputs carry (isoToLocalInput turns them back into
