@@ -128,6 +128,9 @@ const RAISED_MESSAGES: Record<string, string> = {
   // PT429), which createSession() calls before every place lookup.
   place_lookup_rate_limited:
     "You've tried a lot of places in the last few minutes. Wait a few minutes, then try again.",
+  // S10: create_sessions_weekly (US-20).
+  weeks_out_of_range: "Repeat for between 2 and 8 weeks.",
+  ends_before_starts: "The session has to end after it starts.",
 };
 
 /** SQLSTATE codes with one meaning wherever they come from. */

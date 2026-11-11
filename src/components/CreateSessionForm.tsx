@@ -88,7 +88,9 @@ import {
 import { isoToLocalInput, localInputToIso } from "@/lib/datetime-local";
 import {
   LOCATION_LABEL_MAX_LENGTH,
+  MAX_REPEAT_WEEKS,
   MIN_CAPACITY,
+  MIN_REPEAT_WEEKS,
   ROOM_MAX_LENGTH,
   TOPIC_MAX_LENGTH,
 } from "@/lib/limits";
@@ -131,6 +133,11 @@ export type CreateSessionFormProps = {
   /** The submit button, idle and pending. Defaults to creating a session. */
   submitLabel?: string;
   pendingLabel?: string;
+  /**
+   * US-20: show the "Repeat weekly" controls. On for create; off for edit
+   * (S7) -- editing one copy of a series must not invent the others.
+   */
+  showRepeat?: boolean;
 };
 
 export default function CreateSessionForm({
@@ -139,10 +146,16 @@ export default function CreateSessionForm({
   action = createSession,
   submitLabel = "Create session",
   pendingLabel = "Creating session…",
+  showRepeat = true,
 }: CreateSessionFormProps) {
   const [state, formAction, pending] = useActionState(action, initialState);
   const values = state.values ?? {};
   const prefix = useId();
+  // Local only so the weeks field can appear without a round trip; the
+  // submitted value is still the checkbox's own name="repeatWeekly".
+  const [repeatWeekly, setRepeatWeekly] = useState(
+    values.repeatWeekly === "on" || values.repeatWeekly === "true",
+  );
 
   // --- Department: a known code, or "add" plus free text -------------------
   const initialDepartment = initialState.values?.departmentCode ?? "";
@@ -519,6 +532,52 @@ export default function CreateSessionForm({
             </div>
             <FieldError id={ids("capacity").error} message={errorFor("capacity")} />
           </div>
+
+          {showRepeat && (
+            <div className={FIELD}>
+              <label className="flex min-h-11 cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  name="repeatWeekly"
+                  value="on"
+                  checked={repeatWeekly}
+                  onChange={(event) => setRepeatWeekly(event.target.checked)}
+                  className="mt-1 size-5 shrink-0 rounded border-field text-brand focus:ring-signal/30"
+                />
+                <span>
+                  <span className={LABEL}>Repeat weekly</span>
+                  <span className={`${HINT} mt-0.5 block`}>
+                    Creates separate sessions a week apart — same spot, topic and
+                    time. Each one can be edited or cancelled on its own.
+                  </span>
+                </span>
+              </label>
+              {repeatWeekly && (
+                <div className="mt-2 pl-8">
+                  <label htmlFor={ids("weeks").input} className={LABEL}>
+                    For how many weeks?
+                  </label>
+                  <p id={ids("weeks").hint} className={HINT}>
+                    {MIN_REPEAT_WEEKS} to {MAX_REPEAT_WEEKS}, including this one.
+                  </p>
+                  <input
+                    id={ids("weeks").input}
+                    name="weeks"
+                    type="number"
+                    inputMode="numeric"
+                    defaultValue={values.weeks ?? String(MIN_REPEAT_WEEKS)}
+                    required
+                    min={MIN_REPEAT_WEEKS}
+                    max={MAX_REPEAT_WEEKS}
+                    step={1}
+                    {...a11y("weeks", true)}
+                    className={`${INPUT} mt-1.5 max-w-[8rem]`}
+                  />
+                  <FieldError id={ids("weeks").error} message={errorFor("weeks")} />
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </fieldset>
 

@@ -462,3 +462,11 @@ describe("databaseErrorMessage: the place lookup rate limit (SEC-05)", () => {
     expect(message).not.toMatch(/rate_limited|hits|PT429/);
   });
 });
+
+describe("databaseErrorMessage: repeat weekly (S10, US-20)", () => {
+  it("explains a week count outside 2..8", () => {
+    expect(databaseErrorMessage({ message: "weeks_out_of_range", code: "P0001" })).toBe(
+      "Repeat for between 2 and 8 weeks.",
+    );
+  });
+});

@@ -30,8 +30,10 @@ import {
   LOCATION_LABEL_MAX_LENGTH,
   MAJOR_MAX_LENGTH,
   MAX_CAPACITY,
+  MAX_REPEAT_WEEKS,
   MIN_CAPACITY,
   MINOR_MAX_LENGTH,
+  MIN_REPEAT_WEEKS,
   OTP_CODE_MAX_LENGTH,
   OTP_CODE_MIN_LENGTH,
   PASSWORD_MAX_LENGTH,
@@ -53,8 +55,10 @@ export {
   LOCATION_LABEL_MAX_LENGTH,
   MAJOR_MAX_LENGTH,
   MAX_CAPACITY,
+  MAX_REPEAT_WEEKS,
   MIN_CAPACITY,
   MINOR_MAX_LENGTH,
+  MIN_REPEAT_WEEKS,
   OTP_CODE_MAX_LENGTH,
   OTP_CODE_MIN_LENGTH,
   PASSWORD_MAX_LENGTH,
@@ -429,6 +433,29 @@ export function createSessionSchema(
           })
           .max(MAX_CAPACITY, { error: "That's more seats than we can store." }),
       ),
+      // US-20: a checked box posts "on"; an unchecked box posts nothing. The
+      // edit form does not render these fields at all, so both stay at their
+      // "not repeating" defaults there.
+      repeatWeekly: z
+        .string()
+        .optional()
+        .transform((value) => value === "on" || value === "true"),
+      // Only meaningful when repeatWeekly is true; ignored otherwise. The
+      // refine below is what demands it then -- making it required here would
+      // refuse every ordinary (non-repeat) create.
+      weeks: z.preprocess(
+        blankAsMissing,
+        z.coerce
+          .number({ error: `Choose ${MIN_REPEAT_WEEKS} to ${MAX_REPEAT_WEEKS} weeks.` })
+          .int({ error: "Enter a whole number of weeks." })
+          .min(MIN_REPEAT_WEEKS, {
+            error: `Repeat for at least ${MIN_REPEAT_WEEKS} weeks.`,
+          })
+          .max(MAX_REPEAT_WEEKS, {
+            error: `Repeat for at most ${MAX_REPEAT_WEEKS} weeks.`,
+          })
+          .optional(),
+      ),
     })
     .refine((session) => session.endsAt > session.startsAt, {
       path: ["endsAt"],
@@ -442,6 +469,10 @@ export function createSessionSchema(
         const value = payload.value as { startsAt?: unknown; endsAt?: unknown };
         return value?.startsAt instanceof Date && value?.endsAt instanceof Date;
       },
+    })
+    .refine((session) => !session.repeatWeekly || session.weeks != null, {
+      path: ["weeks"],
+      error: `Choose ${MIN_REPEAT_WEEKS} to ${MAX_REPEAT_WEEKS} weeks.`,
     });
 }
 
