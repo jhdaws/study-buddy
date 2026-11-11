@@ -239,10 +239,11 @@ describe("RLS on sessions and session_attendees (S1)", () => {
 
     const anon = await connection();
     await anon.query("set role anon");
-    const sessions = await anon.query("select id from public.sessions where id = $1", [
-      sessionId,
-    ]);
-    expect(sessions.rows).toEqual([]);
+    // Refused outright since SEC-14 (anon holds no privilege on public
+    // tables); before, RLS returned no rows.
+    await expect(
+      anon.query("select id from public.sessions where id = $1", [sessionId]),
+    ).rejects.toMatchObject({ code: "42501" });
   });
 
   it("refuses a direct client INSERT into session_attendees -- only create_session may write it", async () => {

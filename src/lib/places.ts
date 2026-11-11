@@ -108,25 +108,27 @@ export class PlaceError extends Error {
 // the browser key too, so the picker offers real places; that is intended
 // (.env.example: both Google keys, or neither).
 // Why this is not a bypass of the radius and type checks: it writes nothing,
-// and the location ids it returns (FIXTURE_LOCATIONS, `20000000-...`) are not
-// rows in any real database -- they are not seeded -- so a session pointing
-// at one fails `sessions.location_id`'s foreign key once S3 saves for real.
-// Any other id goes the full route above.
+// and the location ids it returns (FIXTURE_LOCATIONS, `20000000-...`) exist
+// only where M5 (#74) seeds them -- local and CI databases, never production
+// -- so on production a session pointing at one fails
+// `sessions.location_id`'s foreign key. Any other id goes the full route
+// above. (SEC-17: this used to say the ids were seeded nowhere.)
 //
 // SIGNED-IN ONLY. Every real lookup is a billed Google call and a write with
-// the secret key. createSession() is a public POST endpoint, and its
-// requireUser() is a stub returning FIXTURE_USER until A4 (#17) -- so this
-// checks for itself rather than trusting its caller. In a production build
-// it asks Supabase for the session's user (getUser(), revalidated); nobody,
-// and the lookup is refused before Google is called. Until A4 lets anyone
-// sign in, that closes the real path in production entirely, even with the
-// keys set. Not checked outside production, so M3 and M2 can be tried
-// locally before sign-in exists.
+// the secret key. createSession() and editSession() are public POST
+// endpoints; they call requireUser() first, but this checks for itself
+// rather than trusting its caller. In a production build it asks Supabase
+// for the session's user (getUser(), revalidated); with nobody signed in the
+// lookup is refused before Google is called. Any Vanderbilt student can sign
+// in, so this stops anonymous callers, not students -- the per-student limit
+// below is what stops a student looping it. Not checked outside production,
+// so the picker can be tried locally. (SEC-17: this used to describe
+// requireUser() as A4's stub, and sign-in as impossible in production.)
 //
-// RATE LIMITED BY THE CALLER (SEC-05). createSession() spends one
-// `place_lookup` hit (src/lib/rate-limit.ts; PLACE_LOOKUPS_PER_WINDOW in
-// limits.ts) before calling this, so a student cannot loop lookups. Any new
-// caller must do the same. Google's daily quota cap (M1) stays the backstop.
+// RATE LIMITED BY THE CALLER (SEC-05). createSession() and editSession()
+// spend one `place_lookup` hit (src/lib/rate-limit.ts;
+// PLACE_LOOKUPS_PER_WINDOW in limits.ts) before calling this, so a student
+// cannot loop lookups. Any new caller must do the same. Google's daily quota cap (M1) stays the backstop.
 // ===========================================================================
 
 /** Optional extras for resolvePlace(). */

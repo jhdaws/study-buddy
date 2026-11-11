@@ -385,15 +385,15 @@ describe("grants on join_session and leave_session (S5)", () => {
     await signInAs(other, otherId);
     await joinSession(other, sessionId);
 
-    // No DELETE policy exists, so RLS's implicit USING(false) filters the
-    // target row out before the DELETE runs -- it reports 0 rows affected
-    // rather than an error (unlike the INSERT case in session-rules.test.ts,
-    // where a failing WITH CHECK always raises).
-    const result = await other.query(
-      "delete from public.session_attendees where session_id = $1 and user_id = $2",
-      [sessionId, otherId],
-    );
-    expect(result.rowCount).toBe(0);
+    // Since SEC-14 the client role has no DELETE on session_attendees at
+    // all, so this is refused outright (before, with no DELETE policy, RLS
+    // matched 0 rows). leave_session() is the only way off a roster.
+    await expect(
+      other.query("delete from public.session_attendees where session_id = $1 and user_id = $2", [
+        sessionId,
+        otherId,
+      ]),
+    ).rejects.toMatchObject({ code: "42501" });
     expect(await rosterCount(host, sessionId)).toBe(2);
   });
 });
