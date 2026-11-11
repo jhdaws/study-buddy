@@ -16,6 +16,7 @@ was rejected and why.
 | [0008](./0008-sprint-2-schema-decisions.md) | Accepted | Sprint 2 schema: RLS deny by default, derived seats, server-written Places locations, anonymised deletion, user-created departments |
 | [0009](./0009-auth-settings-as-code.md) | **Proposed** | Security-relevant Supabase auth settings live in `config.toml` with production's values; CI checks them against the hosted project (from the Sprint 4 security review) |
 | [0010](./0010-account-deletion-secret-key.md) | **Proposed** | Account deletion (US-24) deletes the caller's own auth user with the secret key; a trigger cancels their upcoming hosted sessions in the same transaction |
+| [0011](./0011-rate-limits-in-the-database.md) | Accepted | Rate limits live in the database: a trigger for direct inserts, `consume_rate_limit()` for server-only work, both per `auth.uid()` and failing closed (Sprint 4 security audit, SEC-03 and SEC-05) |
 
 ## On "Proposed"
 
