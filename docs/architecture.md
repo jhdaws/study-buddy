@@ -155,6 +155,9 @@ classDiagram
     class Profile {
         +UUID id
         +string displayName
+        +string major
+        +string minor
+        +ClassYear classYear
         +datetime createdAt
     }
 
@@ -216,7 +219,7 @@ classDiagram
     Profile "1" --> "0..*" StudyRequest : posts
     StudySession --> SessionStatus
 
-    note for Profile "displayName is null until the<br/>first-sign-in name step. Email stays<br/>in auth.users, which clients cannot<br/>read — never copied here (US-25)."
+    note for Profile "displayName is null until the<br/>first-sign-in name step. Email stays<br/>in auth.users, which clients cannot<br/>read — never copied here (US-25).<br/>major, minor, classYear and current<br/>courses (profile_courses) are optional<br/>(US-11)."
     note for SessionAttendee "Composite key (sessionId, userId).<br/>This is what makes a double-join<br/>impossible — capacity is enforced<br/>separately, under a row lock."
     note for StudySession "seatsLeft() is DERIVED from the<br/>roster, never stored. hasEnded() is<br/>derived from endsAt — there is no<br/>ENDED status. hostId is null only<br/>after the host deletes their account."
     note for Message "Later sprint. isWritable() is true<br/>until one week after the session<br/>ends, enforced in RLS. authorId is<br/>null after deletion: 'Deleted user'."

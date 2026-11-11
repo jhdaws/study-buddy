@@ -23,6 +23,7 @@
 
 import "server-only";
 
+import type { ClassYear } from "@/lib/academic";
 import type { CourseFilter } from "@/lib/session-course";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeCourseNumber, normalizeDepartmentCode } from "@/lib/validation";
@@ -93,6 +94,13 @@ export type Attendee = {
   /** Never an email (US-25). Null only for a profile with no name yet. */
   displayName: string | null;
   isHost: boolean;
+  /**
+   * From their academic profile (US-11); null when they have not said.
+   * getSession() always sets both; optional so a roster built by hand (a
+   * test, a fixture) need not.
+   */
+  major?: string | null;
+  classYear?: ClassYear | null;
 };
 
 /**
@@ -264,6 +272,8 @@ export async function listSessions(
 // Reading the roster needs S1's session_attendees_select policy and A2's
 // profiles read policy; both allow any signed-in user, so a student can see
 // who is going before they join (US-23). Emails are never selected (US-25).
+// Each attendee's major and year come from the same profile row (US-11), so
+// they cost nothing extra.
 // ===========================================================================
 
 /** A session id is a uuid; anything else cannot match a row. */
@@ -284,7 +294,7 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
        courses!inner (department_code, number, title),
        locations!inner (place_id),
        profiles!sessions_host_id_fkey (display_name),
-       session_attendees (user_id, joined_at, profiles (display_name))`,
+       session_attendees (user_id, joined_at, profiles (display_name, major, class_year))`,
     )
     .eq("id", id)
     .maybeSingle();
@@ -303,6 +313,8 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
       userId: row.user_id,
       displayName: row.profiles?.display_name ?? null,
       isHost: row.user_id === data.host_id,
+      major: row.profiles?.major ?? null,
+      classYear: row.profiles?.class_year ?? null,
     }));
 
   return {

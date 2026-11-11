@@ -2,7 +2,8 @@
 
 /**
  * Attendee roster, seat count, and the join/leave button (US-04, US-07,
- * US-08, US-23). S6 (#52), on the session page.
+ * US-08, US-23). S6 (#52), on the session page. Each attendee's major and
+ * year (US-11) sit under their name when their profile has them.
  *
  * The page decides which button to offer (rosterAction(), src/lib/roster.ts)
  * and passes the roster in as props; this component only renders them and
@@ -41,6 +42,7 @@ import {
   PANEL,
   SECTION_TITLE,
 } from "@/components/ui/styles";
+import { formatAcademicLine } from "@/lib/academic";
 import { formatInitial } from "@/lib/format";
 import { subscribeToRoster } from "@/lib/live-roster";
 import type { RosterAction } from "@/lib/roster";
@@ -126,10 +128,18 @@ export default function SessionRoster({
               >
                 {formatInitial(attendee.displayName)}
               </span>
-              <span className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink">
-                {attendee.displayName ?? "A student"}
-                {attendee.userId === viewerId && (
-                  <span className="font-normal text-ink-2"> (you)</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[15px] font-semibold text-ink">
+                  {attendee.displayName ?? "A student"}
+                  {attendee.userId === viewerId && (
+                    <span className="font-normal text-ink-2"> (you)</span>
+                  )}
+                </span>
+                {/* US-11: context from their profile, when they gave any. */}
+                {formatAcademicLine(attendee.major, attendee.classYear) && (
+                  <span className="block truncate text-sm text-ink-2">
+                    {formatAcademicLine(attendee.major, attendee.classYear)}
+                  </span>
                 )}
               </span>
               {attendee.isHost && (

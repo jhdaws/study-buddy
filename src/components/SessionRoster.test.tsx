@@ -81,6 +81,24 @@ describe("SessionRoster", () => {
     expect(screen.getByText("2 seats left")).toBeTruthy();
   });
 
+  it("shows each attendee's major and year under their name when they gave them (US-11)", () => {
+    renderRoster({
+      attendees: [
+        { userId: "host", displayName: "Priya", isHost: true, major: "Computer Science", classYear: "junior" },
+        { userId: "me", displayName: "Alex", isHost: false, major: null, classYear: "graduate" },
+        { userId: "sam", displayName: "Sam", isHost: false, major: null, classYear: null },
+      ],
+    });
+
+    const items = within(screen.getByRole("list")).getAllByRole("listitem");
+    // The viewer is someone else, so every entry also ends in US-18's Report.
+    expect(items.map((item) => item.textContent)).toEqual([
+      "PPriyaComputer Science · JuniorHostReport",
+      "AAlexGraduate studentReport",
+      "SSamReport",
+    ]);
+  });
+
   it("joins this session when Join is pressed (US-04)", async () => {
     renderRoster();
     await click("Join session");

@@ -267,9 +267,9 @@ const detailRow = (overrides: Record<string, unknown> = {}) =>
     locations: { place_id: PLACE_ID },
     // Deliberately out of order: the late joiner first, the host in the middle.
     session_attendees: [
-      { user_id: LATE, joined_at: "2026-10-01T18:00:00+00:00", profiles: { display_name: "Sam" } },
-      { user_id: HOST, joined_at: "2026-10-01T12:00:00+00:00", profiles: { display_name: "Priya" } },
-      { user_id: EARLY, joined_at: "2026-10-01T13:00:00+00:00", profiles: { display_name: "Alex" } },
+      { user_id: LATE, joined_at: "2026-10-01T18:00:00+00:00", profiles: { display_name: "Sam", major: null, class_year: null } },
+      { user_id: HOST, joined_at: "2026-10-01T12:00:00+00:00", profiles: { display_name: "Priya", major: "Computer Science", class_year: "junior" } },
+      { user_id: EARLY, joined_at: "2026-10-01T13:00:00+00:00", profiles: { display_name: "Alex", major: null, class_year: "first_year" } },
     ],
     ...overrides,
   });
@@ -299,9 +299,9 @@ describe("getSession", () => {
       status: "open",
       hostId: HOST,
       attendees: [
-        { userId: HOST, displayName: "Priya", isHost: true },
-        { userId: EARLY, displayName: "Alex", isHost: false },
-        { userId: LATE, displayName: "Sam", isHost: false },
+        { userId: HOST, displayName: "Priya", isHost: true, major: "Computer Science", classYear: "junior" },
+        { userId: EARLY, displayName: "Alex", isHost: false, major: null, classYear: "first_year" },
+        { userId: LATE, displayName: "Sam", isHost: false, major: null, classYear: null },
       ],
       placeId: PLACE_ID,
     });
@@ -332,7 +332,9 @@ describe("getSession", () => {
 
     const select = String(callTo("select")?.[0]);
     expect(select).toContain("profiles!sessions_host_id_fkey");
-    expect(select).toContain("session_attendees (user_id, joined_at, profiles (display_name))");
+    expect(select).toContain(
+      "session_attendees (user_id, joined_at, profiles (display_name, major, class_year))",
+    );
     // S7 (US-09): the place id the edit form prefills from. `!inner` because
     // location_id is NOT NULL -- every session has exactly one location, and
     // the embed should not make the row optional.
@@ -380,7 +382,10 @@ describe("getSession", () => {
     expect(session?.status).toBe("cancelled");
     expect(session?.hostId).toBeNull();
     expect(session?.hostDisplayName).toBeNull();
-    expect(session?.attendees).toEqual([{ userId: EARLY, displayName: "Alex", isHost: false }]);
+    // An embed without the profile's newer columns still maps: they are null.
+    expect(session?.attendees).toEqual([
+      { userId: EARLY, displayName: "Alex", isHost: false, major: null, classYear: null },
+    ]);
   });
 
   it("throws with the database's message when the query fails", async () => {

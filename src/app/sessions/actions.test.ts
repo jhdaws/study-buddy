@@ -52,6 +52,9 @@ vi.mock("@/lib/places", async (importOriginal) => ({
 // editSession() reads the session's stored start time (S7, US-09).
 const sessions = vi.hoisted(() => ({ getSession: vi.fn() }));
 vi.mock("@/lib/sessions", () => ({ getSession: sessions.getSession }));
+// SEC-05's per-student limit: null is "allowed", an error is a refusal.
+const rateLimit = vi.hoisted(() => ({ consumeRateLimit: vi.fn() }));
+vi.mock("@/lib/rate-limit", () => ({ consumeRateLimit: rateLimit.consumeRateLimit }));
 
 const HOUR = 60 * 60 * 1000;
 
@@ -93,6 +96,7 @@ async function redirectOf(promise: Promise<unknown>): Promise<string> {
 beforeEach(() => {
   server.requireUser.mockResolvedValue({ id: "u1", displayName: "Priya" });
   places.resolvePlace.mockResolvedValue({ locationId: "loc-1" });
+  rateLimit.consumeRateLimit.mockResolvedValue(null);
   rpcReplies({ data: "course-1", error: null }, { data: { id: "s1" }, error: null });
   // A session whose start is still ahead, so editSessionSchema's allowance
   // for an unmoved past start is not what makes a test pass by accident.
@@ -101,6 +105,7 @@ beforeEach(() => {
     startsAt: new Date(Date.now() + HOUR).toISOString(),
   });
   vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -109,6 +114,7 @@ afterEach(() => {
   server.rpc.mockReset();
   server.from.mockReset();
   places.resolvePlace.mockReset();
+  rateLimit.consumeRateLimit.mockReset();
   cache.revalidatePath.mockReset();
   sessions.getSession.mockReset();
 });
@@ -241,6 +247,68 @@ describe("createSession: database refusals", () => {
   });
 });
 
+// SEC-05 (threat model T8): every resolvePlace() can be a billed Google
+// call, so createSession() spends a `place_lookup` hit first. The counting
+// itself is consume_rate_limit()'s, tested against real Postgres in
+// tests/db/place-lookup-rate-limit.test.ts.
+describe("createSession: place lookup rate limit (SEC-05)", () => {
+  const LIMITED = { code: "PT429", message: "place_lookup_rate_limited", details: "20 of 20 hits" };
+
+  it("spends one place lookup before resolving the place", async () => {
+    await redirectOf(createSession({}, form()));
+
+    expect(rateLimit.consumeRateLimit).toHaveBeenCalledOnce();
+    expect(rateLimit.consumeRateLimit).toHaveBeenCalledWith("place_lookup");
+    expect(rateLimit.consumeRateLimit.mock.invocationCallOrder[0]).toBeLessThan(
+      places.resolvePlace.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("at the limit: never calls resolvePlace() or either RPC, and says why against the form", async () => {
+    rateLimit.consumeRateLimit.mockResolvedValue(LIMITED);
+
+    const state = await createSession({}, form());
+
+    expect(places.resolvePlace).not.toHaveBeenCalled();
+    expect(server.rpc).not.toHaveBeenCalled();
+    expect(state.formError).toBe(
+      "You've tried a lot of places in the last few minutes. Wait a few minutes, then try again.",
+    );
+    expect(state.fieldErrors).toBeUndefined();
+    expect(state.values?.topic).toBe("Design patterns review");
+  });
+
+  it("logs the refusal by code and name only -- not the place, not the student", async () => {
+    rateLimit.consumeRateLimit.mockResolvedValue(LIMITED);
+
+    await createSession({}, form());
+
+    expect(console.error).toHaveBeenCalledWith("createSession: consume_rate_limit failed", {
+      code: "PT429",
+      message: "place_lookup_rate_limited",
+    });
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toMatch(/ChIJ|u1|Priya/);
+  });
+
+  it("fails closed: if the check itself fails, nothing is looked up", async () => {
+    rateLimit.consumeRateLimit.mockResolvedValue({ message: "fetch failed" });
+
+    const state = await createSession({}, form());
+
+    expect(places.resolvePlace).not.toHaveBeenCalled();
+    expect(state.formError).toBe("Something went wrong on our side. Try again in a moment.");
+  });
+
+  it("spends nothing on a form that fails validation, or for a signed-out student", async () => {
+    await createSession({}, form({ topic: "" }));
+
+    server.requireUser.mockRejectedValue(new Redirect("/login"));
+    await redirectOf(createSession({}, form()));
+
+    expect(rateLimit.consumeRateLimit).not.toHaveBeenCalled();
+  });
+});
+
 // joinSession() and leaveSession() (S5) with everything outside them
 // replaced the same way: requireUser() and the RPC. The row lock and every
 // refusal reason (full, cancelled, ended, already on the roster, ...) are
@@ -363,6 +431,23 @@ describe("editSession", () => {
       p_ends_at: submitted.get("endsAt"),
       p_capacity: 4,
     });
+  });
+
+  it("spends a place lookup (SEC-05), and stops at the limit before calling Google", async () => {
+    rateLimit.consumeRateLimit.mockResolvedValue({
+      code: "PT429",
+      message: "place_lookup_rate_limited",
+      details: "20 of 20 hits",
+    });
+
+    const state = await editSession("s1", {}, form());
+
+    expect(rateLimit.consumeRateLimit).toHaveBeenCalledWith("place_lookup");
+    expect(places.resolvePlace).not.toHaveBeenCalled();
+    expect(server.rpc).not.toHaveBeenCalled();
+    expect(state.formError).toBe(
+      "You've tried a lot of places in the last few minutes. Wait a few minutes, then try again.",
+    );
   });
 
   it("revalidates the session page and the list", async () => {
@@ -707,4 +792,132 @@ describe("withdrawRequest", () => {
 
     expect(state.error).toBe("You don't have permission to do that.");
   });
+});
+
+// ---------------------------------------------------------------------------
+// The security log (SEC-09, src/lib/security-log.ts): one line per refused
+// join or create, with the name the refusal was mapped by -- never
+// Postgres's own text. (console.error above keeps that, for debugging.)
+// ---------------------------------------------------------------------------
+
+const USER = "0b6f7a52-3c1d-4e2f-9a8b-7c6d5e4f3a2b";
+const SESSION = "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
+
+/** The one security line logged, parsed. */
+function securityLine(): Record<string, string> {
+  expect(console.warn).toHaveBeenCalledTimes(1);
+  const args = vi.mocked(console.warn).mock.calls[0];
+  expect(args).toHaveLength(1);
+  return JSON.parse(args[0] as string);
+}
+
+describe("security log (SEC-09)", () => {
+  beforeEach(() => {
+    server.requireUser.mockResolvedValue({ id: USER, displayName: "Priya" });
+  });
+
+  it("logs a refused join once, with the mapped reason, the student and the session", async () => {
+    server.rpc.mockResolvedValue({ data: null, error: { code: "P0001", message: "session_full" } });
+    await joinSession(SESSION, {}, new FormData());
+
+    expect(securityLine()).toMatchObject({
+      log: "security",
+      event: "session_join_refused",
+      reason: "session_full",
+      userId: USER,
+      sessionId: SESSION,
+    });
+  });
+
+  it("logs an unmapped join failure by its SQLSTATE, never Postgres's text", async () => {
+    server.rpc.mockResolvedValue({
+      data: null,
+      error: { code: "55P03", message: 'could not obtain lock on row in relation "sessions"' },
+    });
+    await joinSession(SESSION, {}, new FormData());
+
+    expect(securityLine().reason).toBe("sqlstate_55p03");
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toMatch(/lock|relation/);
+  });
+
+  it("logs nothing for a join that worked", async () => {
+    server.rpc.mockResolvedValue({ data: null, error: null });
+    await joinSession(SESSION, {}, new FormData());
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it("logs a refused place once, with the place's reason", async () => {
+    places.resolvePlace.mockRejectedValue(new PlaceError("outside_campus", "ChIJN1t_tDeuEmsRUsoyG83frY4"));
+    await createSession({}, form());
+
+    expect(securityLine()).toMatchObject({
+      event: "session_create_refused",
+      reason: "outside_campus",
+      userId: USER,
+    });
+  });
+
+  it("logs a refused course once, by the raised name", async () => {
+    rpcReplies({ data: null, error: { code: "P0001", message: "invalid_course_number" } }, null);
+    await createSession({}, form());
+    expect(securityLine()).toMatchObject({ event: "session_create_refused", reason: "invalid_course_number" });
+  });
+
+  it("logs a refused session once, by constraint name, never Postgres's text or the form", async () => {
+    rpcReplies(
+      { data: "course-1", error: null },
+      {
+        data: null,
+        error: {
+          code: "23514",
+          message: 'new row for relation "sessions" violates check constraint "sessions_capacity_min"',
+          details: "Failing row contains (Design patterns review, …).",
+        },
+      },
+    );
+    await createSession({}, form());
+
+    expect(securityLine()).toMatchObject({
+      event: "session_create_refused",
+      reason: "sessions_capacity_min",
+      userId: USER,
+    });
+    expect(JSON.stringify(vi.mocked(console.warn).mock.calls)).not.toMatch(
+      /violates|Failing row|Design patterns/,
+    );
+  });
+
+  it("logs nothing for a session that was created, or a form refused before the database", async () => {
+    await redirectOf(createSession({}, form()));
+    await createSession({}, form({ capacity: "1" }));
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it("logs a cancel by someone who is not the host, with the session", async () => {
+    server.rpc.mockResolvedValue({ data: null, error: { code: "P0001", message: "not_session_host" } });
+    await cancelSession(SESSION, {}, new FormData());
+
+    expect(securityLine()).toMatchObject({
+      event: "session_cancel_refused",
+      reason: "not_session_host",
+      userId: USER,
+      sessionId: SESSION,
+    });
+  });
+
+  it("logs an edit by someone who is not the host, with the session", async () => {
+    rpcReplies(
+      { data: "course-1", error: null },
+      { data: null, error: { code: "P0001", message: "not_session_host" } },
+    );
+    await editSession(SESSION, {}, form());
+
+    expect(securityLine()).toMatchObject({
+      event: "session_edit_refused",
+      reason: "not_session_host",
+      userId: USER,
+      sessionId: SESSION,
+    });
+  });
+
 });
