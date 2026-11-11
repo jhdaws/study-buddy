@@ -31,6 +31,7 @@ import Link from "next/link";
 import SessionBrowser from "@/components/SessionBrowser";
 import StudyRequests from "@/components/StudyRequests";
 import { BUTTON_PRIMARY, PAGE_LEAD, PAGE_TITLE } from "@/components/ui/styles";
+import { markSessionsSeen } from "@/lib/course-notifications";
 import { COURSE_PARAM, parseCourseParam } from "@/lib/session-course";
 import { listDepartments, listSessions } from "@/lib/sessions";
 import { listStudyRequests } from "@/lib/study-requests";
@@ -70,6 +71,11 @@ export default async function SessionsPage({ searchParams }: SessionsPageProps) 
     listSessions(course ? { course } : {}),
     listStudyRequests(),
     listDepartments(),
+    // N1/US-17: opening this page "catches up" the new-in-your-courses badge
+    // too -- browsing the open list already shows what is new. A signed-out
+    // visitor's call fails (no such function grant for anon) and is ignored;
+    // nothing on this page depends on it succeeding either way.
+    markSessionsSeen().catch(() => {}),
   ]);
   const now = new Date();
 

@@ -123,14 +123,14 @@ isOneToOne: false
                   ]
                 },"profiles": {
                   Row: {
-                    "class_year": Database["public"]['Enums']["class_year"] | null,"created_at": string,"display_name": string | null,"id": string,"major": string | null,"minor": string | null
+                    "class_year": Database["public"]['Enums']["class_year"] | null,"created_at": string,"display_name": string | null,"id": string,"last_seen_sessions_at": string,"major": string | null,"minor": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "class_year"?: Database["public"]['Enums']["class_year"] | null,"created_at"?: string,"display_name"?: string | null,"id": string,"major"?: string | null,"minor"?: string | null
+                    "class_year"?: Database["public"]['Enums']["class_year"] | null,"created_at"?: string,"display_name"?: string | null,"id": string,"last_seen_sessions_at"?: string,"major"?: string | null,"minor"?: string | null
                   }
                   Update: {
-                    "class_year"?: Database["public"]['Enums']["class_year"] | null,"created_at"?: string,"display_name"?: string | null,"id"?: string,"major"?: string | null,"minor"?: string | null
+                    "class_year"?: Database["public"]['Enums']["class_year"] | null,"created_at"?: string,"display_name"?: string | null,"id"?: string,"last_seen_sessions_at"?: string,"major"?: string | null,"minor"?: string | null
                   }
                   Relationships: [
                     
@@ -281,6 +281,9 @@ isOneToOne: false
 "consume_rate_limit":
 { Args: { "p_bucket": string }; Returns: number
                            },
+"count_new_sessions_in_my_courses":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
 "create_session":
 { Args: { "capacity": number,"course_id": string,"ends_at": string,"location_id": string,"location_label": string,"room": string,"starts_at": string,"topic": string }; Returns: {
               "capacity": number,
@@ -340,6 +343,14 @@ isOneToOne: false
       } },
 "leave_session":
 { Args: { "session_id": string }; Returns: undefined
+                           },
+"mark_sessions_seen":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
+"new_sessions_in_my_courses":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "course_number": string,"course_title": string,"department_code": string,"ends_at": string,"id": string,"location_label": string,"starts_at": string,"topic": string
+            }[]
                            },
 "normalize_course_number":
 { Args: { "raw": string }; Returns: string

@@ -9,9 +9,13 @@
  *     - the next few after it, under day headings, and a link to the rest
  *     - a one-line nudge to host
  *
+ * "New in your courses" (N1, US-17) is the first of the "left out" list
+ * below to land, now that profile_courses (P1) exists: open sessions in the
+ * student's own current courses, created since they last opened Home or
+ * /sessions, excluding ones they host themselves.
+ *
  * Left out on purpose until a backend exists: personal stats, "my" joined
- * sessions, courses "for you" (no enrolment data), study requests (US-16),
- * the map.
+ * sessions, study requests (US-16), the map.
  *
  * listSessions() is still the W4 fixture stub until S4 (#21); this page does
  * not change when it lands. A failure to load it shows an inline message
@@ -36,7 +40,8 @@ import {
   SECTION_TITLE,
 } from "@/components/ui/styles";
 import { isAccountDeletedNotice } from "@/lib/account";
-import { campusDayOffset, isInProgress } from "@/lib/format";
+import { listNewSessionsInMyCourses, type NewCourseSession } from "@/lib/course-notifications";
+import { campusDayOffset, formatCourseCode, formatSessionTime, isInProgress } from "@/lib/format";
 import { groupByDay } from "@/lib/session-filters";
 import { listSessions, type SessionListItem } from "@/lib/sessions";
 import { createClient, fetchDisplayName } from "@/lib/supabase/server";
@@ -63,12 +68,22 @@ export default async function HomePage({
     return <SignedOutHome accountDeleted={isAccountDeletedNotice(await searchParams)} />;
   }
 
-  const [displayName, sessions] = await Promise.all([
+  const [displayName, sessions, newSessions] = await Promise.all([
     fetchDisplayName(supabase, user.id).catch(() => null),
     listSessions().catch(() => null),
+    // Missing enrolment data, or any other failure, just means no nudge --
+    // never a reason to take the rest of Home down with it.
+    listNewSessionsInMyCourses().catch(() => []),
   ]);
 
-  return <SignedInHome displayName={displayName} sessions={sessions} now={new Date()} />;
+  return (
+    <SignedInHome
+      displayName={displayName}
+      sessions={sessions}
+      newSessions={newSessions}
+      now={new Date()}
+    />
+  );
 }
 
 /** "4 sessions open on campus, 2 of them today." -- one plain line. */
@@ -85,10 +100,12 @@ function statusLine(sessions: SessionListItem[], now: Date): string {
 function SignedInHome({
   displayName,
   sessions,
+  newSessions,
   now,
 }: {
   displayName: string | null;
   sessions: SessionListItem[] | null;
+  newSessions: NewCourseSession[];
   now: Date;
 }) {
   const list = sessions ?? [];
@@ -113,6 +130,33 @@ function SignedInHome({
           </Link>
         </div>
       </div>
+
+      {newSessions.length > 0 && (
+        <section aria-labelledby="home-new-in-courses" className="mb-8">
+          <h2 id="home-new-in-courses" className={`${SECTION_TITLE} mb-2`}>
+            New in your courses
+          </h2>
+          <ul className={`${PANEL} divide-y divide-line`}>
+            {newSessions.map((session) => (
+              <li key={session.id}>
+                <Link
+                  href={`/sessions/${session.id}`}
+                  className="flex min-h-11 flex-col gap-0.5 px-4 py-3 hover:bg-paper"
+                >
+                  <span className="text-[13px] font-semibold text-signal">
+                    {formatCourseCode(session.course)}
+                  </span>
+                  <span className="text-[15px] font-semibold text-ink">{session.topic}</span>
+                  <span className="text-[13px] text-ink-2">
+                    {formatSessionTime(session.startsAt, session.endsAt, now)} ·{" "}
+                    {session.locationLabel}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {sessions === null ? null : !next ? (
         <section aria-labelledby="home-empty" className={`${PANEL} px-5 py-8 text-center`}>
