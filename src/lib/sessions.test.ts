@@ -53,12 +53,26 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 let calls: Recorded;
+// US-22: listSessions() also reads `blocks` (listBlockedUserIds()), a second
+// table the single-response `respond()` below knows nothing about. Defaults
+// to "nothing blocked" so every pre-existing test, which never heard of
+// blocks, keeps seeing exactly the rows it asks for.
+let blockedIds: string[] = [];
+
+/** The ids of the sessions test's viewer's blocked students, for this test only. */
+function respondBlocked(ids: string[]) {
+  blockedIds = ids;
+}
 
 /** Makes the next query return `data`, and records what it was asked for. */
 function respond(data: unknown, error: { message: string } | null = null) {
   calls = [];
+  blockedIds = [];
   db.from.mockImplementation((table: string) => {
     calls.push({ method: "from", args: [table] });
+    if (table === "blocks") {
+      return fakeBuilder({ data: blockedIds.map((id) => ({ blocked_id: id })), error: null }, calls);
+    }
     return fakeBuilder({ data, error }, calls);
   });
 }
@@ -250,6 +264,29 @@ describe("listSessions", () => {
       ["status", "open"],
     ]);
   });
+
+  // US-22: a blocked host's sessions never show, as if they did not exist.
+  it("leaves out a session hosted by someone the viewer has blocked", async () => {
+    respond([
+      sessionRow({ host_id: "blocked-host" }),
+      sessionRow({ id: "22222222-2222-4222-8222-222222222222", host_id: "open-host" }),
+    ]);
+    respondBlocked(["blocked-host"]);
+
+    expect((await listSessions()).map((s) => s.id)).toEqual([
+      "22222222-2222-4222-8222-222222222222",
+    ]);
+  });
+
+  // A NOT IN filter in SQL drops a NULL host_id too (NULL IN (...) is
+  // neither true nor false) -- the JS filter below must not make the same
+  // mistake for a session whose host deleted their account.
+  it("keeps a session with no host, even when the viewer has blocks", async () => {
+    respond([sessionRow({ host_id: null })]);
+    respondBlocked(["someone-else"]);
+
+    expect(await listSessions()).toHaveLength(1);
+  });
 });
 
 // S6 (#52). Ids are uuids in the 4/8 variant, which is what Postgres hands out.
@@ -299,12 +336,25 @@ describe("getSession", () => {
       status: "open",
       hostId: HOST,
       attendees: [
-        { userId: HOST, displayName: "Priya", isHost: true, major: "Computer Science", classYear: "junior" },
-        { userId: EARLY, displayName: "Alex", isHost: false, major: null, classYear: "first_year" },
-        { userId: LATE, displayName: "Sam", isHost: false, major: null, classYear: null },
+        { userId: HOST, displayName: "Priya", isHost: true, major: "Computer Science", classYear: "junior", isBlocked: false },
+        { userId: EARLY, displayName: "Alex", isHost: false, major: null, classYear: "first_year", isBlocked: false },
+        { userId: LATE, displayName: "Sam", isHost: false, major: null, classYear: null, isBlocked: false },
       ],
       placeId: PLACE_ID,
     });
+  });
+
+  // US-22: marked from the viewer's OWN blocks, never the reverse.
+  it("marks an attendee the viewer has blocked", async () => {
+    respond(detailRow());
+    respondBlocked([EARLY]);
+
+    const session = await getSession(id);
+    expect(session?.attendees.map((a) => [a.userId, a.isBlocked])).toEqual([
+      [HOST, false],
+      [EARLY, true],
+      [LATE, false],
+    ]);
   });
 
   it("asks for that one session, by id", async () => {
@@ -384,7 +434,7 @@ describe("getSession", () => {
     expect(session?.hostDisplayName).toBeNull();
     // An embed without the profile's newer columns still maps: they are null.
     expect(session?.attendees).toEqual([
-      { userId: EARLY, displayName: "Alex", isHost: false, major: null, classYear: null },
+      { userId: EARLY, displayName: "Alex", isHost: false, major: null, classYear: null, isBlocked: false },
     ]);
   });
 

@@ -170,6 +170,9 @@ describe("databaseErrorMessage: joining and leaving a session (S5)", () => {
     ["session_full", "This session is full."],
     ["not_joined", "You're not on the roster for this session."],
     ["host_cannot_leave", "As the host, you can't leave — cancel the session instead."],
+    // P4 (US-22): the host has blocked the caller. Worded like any other
+    // refusal on purpose -- never "blocked".
+    ["cannot_join_session", "You can't join this session."],
     // S7 (US-09): update_session and cancel_session.
     ["not_session_host", "Only the host can change or cancel this session."],
     [
@@ -245,6 +248,17 @@ describe("databaseErrorMessage: reporting a user (US-18)", () => {
       message: `new row for relation "reports" violates check constraint "${constraint}"`,
     });
     expect(message).toMatch(expected);
+    expect(message).not.toMatch(RAW_TEXT);
+  });
+});
+
+describe("databaseErrorMessage: blocking a user (US-22)", () => {
+  it("maps a self-block", () => {
+    const message = databaseErrorMessage({
+      code: "23514",
+      message: 'new row for relation "blocks" violates check constraint "blocks_not_self"',
+    });
+    expect(message).toBe("You can't block yourself.");
     expect(message).not.toMatch(RAW_TEXT);
   });
 });

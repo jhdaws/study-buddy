@@ -16,8 +16,10 @@
 
 import type { Metadata } from "next";
 
+import BlockedStudentsList from "@/components/BlockedStudentsList";
 import ProfileForm from "@/components/ProfileForm";
 import { PAGE_LEAD, PAGE_TITLE } from "@/components/ui/styles";
+import { listMyBlocks } from "@/lib/blocks";
 import { getProfile } from "@/lib/profiles";
 import { listDepartments } from "@/lib/sessions";
 import { requireUser } from "@/lib/supabase/server";
@@ -28,7 +30,13 @@ export const metadata: Metadata = {
 
 export default async function ProfilePage() {
   const user = await requireUser();
-  const [profile, departments] = await Promise.all([getProfile(user.id), listDepartments()]);
+  const [profile, departments, blocks] = await Promise.all([
+    getProfile(user.id),
+    listDepartments(),
+    // US-22: missing or failed, this is just an empty list -- never a
+    // reason to take the whole profile page down.
+    listMyBlocks().catch(() => []),
+  ]);
 
   return (
     <main className="min-w-0 lg:max-w-2xl">
@@ -47,6 +55,7 @@ export default async function ProfilePage() {
           courses: profile?.courses ?? [],
         }}
       />
+      <BlockedStudentsList blocks={blocks} />
     </main>
   );
 }

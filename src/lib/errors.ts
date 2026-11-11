@@ -32,6 +32,8 @@
 //     (*_academic_profile.sql).
 //   - P2 (US-24): deleting an account through Supabase Auth's admin API.
 //   - P3 (US-18): the reports table's limit and note check (*_reports.sql).
+//   - P4 (US-22): the blocks table's self-block CHECK, and join_session's
+//     new refusal when the host has blocked the caller (*_p4_us_22_block_a_user.sql).
 //   - C1 (US-05): the chat's body check, and chatErrorMessage() for its
 //     RLS refusal (*_session_chat.sql).
 
@@ -81,6 +83,8 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   // P3 (US-18): mirror reportUserSchema.
   reports_note_length: "Keep the note to 500 characters or fewer.",
   reports_not_self: "You can't report yourself.",
+  // P4 (US-22): a direct insert naming yourself as both sides.
+  blocks_not_self: "You can't block yourself.",
   // R1 (US-16): one live request per student per course, so asking twice is
   // a unique violation rather than a second vote. Reached from two sides --
   // two tabs, or a direct API call -- so it needs a message either way.
@@ -117,6 +121,10 @@ const RAISED_MESSAGES: Record<string, string> = {
   session_full: "This session is full.",
   not_joined: "You're not on the roster for this session.",
   host_cannot_leave: "As the host, you can't leave — cancel the session instead.",
+  // P4 (US-22): join_session refuses a caller the host has blocked. Worded
+  // exactly like a plain refusal -- never "blocked" -- so the two are
+  // indistinguishable to the caller (the ticket's own requirement).
+  cannot_join_session: "You can't join this session.",
   // P1 (US-11): the profile_courses_limit trigger (PROFILE_COURSES_MAX).
   profile_courses_limit: "List up to 8 current courses.",
   // P3 (US-18): the reports_limit trigger (SQLSTATE PT429, REPORTS_PER_DAY).
