@@ -25,6 +25,7 @@ import { z } from "zod";
 import { CLASS_YEARS } from "@/lib/academic";
 import { ALLOWED_EMAIL_DOMAIN } from "@/lib/env";
 import {
+  CHAT_MESSAGE_MAX_LENGTH,
   DEPARTMENT_CODE_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
   LOCATION_LABEL_MAX_LENGTH,
@@ -50,6 +51,7 @@ import { REPORT_REASONS } from "@/lib/reports";
 // The limits are part of this module's contract (docs/contracts.md); they
 // live in limits.ts so Client Components can have them without zod.
 export {
+  CHAT_MESSAGE_MAX_LENGTH,
   DEPARTMENT_CODE_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
   LOCATION_LABEL_MAX_LENGTH,
@@ -662,3 +664,22 @@ export const reportUserSchema = z.object({
 
 export type ReportUserValues = z.output<typeof reportUserSchema>;
 export type ReportUserField = keyof ReportUserValues;
+
+// ---------------------------------------------------------------------------
+// Session chat (US-05) -- sendMessage() in src/app/sessions/actions.ts. Its
+// database twin: session_messages_body_check (*_session_chat.sql). Who sends
+// it is never a field: the database fills author_id from the session.
+// ---------------------------------------------------------------------------
+
+export const chatMessageSchema = z.object({
+  body: z
+    .string({ error: "Write a message first." })
+    .trim()
+    .min(1, { error: "Write a message first." })
+    .max(CHAT_MESSAGE_MAX_LENGTH, {
+      error: `Keep messages to ${CHAT_MESSAGE_MAX_LENGTH} characters or fewer.`,
+    }),
+});
+
+export type ChatMessageValues = z.output<typeof chatMessageSchema>;
+export type ChatMessageField = keyof ChatMessageValues;

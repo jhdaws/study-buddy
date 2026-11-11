@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { REFRESH_DELAY_MS, subscribeToRoster } from "./live-roster";
+import { REFRESH_DELAY_MS, subscribeToChat, subscribeToRoster } from "./live-roster";
 
 // A stand-in for supabase-js's channel API: records each .on() filter and
 // callback, and lets a test play Realtime's part by firing them. What the
@@ -224,5 +224,58 @@ describe("subscribeToRoster", () => {
     await authSettles();
 
     expect(fake.channel.subscribe).toHaveBeenCalledTimes(1);
+  });
+});
+
+// The chat (US-05) shares listen() with the roster, so the coalescing, the
+// catch-up on SUBSCRIBED and the setAuth() wait tested above are the same
+// code. These check what is chat-specific: the channel and the one filter.
+describe("subscribeToChat", () => {
+  it("listens on its own channel to new messages in this session only", async () => {
+    const fake = fakeClient();
+    subscribeToChat(fake.client, SESSION, vi.fn());
+    await authSettles();
+
+    expect(fake.raw.channel).toHaveBeenCalledWith(`chat:${SESSION}`);
+    // Only INSERTs: nobody can edit or delete a message.
+    expect(fake.listeners.map((l) => l.filter)).toEqual([
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "session_messages",
+        filter: `session_id=eq.${SESSION}`,
+      },
+    ]);
+  });
+
+  it("reports a new message, and every (re)subscribe, once per burst", async () => {
+    const fake = fakeClient();
+    const onChange = vi.fn();
+    subscribeToChat(fake.client, SESSION, onChange);
+    await authSettles();
+
+    fake.status("SUBSCRIBED");
+    fake.fire("INSERT");
+    fake.fire("INSERT");
+    await vi.advanceTimersByTimeAsync(REFRESH_DELAY_MS);
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    fake.fire("INSERT");
+    await vi.advanceTimersByTimeAsync(REFRESH_DELAY_MS);
+    expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
+  it("waits for the token, and stops cleanly", async () => {
+    let grantToken!: () => void;
+    const fake = fakeClient(() => new Promise<void>((resolve) => (grantToken = resolve)));
+    const stop = subscribeToChat(fake.client, SESSION, vi.fn());
+
+    await authSettles();
+    expect(fake.raw.channel).not.toHaveBeenCalled();
+
+    grantToken();
+    await authSettles();
+    stop();
+    expect(fake.raw.removeChannel).toHaveBeenCalledWith(fake.channel);
   });
 });

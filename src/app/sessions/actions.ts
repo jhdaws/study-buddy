@@ -9,7 +9,7 @@
 // (Next's "Server Actions" guide): authenticate, validate, and authorise
 // inside the action every time.
 //
-// Later sprints, not stubbed yet: sendMessage() (US-05).
+// C1 added sendMessage() (US-05) after leaveSession().
 //
 // R1 added requestSession() and withdrawRequest() (US-16) at the bottom --
 // the only writes here that go through RLS policies rather than an RPC.
@@ -17,18 +17,25 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { databaseErrorMessage, databaseErrorReason, type DatabaseErrorLike } from "@/lib/errors";
+import {
+  chatErrorMessage,
+  databaseErrorMessage,
+  databaseErrorReason,
+  type DatabaseErrorLike,
+} from "@/lib/errors";
 import { PlaceError, resolvePlace } from "@/lib/places";
 import { logSecurityEvent } from "@/lib/security-log";
 import { getSession } from "@/lib/sessions";
 import { consumeRateLimit } from "@/lib/rate-limit";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import {
+  chatMessageSchema,
   createSessionSchema,
   editSessionSchema,
   formValues,
   invalidFormState,
   studyRequestSchema,
+  type ChatMessageField,
   type CreateSessionField,
   type EditSessionField,
   type FormState,
@@ -346,6 +353,59 @@ export async function leaveSession(
 
   revalidatePath(`/sessions/${sessionId}`);
   revalidatePath("/sessions");
+  return {};
+}
+
+/**
+ * What sendMessage() hands back. Start from `{}`; `{}` again after a post,
+ * when React's form reset empties the message box.
+ */
+export type SendMessageState = FormState<ChatMessageField>;
+
+/**
+ * Post to a session's chat (US-05). Same binding pattern as joinSession():
+ * `useActionState(sendMessage.bind(null, sessionId), {})`. Form field
+ * (chatMessageSchema): `body`.
+ *
+ * Goes through RLS, not a function: session_messages_insert_attendees
+ * (*_session_chat.sql) refuses anyone not on the roster, and a chat that is
+ * cancelled or a week past the end, and the author is never sent -- the
+ * database fills author_id from auth.uid(), and clients have no privilege to
+ * name it. So there is nothing for this action to check about the session
+ * itself; its one job beyond validating is a good message.
+ */
+export async function sendMessage(
+  sessionId: string,
+  _prev: SendMessageState,
+  formData: FormData,
+): Promise<SendMessageState> {
+  const user = await requireUser();
+
+  const parsed = chatMessageSchema.safeParse(Object.fromEntries(formData));
+  if (!parsed.success) {
+    return invalidFormState(parsed.error, formData);
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("session_messages")
+    .insert({ session_id: sessionId, body: parsed.data.body });
+  if (error) {
+    console.error("sendMessage: insert failed", { code: error.code, message: error.message });
+    // SEC-09: a refused post is usually a stale page, but it is also what a
+    // student posting into a chat they are not in looks like.
+    logSecurityEvent({
+      event: "chat_post_refused",
+      reason: databaseErrorReason(error),
+      userId: user.id,
+      sessionId,
+    });
+    return { formError: chatErrorMessage(error), values: formValues(formData) };
+  }
+
+  // The other attendees hear of it through Realtime (subscribeToChat()); the
+  // sender's own page refreshes here, without waiting for the event.
+  revalidatePath(`/sessions/${sessionId}`);
   return {};
 }
 

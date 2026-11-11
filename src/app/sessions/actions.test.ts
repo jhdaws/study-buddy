@@ -11,6 +11,7 @@ import {
   joinSession,
   leaveSession,
   requestSession,
+  sendMessage,
   withdrawRequest,
 } from "./actions";
 
@@ -791,6 +792,92 @@ describe("withdrawRequest", () => {
     const state = await withdrawRequest("req-1", {}, new FormData());
 
     expect(state.error).toBe("You don't have permission to do that.");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Session chat (US-05, C1). The rules -- attendees only, as themselves, until
+// a week after the end -- are the database's (tests/db/session-chat.test.ts);
+// these check what reaches the insert and what reaches the student.
+// ---------------------------------------------------------------------------
+
+const SESSION_ID_FOR_CHAT = "7a1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b";
+
+function chatForm(body: string): FormData {
+  const data = new FormData();
+  data.set("body", body);
+  return data;
+}
+
+describe("sendMessage", () => {
+  it("inserts the trimmed body for this session, never an author, and refreshes the page", async () => {
+    tableReplies();
+
+    const state = await sendMessage("sess-1", {}, chatForm("  On my way  "));
+
+    expect(state).toEqual({});
+    expect(tableCalls[0]).toEqual({ method: "from", args: ["session_messages"] });
+    // author_id is the database's default, auth.uid(); clients cannot name it.
+    expect(insertArg()).toEqual({ session_id: "sess-1", body: "On my way" });
+    expect(cache.revalidatePath).toHaveBeenCalledWith("/sessions/sess-1");
+  });
+
+  it("checks the sign-in first", async () => {
+    server.requireUser.mockRejectedValueOnce(new Redirect("/login"));
+
+    expect(await redirectOf(sendMessage("sess-1", {}, chatForm("Hi")))).toBe("/login");
+    expect(server.from).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["blank", "   ", "Write a message first."],
+    ["too long", "x".repeat(1001), "Keep messages to 1000 characters or fewer."],
+  ])("refuses a %s message before the database, keeping what was typed", async (_label, body, message) => {
+    tableReplies();
+
+    const state = await sendMessage("sess-1", {}, chatForm(body));
+
+    expect(state.fieldErrors?.body).toEqual([message]);
+    expect(state.values?.body).toBe(body);
+    expect(server.from).not.toHaveBeenCalled();
+  });
+
+  it("explains an RLS refusal -- not on the roster, or the chat has closed -- and keeps the text", async () => {
+    tableReplies({
+      onInsert: {
+        error: { code: "42501", message: 'new row violates row-level security policy for table "session_messages"' },
+      },
+    });
+
+    const state = await sendMessage("sess-1", {}, chatForm("Still there?"));
+
+    expect(state.formError).toBe(
+      "You can't post here: only people going can, until a week after the session ends.",
+    );
+    expect(state.formError).not.toContain("row-level security");
+    expect(state.values?.body).toBe("Still there?");
+    expect(cache.revalidatePath).not.toHaveBeenCalled();
+  });
+});
+
+describe("sendMessage: security log (SEC-09)", () => {
+  it("logs a refused post by name, never Postgres's text", async () => {
+    const log = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    tableReplies({ onInsert: { error: { code: "42501", message: "new row violates row-level security policy" } } });
+
+    await sendMessage(SESSION_ID_FOR_CHAT, {}, chatForm("Hi"));
+
+    expect(log).toHaveBeenCalledTimes(1);
+    const line = String(log.mock.calls[0][0]);
+    expect(JSON.parse(line)).toMatchObject({
+      event: "chat_post_refused",
+      reason: "sqlstate_42501",
+      userId: "u1",
+      sessionId: SESSION_ID_FOR_CHAT,
+    });
+    expect(line).not.toContain("row-level security");
+    log.mockRestore();
   });
 });
 

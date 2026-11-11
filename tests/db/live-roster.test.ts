@@ -27,9 +27,10 @@ describe("live roster publication", () => {
   it("publishes exactly the public tables chosen for Realtime", async () => {
     // An allowlist on purpose. Publishing a table streams its rows to every
     // browser whose RLS lets them read it -- and DELETEs to every browser,
-    // since Realtime does not apply RLS to them. Adding a table here (US-05's
-    // messages, say) should be a decision someone writes down, not a side
-    // effect.
+    // since Realtime does not apply RLS to them. Adding a table here should
+    // be a decision someone writes down, not a side effect. session_messages
+    // is US-05's chat (*_session_chat.sql; tests/db/session-chat.test.ts
+    // checks its grants and replica identity).
     const { rows } = await db.query<{ tablename: string }>(`
       select tablename
       from pg_publication_tables
@@ -38,7 +39,7 @@ describe("live roster publication", () => {
       order by tablename
     `);
 
-    expect(rows.map((row) => row.tablename)).toEqual(["session_attendees"]);
+    expect(rows.map((row) => row.tablename)).toEqual(["session_attendees", "session_messages"]);
   });
 
   it("keeps session_attendees' default replica identity, so a DELETE carries session_id", async () => {

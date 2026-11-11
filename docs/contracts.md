@@ -261,7 +261,7 @@ Handler**:
   names and SQLSTATEs to the two tables; it should not need a new function.
 - **The display-name route** is `/login/name?next=…` (A4). `/auth/confirm`,
   `verifyCode()` and `requireUser()` send nameless students there.
-- **Cancelling and chat** are later sprints.
+- **Cancelling** (S7) and **chat** (C1) have landed; chat's seam is below.
 
 ## Joining and leaving (S5), for S6 to wire up
 
@@ -323,3 +323,31 @@ waits for `client.realtime.setAuth()` before joining the channel; without
 that, a freshly loaded page joins signed out and receives nothing. A future
 Realtime feature (US-05's chat) should do the same, and add its table to
 `tests/db/live-roster.test.ts`'s publication allowlist on purpose.
+
+## Session chat (C1, US-05)
+
+**Database.** `session_messages (id, session_id, author_id, body, created_at)`
+(`*_session_chat.sql`). Attendees — the host included — SELECT a session's
+messages and INSERT `(session_id, body)`; `author_id` is the database's
+default, `auth.uid()`, and no client can name it or `created_at`. No UPDATE or
+DELETE for anyone. Posting is refused (RLS, `42501`) once the session is
+cancelled or ended more than `CHAT_OPEN_DAYS_AFTER_END` (7) days ago. A
+deleted account leaves its messages with `author_id` null ("Deleted user").
+The table is in the `supabase_realtime` publication; anon has no privilege.
+
+**Reading.** `listMessages(sessionId): Promise<ChatMessage[]>` in
+`src/lib/messages.ts` (server only): the latest `CHAT_HISTORY_LIMIT` (200),
+oldest first. Returns `[]` for a non-attendee (RLS), so the page asks
+`chatAccess(session, viewerId, now)` (`src/lib/chat.ts`: `"hidden"`,
+`"open"` or `"closed"`) first and does not call it for `"hidden"`.
+
+**Writing.** `sendMessage(sessionId, prev, formData)` in
+`src/app/sessions/actions.ts`, bound like `joinSession`. One field, `body`
+(`chatMessageSchema`: trimmed, 1–1000). Returns `{}` on success, or
+`FormState` with the typed text back in `values.body`. A refusal is mapped by
+`chatErrorMessage()` in `src/lib/errors.ts`.
+
+**Live.** `subscribeToChat(client, sessionId, onChange)` in
+`src/lib/live-roster.ts`, the same contract as `subscribeToRoster`: INSERTs
+for that session only, coalesced, once more on each (re)subscribe, after
+`realtime.setAuth()`. `<SessionChat>` answers with `router.refresh()`.

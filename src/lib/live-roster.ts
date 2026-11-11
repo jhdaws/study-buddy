@@ -32,6 +32,9 @@
 //
 // Bursts are coalesced: one refresh per REFRESH_DELAY_MS, however many
 // events arrive in it.
+//
+// The session chat (US-05) listens the same way -- subscribeToChat() below,
+// on its own channel -- and shares all of the above through listen().
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -39,6 +42,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export const REFRESH_DELAY_MS = 250;
 
 type RealtimeClient = Pick<SupabaseClient, "channel" | "removeChannel" | "realtime">;
+type Channel = ReturnType<SupabaseClient["channel"]>;
 
 /**
  * Calls `onChange` (coalesced) whenever `sessionId`'s roster may have
@@ -49,20 +53,8 @@ export function subscribeToRoster(
   sessionId: string,
   onChange: () => void,
 ): () => void {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let stopped = false;
-
-  const changed = () => {
-    if (stopped || timer !== undefined) return;
-    timer = setTimeout(() => {
-      timer = undefined;
-      onChange();
-    }, REFRESH_DELAY_MS);
-  };
-
-  const subscribe = () =>
-    client
-      .channel(`roster:${sessionId}`)
+  return listen(client, `roster:${sessionId}`, onChange, (channel, changed) =>
+    channel
       .on(
         "postgres_changes",
         {
@@ -82,12 +74,65 @@ export function subscribeToRoster(
           const leftFrom = (payload.old as { session_id?: string }).session_id;
           if (leftFrom === undefined || leftFrom === sessionId) changed();
         },
-      )
-      .subscribe((status) => {
-        if (status === "SUBSCRIBED") changed();
-      });
+      ),
+  );
+}
 
-  let channel: ReturnType<typeof subscribe> | undefined;
+/**
+ * Session chat (US-05): calls `onChange` (coalesced) whenever someone posts
+ * in `sessionId`'s chat, and on each (re)subscribe. Same contract as
+ * subscribeToRoster(): it says only *that* there is something new, and the
+ * caller re-fetches, so the transcript on screen is always listMessages()'s
+ * -- no payload to de-duplicate against the sender's own post, and nothing
+ * to reorder.
+ *
+ * Only INSERTs: nobody can edit or delete a message (*_session_chat.sql).
+ * Realtime checks session_messages_select_attendees as this student before
+ * sending each one, so a non-attendee who subscribes anyway hears nothing
+ * (US-05b) -- which is why the token must be on the first join (above).
+ */
+export function subscribeToChat(
+  client: RealtimeClient,
+  sessionId: string,
+  onChange: () => void,
+): () => void {
+  return listen(client, `chat:${sessionId}`, onChange, (channel, changed) =>
+    channel.on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "session_messages",
+        filter: `session_id=eq.${sessionId}`,
+      },
+      changed,
+    ),
+  );
+}
+
+/**
+ * What both subscriptions share: coalescing, a catch-up on every SUBSCRIBED,
+ * and waiting for realtime.setAuth() before the channel's first join.
+ * `bind` adds the channel's postgres_changes listeners, calling `changed`.
+ */
+function listen(
+  client: RealtimeClient,
+  name: string,
+  onChange: () => void,
+  bind: (channel: Channel, changed: () => void) => Channel,
+): () => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+
+  const changed = () => {
+    if (stopped || timer !== undefined) return;
+    timer = setTimeout(() => {
+      timer = undefined;
+      onChange();
+    }, REFRESH_DELAY_MS);
+  };
+
+  let channel: Channel | undefined;
 
   // setAuth() with no token asks supabase-js for the session's. It only
   // rejects if that lookup itself throws; subscribing anyway then costs
@@ -96,7 +141,10 @@ export function subscribeToRoster(
     .setAuth()
     .catch(() => undefined)
     .then(() => {
-      if (!stopped) channel = subscribe();
+      if (stopped) return;
+      channel = bind(client.channel(name), changed).subscribe((status) => {
+        if (status === "SUBSCRIBED") changed();
+      });
     });
 
   return () => {
