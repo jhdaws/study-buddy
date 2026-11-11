@@ -262,6 +262,8 @@ describe("SessionRoster: reporting someone (US-18)", () => {
     it("announces the going count politely, so a screen reader hears it change", () => {
       renderRoster();
       expect(screen.getByText("2 of 4 going").getAttribute("aria-live")).toBe("polite");
+      // The whole line, not just the number that changed.
+      expect(screen.getByText("2 of 4 going").getAttribute("aria-atomic")).toBe("true");
     });
   });
 });

@@ -117,7 +117,10 @@ export default function SessionRoster({
         </h2>
         <SeatsLabel seatsLeft={seatsLeft} />
       </div>
-      <p aria-live="polite" className="mt-0.5 text-sm text-ink-2">
+      {/* aria-atomic (Group 3's review of #85): React updates only the text
+          node that changed, so without it a screen reader may say "2" rather
+          than "2 of 4 going". */}
+      <p aria-live="polite" aria-atomic="true" className="mt-0.5 text-sm text-ink-2">
         {attendees.length} of {capacity} going
       </p>
 

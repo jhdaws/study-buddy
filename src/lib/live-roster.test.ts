@@ -67,7 +67,10 @@ describe("subscribeToRoster", () => {
     subscribeToRoster(fake.client, SESSION, vi.fn());
     await authSettles();
 
-    expect(fake.raw.channel).toHaveBeenCalledWith(`roster:${SESSION}`);
+    // A topic of its own each time, so a remount never gets the old channel back.
+    expect(fake.raw.channel).toHaveBeenCalledWith(
+      expect.stringMatching(new RegExp(`^roster:${SESSION}:[0-9a-f-]{36}$`)),
+    );
     expect(fake.listeners.map((l) => l.filter)).toEqual([
       {
         event: "INSERT",
@@ -216,7 +219,8 @@ describe("subscribeToRoster", () => {
     expect(fake.raw.removeChannel).not.toHaveBeenCalled();
   });
 
-  it("still subscribes if looking up the token fails", async () => {
+  it("still subscribes if looking up the token fails, and logs it", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const fake = fakeClient(async () => {
       throw new Error("no session");
     });
@@ -224,6 +228,23 @@ describe("subscribeToRoster", () => {
     await authSettles();
 
     expect(fake.channel.subscribe).toHaveBeenCalledTimes(1);
+    // The error's name only, never the error object (it could carry the token).
+    expect(warn).toHaveBeenCalledWith("realtime: could not set the token", {
+      error: "Error",
+    });
+    warn.mockRestore();
+  });
+
+  it("gives each subscription its own topic, even for the same session", async () => {
+    const fake = fakeClient();
+    subscribeToRoster(fake.client, SESSION, vi.fn());
+    subscribeToRoster(fake.client, SESSION, vi.fn());
+    await authSettles();
+
+    const [first, second] = (fake.raw.channel.mock.calls as unknown as [string][]).map(
+      ([topic]) => topic,
+    );
+    expect(first).not.toBe(second);
   });
 });
 
@@ -236,7 +257,9 @@ describe("subscribeToChat", () => {
     subscribeToChat(fake.client, SESSION, vi.fn());
     await authSettles();
 
-    expect(fake.raw.channel).toHaveBeenCalledWith(`chat:${SESSION}`);
+    expect(fake.raw.channel).toHaveBeenCalledWith(
+      expect.stringMatching(new RegExp(`^chat:${SESSION}:[0-9a-f-]{36}$`)),
+    );
     // Only INSERTs: nobody can edit or delete a message.
     expect(fake.listeners.map((l) => l.filter)).toEqual([
       {
