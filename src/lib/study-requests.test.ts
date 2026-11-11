@@ -40,11 +40,24 @@ const VIEWER = "22222222-2222-4222-8222-222222222222";
 const CLASSMATE = "33333333-3333-4333-8333-333333333333";
 
 let calls: Recorded;
+// US-22: listStudyRequests() also reads `blocks` (listBlockedUserIds()).
+// Defaults to "nothing blocked" so every pre-existing test keeps seeing
+// exactly the rows it asks for.
+let blockedIds: string[] = [];
+
+/** The ids of this test's viewer's blocked students. */
+function respondBlocked(ids: string[]) {
+  blockedIds = ids;
+}
 
 function respond(data: unknown, error: { message: string } | null = null) {
   calls = [];
+  blockedIds = [];
   db.from.mockImplementation((table: string) => {
     calls.push({ method: "from", args: [table] });
+    if (table === "blocks") {
+      return fakeBuilder({ data: blockedIds.map((id) => ({ blocked_id: id })), error: null }, calls);
+    }
     return fakeBuilder({ data, error }, calls);
   });
 }
@@ -219,5 +232,26 @@ describe("listStudyRequests", () => {
     // The page's error boundary shows a retry screen; the student never sees
     // a schema name.
     await expect(listStudyRequests()).rejects.toThrow("Could not load the study requests");
+  });
+
+  // US-22: a blocked classmate's own asks never show, and never count.
+  it("drops a blocked student's request from its group, and from the count", async () => {
+    respond([
+      requestRow({ id: "r1", author_id: CLASSMATE }),
+      requestRow({ id: "r2", author_id: "blocked-student" }),
+    ]);
+    respondBlocked(["blocked-student"]);
+
+    const groups = await listStudyRequests();
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].count).toBe(1);
+  });
+
+  it("drops a course entirely when its only asker is blocked", async () => {
+    respond([requestRow({ id: "r1", author_id: "blocked-student" })]);
+    respondBlocked(["blocked-student"]);
+
+    expect(await listStudyRequests()).toEqual([]);
   });
 });

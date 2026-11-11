@@ -803,3 +803,72 @@ test("repeat weekly (US-20, S10): creating with repeat for 3 weeks yields 3 sess
     await db.end();
   }
 });
+
+test("block a user (US-22): A blocks B from a roster, B's later join is refused, and A stops seeing B's session", async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(60_000);
+
+  async function hostSession(actor: typeof page, topic: string) {
+    await chooseByKeyboard(actor.getByLabel("Department"), "CS", "CS");
+    await actor.getByLabel("Course number").fill("3251");
+    await actor.getByLabel("What are you studying?").fill(topic);
+    await chooseByKeyboard(actor.getByLabel("Place"), "Feath", "ChIJ-FAKE-featheringill-hall");
+    await actor.getByLabel("Starts").fill(campusTime(2));
+    await actor.getByLabel("Ends").fill(campusTime(4));
+    await actor.getByLabel("How many people, including you?").fill("4");
+    await actor.getByRole("button", { name: "Create session" }).click();
+    await expect(actor).toHaveURL("/sessions");
+  }
+
+  async function openSession(actor: typeof page, topic: string) {
+    await actor
+      .locator("article")
+      .filter({ hasText: topic })
+      .getByRole("link", { name: /^CS 3251/ })
+      .click();
+    await expect(actor).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+  }
+
+  const firstTopic = `E2E block-first ${Date.now()}`;
+  const secondTopic = `E2E block-second ${Date.now()}`;
+  const blockedHostTopic = `E2E block-blocked-host ${Date.now()}`;
+
+  await signInAsNewStudent(page, newStudentEmail("p4blocker"), "Blair Blocker");
+  await hostSession(page, firstTopic);
+
+  const bContext = await browser.newContext();
+  try {
+    const b = await bContext.newPage();
+    await signInAsNewStudent(b, newStudentEmail("p4blocked"), "Casey Blocked");
+
+    // B joins A's first session -- succeeds, nobody is blocked yet.
+    await openSession(b, firstTopic);
+    await b.getByRole("region", { name: "Who's going" }).getByRole("button", { name: "Join session" }).click();
+    await expect(b.getByText("You're going.")).toBeVisible();
+
+    // A sees B on the roster and blocks them. Nobody is removed automatically
+    // (the ticket's own rule) -- B is still on this roster afterward.
+    await openSession(page, firstTopic);
+    const aRoster = page.getByRole("region", { name: "Who's going" });
+    await expect(aRoster).toContainText("Casey Blocked");
+    await aRoster.getByRole("button", { name: "Block Casey Blocked" }).click();
+    await expect(aRoster.getByRole("button", { name: "Unblock Casey Blocked" })).toBeVisible();
+    await expect(aRoster).toContainText("Casey Blocked");
+
+    // A hosts a second session. B's join of THIS one is refused -- the same
+    // refusal family as any other, never a message that says "blocked".
+    await hostSession(page, secondTopic);
+    await openSession(b, secondTopic);
+    await b.getByRole("region", { name: "Who's going" }).getByRole("button", { name: "Join session" }).click();
+    await expect(b.getByRole("alert")).toHaveText("You can't join this session.");
+
+    // B hosts their own session. A no longer sees it in the list.
+    await hostSession(b, blockedHostTopic);
+    await page.goto("/sessions");
+    await expect(page.locator("article").filter({ hasText: blockedHostTopic })).toHaveCount(0);
+  } finally {
+    await bContext.close();
+  }
+});

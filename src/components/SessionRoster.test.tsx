@@ -12,6 +12,8 @@ import SessionRoster, { type SessionRosterProps } from "./SessionRoster";
 vi.mock("@/app/sessions/actions", () => ({ joinSession: vi.fn(), leaveSession: vi.fn() }));
 // Same for the report action (US-18); tests/db/reports.test.ts has its rules.
 vi.mock("@/app/reports/actions", () => ({ reportUser: vi.fn() }));
+// Same for block/unblock (US-22); tests/db/blocks.test.ts has its rules.
+vi.mock("@/app/blocks/actions", () => ({ blockUser: vi.fn(), unblockUser: vi.fn() }));
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 // The subscription itself is tested in src/lib/live-roster.test.ts; here,
@@ -45,13 +47,15 @@ function renderRoster(overrides: Partial<SessionRosterProps> = {}) {
 }
 
 /**
- * The join/leave buttons, leaving out the per-entry Report buttons (US-18),
- * which every roster has -- a session that has ended can still be reported.
+ * The join/leave buttons, leaving out the per-entry Block (US-22) and Report
+ * (US-18) buttons, which every roster has -- a session that has ended can
+ * still be blocked or reported.
  */
 function rosterButtons(): HTMLElement[] {
-  return screen
-    .queryAllByRole("button")
-    .filter((button) => !button.getAttribute("aria-label")?.startsWith("Report "));
+  return screen.queryAllByRole("button").filter((button) => {
+    const label = button.getAttribute("aria-label") ?? "";
+    return !label.startsWith("Report ") && !label.startsWith("Block ") && !label.startsWith("Unblock ");
+  });
 }
 
 async function click(name: string) {
@@ -75,8 +79,11 @@ describe("SessionRoster", () => {
     renderRoster({ viewerId: "me", action: "leave" });
 
     const items = within(screen.getByRole("list")).getAllByRole("listitem");
-    // Everyone but the viewer has a Report button (US-18).
-    expect(items.map((item) => item.textContent)).toEqual(["PPriyaHostReport", "AAlex (you)"]);
+    // Everyone but the viewer has Block (US-22) and Report (US-18) buttons.
+    expect(items.map((item) => item.textContent)).toEqual([
+      "PPriyaHostBlockReport",
+      "AAlex (you)",
+    ]);
     expect(screen.getByText("2 of 4 going")).toBeTruthy();
     expect(screen.getByText("2 seats left")).toBeTruthy();
   });
@@ -91,11 +98,12 @@ describe("SessionRoster", () => {
     });
 
     const items = within(screen.getByRole("list")).getAllByRole("listitem");
-    // The viewer is someone else, so every entry also ends in US-18's Report.
+    // The viewer is someone else, so every entry also ends in Block (US-22)
+    // and Report (US-18).
     expect(items.map((item) => item.textContent)).toEqual([
-      "PPriyaComputer Science · JuniorHostReport",
-      "AAlexGraduate studentReport",
-      "SSamReport",
+      "PPriyaComputer Science · JuniorHostBlockReport",
+      "AAlexGraduate studentBlockReport",
+      "SSamBlockReport",
     ]);
   });
 

@@ -12,6 +12,7 @@
 
 import "server-only";
 
+import { listBlockedUserIds } from "@/lib/blocks";
 import type { CourseLabel } from "@/lib/sessions";
 import { createClient, getCurrentUser } from "@/lib/supabase/server";
 
@@ -61,20 +62,30 @@ export type StudyRequestGroup = {
  */
 export async function listStudyRequests(): Promise<StudyRequestGroup[]> {
   const supabase = await createClient();
-  const viewer = await getCurrentUser();
 
-  const { data, error } = await supabase
-    .from("study_requests")
-    .select(
-      `id, course_id, author_id, note,
+  const [viewer, blockedIds, { data, error }] = await Promise.all([
+    getCurrentUser(),
+    listBlockedUserIds(),
+    supabase
+      .from("study_requests")
+      .select(
+        `id, course_id, author_id, note,
        courses!inner (department_code, number, title)`,
-    )
-    .gt("expires_at", "now")
-    .order("created_at", { ascending: false });
+      )
+      .gt("expires_at", "now")
+      .order("created_at", { ascending: false }),
+  ]);
 
   if (error) {
     throw new Error(`Could not load the study requests: ${error.message}`);
   }
+
+  // US-22: a blocked student's own asks never show, or count toward the
+  // group's total -- classmates still see "N students want CS 3251" with
+  // whatever is left after removing them, not a number the blocker knows is
+  // one too many.
+  const blocked = new Set(blockedIds);
+  const visible = (data ?? []).filter((row) => !blocked.has(row.author_id));
 
   // Grouped here rather than in SQL for the same reason searchCourses ranks
   // here: PostgREST cannot group by an embedded column, and this set is
@@ -82,7 +93,7 @@ export async function listStudyRequests(): Promise<StudyRequestGroup[]> {
   // grows past that, this is the line to replace with a database function.
   const groups = new Map<string, StudyRequestGroup>();
 
-  for (const row of data ?? []) {
+  for (const row of visible) {
     const group = groups.get(row.course_id) ?? {
       courseId: row.course_id,
       course: {
