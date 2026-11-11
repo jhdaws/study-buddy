@@ -246,6 +246,9 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"consume_rate_limit":
+{ Args: { "p_bucket": string }; Returns: number
+                           },
 "count_new_sessions_in_my_courses":
 { Args: Record<PropertyKey, never>; Returns: number
                            },
