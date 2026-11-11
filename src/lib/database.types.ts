@@ -305,6 +305,27 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"create_sessions_weekly":
+{ Args: { "p_capacity": number,"p_course_id": string,"p_ends_at": string,"p_location_id": string,"p_location_label": string,"p_room": string,"p_starts_at": string,"p_topic": string,"p_weeks": number }; Returns: {
+              "capacity": number,
+"course_id": string,
+"created_at": string,
+"ends_at": string,
+"host_id": string | null,
+"id": string,
+"location_id": string,
+"location_label": string,
+"room": string | null,
+"starts_at": string,
+"status": Database["public"]['Enums']["session_status"],
+"topic": string
+            }[]
+                          SetofOptions: {
+        from: "*"
+        to: "sessions"
+        isOneToOne: false
+        isSetofReturn: true
+      } },
 "get_or_create_course":
 { Args: { "p_course_number": string,"p_department_code": string }; Returns: string
                            },

@@ -921,3 +921,46 @@ describe("security log (SEC-09)", () => {
   });
 
 });
+
+describe("createSession: repeat weekly (US-20)", () => {
+  it("validates the place once, then creates the series through create_sessions_weekly", async () => {
+    server.rpc.mockImplementation(async (name: string) =>
+      name === "get_or_create_course"
+        ? { data: "course-1", error: null }
+        : { data: [{ id: "s1" }, { id: "s2" }, { id: "s3" }], error: null },
+    );
+
+    const submitted = form({ repeatWeekly: "on", weeks: "3" });
+    expect(await redirectOf(createSession({}, submitted))).toBe("/sessions");
+
+    // One Places lookup for the whole series -- the ticket's design note.
+    expect(places.resolvePlace).toHaveBeenCalledTimes(1);
+    expect(server.rpc).toHaveBeenCalledWith(
+      "create_sessions_weekly",
+      expect.objectContaining({
+        p_course_id: "course-1",
+        p_location_id: "loc-1",
+        p_weeks: 3,
+        p_topic: "Design patterns review",
+      }),
+    );
+    expect(server.rpc).not.toHaveBeenCalledWith("create_session", expect.anything());
+  });
+
+  it("still creates a single session when the box is unchecked", async () => {
+    await redirectOf(createSession({}, form()));
+
+    expect(server.rpc.mock.calls.map((call) => call[0])).toEqual([
+      "get_or_create_course",
+      "create_session",
+    ]);
+  });
+
+  it("refuses a series with no week count before touching the database", async () => {
+    const state = await createSession({}, form({ repeatWeekly: "on" }));
+
+    expect(state.fieldErrors?.weeks?.[0]).toMatch(/2 to 8 weeks/);
+    expect(server.rpc).not.toHaveBeenCalled();
+    expect(places.resolvePlace).not.toHaveBeenCalled();
+  });
+});
