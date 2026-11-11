@@ -136,3 +136,13 @@ export function formatStartTime(startsAt: string): string {
 export function formatInitial(displayName: string | null | undefined): string {
   return displayName?.trim().charAt(0).toUpperCase() || "?";
 }
+
+/**
+ * When a chat message was sent (US-05), in campus time: `2:05 PM` today,
+ * otherwise `Yesterday, 2:05 PM` or `Thu, Oct 1, 2:05 PM`.
+ */
+export function formatMessageTime(createdAt: string, now: Date): string {
+  const sent = new Date(createdAt);
+  const time = timeFormat.format(sent);
+  return campusDay(sent) === campusDay(now) ? time : `${formatCampusDay(sent, now)}, ${time}`;
+}

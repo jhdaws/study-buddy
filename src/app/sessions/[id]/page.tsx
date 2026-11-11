@@ -16,7 +16,9 @@
  * Times are formatted in campus time explicitly (src/lib/format.ts): this
  * runs in UTC on Vercel.
  *
- * Chat (US-05) goes below the roster in a later sprint.
+ * Chat (US-05, C1) sits below the roster. chatAccess() (src/lib/chat.ts)
+ * decides what the viewer gets; the transcript is loaded only for someone on
+ * the roster -- RLS would return nothing to anyone else anyway (US-05b).
  *
  * `params` is a Promise in this version of Next.js. It is typed inline rather
  * than with the generated `PageProps<...>` helper for the reason given in
@@ -28,10 +30,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import HostSessionControls from "@/components/HostSessionControls";
+import SessionChat from "@/components/SessionChat";
 import SessionRoster from "@/components/SessionRoster";
 import Icon from "@/components/ui/Icon";
 import { LINK, PAGE_TITLE, PANEL } from "@/components/ui/styles";
+import { chatAccess } from "@/lib/chat";
 import { formatCourseCode, formatSessionTime, isInProgress } from "@/lib/format";
+import { listMessages } from "@/lib/messages";
 import { rosterAction } from "@/lib/roster";
 import { getSession } from "@/lib/sessions";
 import { requireUser } from "@/lib/supabase/server";
@@ -57,6 +62,8 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
   // Presentation only -- update_session() and cancel_session() check the host
   // themselves, and refuse a cancelled or ended session regardless.
   const hosting = session.hostId === viewer.id && upcoming;
+  const chat = chatAccess(session, viewer.id, now);
+  const messages = chat === "hidden" ? [] : await listMessages(session.id);
 
   return (
     <main className="min-w-0 lg:max-w-3xl">
@@ -121,6 +128,17 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
           attendees={session.attendees}
           viewerId={viewer.id}
           action={action}
+        />
+      </div>
+
+      <div className="mt-4">
+        <SessionChat
+          sessionId={session.id}
+          viewerId={viewer.id}
+          access={chat}
+          messages={messages}
+          now={now.toISOString()}
+          joinable={action === "join"}
         />
       </div>
 

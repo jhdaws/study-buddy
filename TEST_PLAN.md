@@ -64,7 +64,7 @@ data loss, privacy and the core journey.
 | Join without overbooking (US-04, US-07; Sprint 3) | 3 | 3 | **9** | Y (seat maths) | Y (US-07b concurrency) | Y | to assign |
 | Session list with seats left (US-03; S4, #21) | 2 | 3 | **6** | Y | Y | Y | to assign (S4 has no owner) |
 | Row-level security on every table (ADR 0008) | 2 | 3 | **6** | N | Y | N | each table's track; @jhdaws for the guard test |
-| Session chat (US-05; later) | 3 | 2 | **6** | Y | Y (attendees only, read-only after a week) | N | to assign |
+| Session chat (US-05; C1) | 3 | 2 | **6** | Y | Y (attendees only, read-only after a week) | Y | @jhdaws |
 | Department and course normalisation (US-02; S2, #32) | 2 | 2 | **4** | Y | Y | N | @tsidhwani |
 | Times in campus time (US-02, US-03; W5, #30) | 2 | 2 | **4** | Y | N | Y, inside "create a session" | @jhdaws |
 | Study requests (US-16; later) | 2 | 2 | **4** | Y | Y | N | to assign |
@@ -126,7 +126,7 @@ CI's `e2e` job now starts Realtime for it.
 - **Next.js and Supabase internals** (routing, Server Action CSRF checks,
   token refresh). The frameworks test those. We test how we use them.
 - **Pages with no logic and later-sprint stubs** (`layout.tsx`, `page.tsx`,
-  `error.tsx`, `SessionChat`, `SessionMap`, `SessionRoster`,
+  `error.tsx`, `SessionMap`, `SessionRoster`,
   `/sessions/[id]`). There is nothing to assert yet. They stay in the coverage
   denominator, so the number doesn't flatter us.
 - **`src/lib/database.types.ts`.** It is generated, and CI's `db` job checks it

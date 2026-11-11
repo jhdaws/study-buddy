@@ -45,7 +45,10 @@ export type SecurityEventName =
   // editSession() / cancelSession() (US-09): refused -- not_session_host is
   // someone trying to change a session that is not theirs.
   | "session_edit_refused"
-  | "session_cancel_refused";
+  | "session_cancel_refused"
+  // sendMessage() (US-05): the insert was refused -- sqlstate_42501 is a post
+  // from someone not on the roster, or to a chat that has closed.
+  | "chat_post_refused";
 
 export type SecurityEvent = {
   event: SecurityEventName;

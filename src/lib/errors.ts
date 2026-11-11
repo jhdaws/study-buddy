@@ -34,8 +34,8 @@
 //   - P3 (US-18): the reports table's limit and note check (*_reports.sql).
 //   - P4 (US-22): the blocks table's self-block CHECK, and join_session's
 //     new refusal when the host has blocked the caller (*_p4_us_22_block_a_user.sql).
-// Still to come:
-//   - Later: chat (US-05).
+//   - C1 (US-05): the chat's body check, and chatErrorMessage() for its
+//     RLS refusal (*_session_chat.sql).
 
 import { CATALOGUE_INSERTS_PER_DAY, CATALOGUE_INSERTS_PER_HOUR } from "@/lib/limits";
 
@@ -91,6 +91,8 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   study_requests_course_id_author_id_key:
     "You've already asked for this course. Classmates can see it.",
   study_requests_note_length: "Keep your note to 200 characters or fewer.",
+  // C1 (US-05): mirrors chatMessageSchema (CHAT_MESSAGE_MAX_LENGTH).
+  session_messages_body_check: "Messages are 1 to 1000 characters.",
 };
 
 /**
@@ -186,6 +188,21 @@ export function databaseErrorMessage(error: DatabaseErrorLike | null | undefined
     return SQLSTATE_MESSAGES[error.code];
   }
   return GENERIC_ERROR_MESSAGE;
+}
+
+/**
+ * C1 (US-05): a chat post the session_messages_insert_attendees policy
+ * refused. RLS says only "42501", so this covers every reason it can have:
+ * not on the roster (never joined, or left in another tab), or a chat that
+ * closed while the page was open (cancelled, or a week past the end).
+ */
+export const CHAT_CLOSED_MESSAGE =
+  "You can't post here: only people going can, until a week after the session ends.";
+
+/** A message for a failed chat post, safe to show a student. */
+export function chatErrorMessage(error: DatabaseErrorLike | null | undefined): string {
+  if (error?.code === "42501") return CHAT_CLOSED_MESSAGE;
+  return databaseErrorMessage(error);
 }
 
 // ---------------------------------------------------------------------------

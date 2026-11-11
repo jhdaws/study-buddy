@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CHAT_CLOSED_MESSAGE,
+  chatErrorMessage,
   CODE_RATE_LIMITED_MESSAGE,
   CODE_REJECTED_MESSAGE,
   databaseErrorMessage,
@@ -482,5 +484,29 @@ describe("databaseErrorMessage: repeat weekly (S10, US-20)", () => {
     expect(databaseErrorMessage({ message: "weeks_out_of_range", code: "P0001" })).toBe(
       "Repeat for between 2 and 8 weeks.",
     );
+  });
+});
+
+describe("chatErrorMessage (US-05)", () => {
+  it("explains an RLS refusal of a chat post", () => {
+    const message = chatErrorMessage({
+      code: "42501",
+      message: 'new row violates row-level security policy for table "session_messages"',
+    });
+    expect(message).toBe(CHAT_CLOSED_MESSAGE);
+    expect(message).not.toMatch(RAW_TEXT);
+  });
+
+  it("maps the body check, which only a client skipping the form reaches", () => {
+    const message = chatErrorMessage({
+      code: "23514",
+      message: 'new row for relation "session_messages" violates check constraint "session_messages_body_check"',
+    });
+    expect(message).toBe("Messages are 1 to 1000 characters.");
+  });
+
+  it("falls back to the generic message for anything else", () => {
+    expect(chatErrorMessage({ code: "08006", message: "connection failure" })).toBe(GENERIC_ERROR_MESSAGE);
+    expect(chatErrorMessage(null)).toBe(GENERIC_ERROR_MESSAGE);
   });
 });

@@ -219,6 +219,32 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"session_messages": {
+                  Row: {
+                    "author_id": string | null,"body": string,"created_at": string,"id": string,"session_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "author_id"?: string | null,"body": string,"created_at"?: string,"id"?: string,"session_id": string
+                  }
+                  Update: {
+                    "author_id"?: string | null,"body"?: string,"created_at"?: string,"id"?: string,"session_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "session_messages_author_id_fkey"
+      columns: ["author_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "session_messages_session_id_fkey"
+      columns: ["session_id"]
+isOneToOne: false
+      referencedRelation: "sessions"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"sessions": {
                   Row: {
                     "capacity": number,"course_id": string,"created_at": string,"ends_at": string,"host_id": string | null,"id": string,"location_id": string,"location_label": string,"room": string | null,"starts_at": string,"status": Database["public"]['Enums']["session_status"],"topic": string
