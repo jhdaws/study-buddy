@@ -204,8 +204,22 @@ describe("<SignInForm> code step", () => {
     expect(code.className).toContain("min-h-11");
     expect(hidden("email")?.value).toBe("jane@vanderbilt.edu");
     expect(hidden("next")?.value).toBe("/sessions/new");
-    // Both ways in are explained.
-    expect(screen.getByRole("status").textContent).toMatch(/Tap the link in that email, or enter its code below/);
+    // Code only: the email carries no link any more.
+    expect(screen.getByRole("status").textContent).toMatch(/We sent a sign-in code to/);
+    expect(screen.getByRole("status").textContent).not.toMatch(/link/i);
+    // Not from "Forgot your password?", so no reset flag.
+    expect(hidden("reset")).toBeNull();
+  });
+
+  it("posts reset=1 from \"Forgot your password?\", and not from \"New here?\"", () => {
+    const { unmount } = render(<SignInForm next="/sessions" initialState={sent} />);
+    fireEvent.click(screen.getByRole("button", { name: "Forgot your password?" }));
+    expect(hidden("reset")?.value).toBe("1");
+    unmount();
+
+    render(<SignInForm next="/sessions" initialState={sent} />);
+    fireEvent.click(screen.getByRole("button", { name: "Get a sign-in code by email" }));
+    expect(hidden("reset")).toBeNull();
   });
 
   it("submits email, code and next to verifyCode", async () => {

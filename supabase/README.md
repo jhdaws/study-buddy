@@ -171,30 +171,30 @@ Set **both "Confirm signup" and "Magic link"** — `signInWithOtp()` sends
 *Confirm signup* to a first-time address and *Magic link* to a returning
 one. Same subject and body for both:
 
-- **Subject:** `Your Study Buddy sign-in link`
+- **Subject:** `Your Study Buddy sign-in code`
 - **Body:** paste the whole of
   [`templates/magic_link.html`](./templates/magic_link.html), unchanged.
 
-What the template does: it carries **a link and the code (`{{ .Token }}`)**.
-The link is `{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=email`:
-`signIn()` sets the redirect to `<this site>/auth/confirm?next=…`, and
-`/auth/confirm` verifies the `token_hash`, so the link works on any device.
-It only reaches the site if step 1's redirect list allows it. Students can
-also type the code into `/login` (A3's `verifyCode()`).
+What the template does: it carries **only the code (`{{ .Token }}`)**, no
+link. Students type it into `/login` (A3's `verifyCode()`).
 
-**Link and code, one token.** Supabase has no "send codes" switch:
-`signInWithOtp()` always sends the *Magic link* (or *Confirm signup*)
-template, and the template alone decides what the student gets. Supabase's
-default template contains only a link through its own `/verify`, which the
-app can finish only in the browser that asked. Ours has a link straight to
-`/auth/confirm` (any device) and the code. History: the link was dropped on
-2026-10-12 and restored on 2026-11-09. Vanderbilt mail goes through
-Microsoft Outlook, whose link scanning can open a link before the student
-does, and the link and the code are the same one-time token. So
-`/auth/confirm` no longer verifies the link: it sends the student to
-`/login/continue`, and only the **Continue signing in** button there spends
-the token (`src/lib/email-link.ts`). A scanner opens the page and spends
-nothing; the link and the code both still work for the student.
+**Why no link (2026-11-11).** Vanderbilt mail goes through Microsoft Outlook,
+which junked or quarantined our sign-in emails while they carried a link to
+the site; the code-only email arrives. History: the link was dropped on
+2026-10-12, restored on 2026-11-09 (with the `/login/continue` button, so
+Outlook's link scanner could not spend the token), and dropped again on
+2026-11-11. `/auth/confirm` and `/login/continue` still work, for links
+already in inboxes, and `signIn()` still sets `emailRedirectTo` for them.
+Supabase has no "send codes" switch: `signInWithOtp()` always sends the
+*Magic link* (or *Confirm signup*) template, and the template alone decides
+what the student gets.
+
+**If an email still doesn't arrive:** check Junk, Focused Inbox's *Other*
+tab, and Microsoft's quarantine (`security.microsoft.com/quarantine`,
+signed in with the Vanderbilt account). A first email from a new sender can
+be held for 10–30 minutes, by which time its code has expired; ask for
+another. Sending from a personal Gmail account is what Microsoft trusts
+least; a domain with SPF/DKIM through a provider (step 4) is the lasting fix.
 
 ### 3. Authentication → Sign In / Providers → Email
 

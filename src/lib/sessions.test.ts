@@ -6,7 +6,10 @@ import {
   COURSE_SUGGESTION_LIMIT,
   getSession,
   listDepartments,
+  listMySessions,
+  listPastSessions,
   listSessions,
+  PAST_SESSIONS_LIMIT,
   searchCourses,
 } from "./sessions";
 
@@ -37,7 +40,7 @@ function fakeBuilder(result: Result, calls: Recorded) {
     then: (resolve: (value: Result) => unknown) => Promise.resolve(result).then(resolve),
   };
 
-  for (const method of ["select", "eq", "gt", "is", "or", "order", "limit", "maybeSingle"]) {
+  for (const method of ["select", "eq", "gt", "is", "in", "or", "order", "limit", "maybeSingle"]) {
     builder[method] = (...args: unknown[]) => {
       calls.push({ method, args });
       return builder;
@@ -621,3 +624,100 @@ describe("searchCourses", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Home's readers (H1, #128; US-15, #133): the student's own roster.
+// ---------------------------------------------------------------------------
+
+/** Different rows per table: the roster read, then the sessions read. */
+function respondByTable(tables: Record<string, unknown>) {
+  calls = [];
+  db.from.mockImplementation((table: string) => {
+    calls.push({ method: "from", args: [table] });
+    return fakeBuilder({ data: tables[table] ?? [], error: null }, calls);
+  });
+}
+
+const ME = "22222222-2222-4222-8222-222222222222";
+
+describe("listMySessions", () => {
+  it("reads the student's roster rows, then those open, not-ended sessions, soonest first", async () => {
+    respondByTable({
+      session_attendees: [{ session_id: "s1" }, { session_id: "s2" }],
+      sessions: [
+        sessionRow({ id: "s1", host_id: ME, status: "open" }),
+        sessionRow({ id: "s2", host_id: "someone-else", status: "open" }),
+      ],
+    });
+
+    const mine = await listMySessions(ME);
+
+    expect(mine.map((s) => [s.id, s.hosting])).toEqual([
+      ["s1", true],
+      ["s2", false],
+    ]);
+    expect(calls.find((c) => c.method === "eq" && c.args[0] === "user_id")?.args).toEqual([
+      "user_id",
+      ME,
+    ]);
+    expect(callTo("in")).toEqual(["id", ["s1", "s2"]]);
+    expect(calls.filter((c) => c.method === "eq").map((c) => c.args)).toContainEqual([
+      "status",
+      "open",
+    ]);
+    expect(callTo("gt")).toEqual(["ends_at", "now"]);
+    expect(callTo("order")).toEqual(["starts_at", { ascending: true }]);
+  });
+
+  it("returns nothing, without a sessions query, when the student is on no roster", async () => {
+    respondByTable({ session_attendees: [] });
+
+    expect(await listMySessions(ME)).toEqual([]);
+    expect(calls.filter((c) => c.method === "from").map((c) => c.args[0])).toEqual([
+      "session_attendees",
+    ]);
+  });
+});
+
+describe("listPastSessions (US-15)", () => {
+  it("lists ended or cancelled sessions, most recent first, capped, flagging cancelled ones", async () => {
+    respondByTable({
+      session_attendees: [{ session_id: "s1" }, { session_id: "s2" }],
+      sessions: [
+        sessionRow({ id: "s2", host_id: "someone-else", status: "cancelled" }),
+        sessionRow({ id: "s1", host_id: ME, status: "open" }),
+      ],
+    });
+
+    const past = await listPastSessions(ME);
+
+    expect(past.map((s) => [s.id, s.hosting, s.cancelled])).toEqual([
+      ["s2", false, true],
+      ["s1", true, false],
+    ]);
+    expect(callTo("or")).toEqual(["status.eq.cancelled,ends_at.lte.now"]);
+    expect(callTo("order")).toEqual(["starts_at", { ascending: false }]);
+    expect(callTo("limit")).toEqual([PAST_SESSIONS_LIMIT]);
+  });
+
+  it("shows a host who deleted their account as null, for the \"Deleted user\" label", async () => {
+    respondByTable({
+      session_attendees: [{ session_id: "s1" }],
+      sessions: [sessionRow({ id: "s1", host_id: null, status: "open", profiles: null })],
+    });
+
+    const [session] = await listPastSessions(ME);
+    expect(session.hostDisplayName).toBeNull();
+    expect(session.hosting).toBe(false);
+  });
+
+  it("throws rather than showing an empty history when the roster read fails", async () => {
+    calls = [];
+    db.from.mockImplementation((table: string) => {
+      calls.push({ method: "from", args: [table] });
+      return fakeBuilder({ data: null, error: { message: "boom" } }, calls);
+    });
+    await expect(listPastSessions(ME)).rejects.toThrow("Could not load your sessions");
+  });
+});
+

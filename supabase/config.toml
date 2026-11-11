@@ -261,11 +261,11 @@ otp_expiry = 600
 # (supabase/README.md, "Hosted auth settings (A1)"); this file is the source for both.
 # Local emails land in Mailpit: http://127.0.0.1:54324
 [auth.email.template.magic_link]
-subject = "Your Study Buddy sign-in link"
+subject = "Your Study Buddy sign-in code"
 content_path = "./supabase/templates/magic_link.html"
 
 [auth.email.template.confirmation]
-subject = "Your Study Buddy sign-in link"
+subject = "Your Study Buddy sign-in code"
 content_path = "./supabase/templates/magic_link.html"
 
 # Uncomment to customize email template

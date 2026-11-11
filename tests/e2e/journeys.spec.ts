@@ -12,6 +12,7 @@ import {
   emailsTo,
   newStudentEmail,
   signInAsNewStudent,
+  signInCodeFor,
 } from "./helpers";
 
 // SEC-10: every journey runs under the real Content-Security-Policy, and
@@ -323,6 +324,103 @@ test("returning student (A6): signs back in with email and password, and no emai
 
   // The whole point: signing in again cost no email.
   expect(await emailsTo(email)).toBe(emailsBefore);
+});
+
+test("returning student by code (BUG-22): no password step unless they asked to reset it", async ({
+  page,
+}) => {
+  const email = newStudentEmail("codeagain");
+  await signInAsNewStudent(page, email, "Robin Return");
+  let lastSentAt = Date.now();
+
+  /** Sign out, then sign in by code from /login, via the given button. */
+  async function signInByCode(button: string) {
+    await page.getByRole("button", { name: "Account" }).click();
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL("/");
+    const before = await emailsTo(email);
+
+    await page.goto("/sessions");
+    await expect(page).toHaveURL(/\/login/);
+    await page.getByRole("button", { name: button }).click();
+    await page.getByLabel("Vanderbilt email").fill(email);
+    // Supabase refuses a second email to one address within
+    // `[auth.email] max_frequency` (1s locally, counted in whole seconds), and
+    // this journey can get from one send to the next in about a second. Wait
+    // it out, with margin, so the refusal never decides the test.
+    await page.waitForTimeout(Math.max(0, lastSentAt + 2_000 - Date.now()));
+    await page.getByRole("button", { name: "Send code" }).click();
+    lastSentAt = Date.now();
+    await expect(page.getByRole("heading", { name: "Check your inbox" })).toBeVisible();
+    // The NEW email, not the one from the first sign-in.
+    await expect.poll(() => emailsTo(email)).toBeGreaterThan(before);
+    await page.getByLabel("Sign-in code").fill(await signInCodeFor(email));
+    await page.getByRole("button", { name: "Sign in" }).click();
+  }
+
+  // They already have a password: a code sign-in goes straight on.
+  await signInByCode("Get a sign-in code by email");
+  await expect(page).toHaveURL("/sessions");
+
+  // "Forgot your password?" is the one code sign-in that asks for a new one,
+  // and it can be kept instead.
+  await signInByCode("Forgot your password?");
+  await expect(page).toHaveURL(/\/login\/password/);
+  await expect(page.getByRole("heading", { name: "Choose a new password" })).toBeVisible();
+  await page.getByRole("link", { name: "Keep my current password" }).click();
+  await expect(page).toHaveURL("/sessions");
+});
+
+test("home (H1, US-15): your own sessions first, then your past ones with \"Host it again\"", async ({
+  page,
+}) => {
+  await signInAsNewStudent(page, newStudentEmail("home"), "Hollis Home");
+
+  const topic = `E2E home journey ${Date.now()}`;
+  await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
+  await page.getByLabel("Course number").fill("3251");
+  await page.getByLabel("What are you studying?").fill(topic);
+  await chooseByKeyboard(page.getByLabel("Place"), "Feath", "ChIJ-FAKE-featheringill-hall");
+  await page.getByLabel("Starts").fill(campusTime(2));
+  await page.getByLabel("Ends").fill(campusTime(4));
+  await page.getByLabel("How many people, including you?").fill("4");
+  await page.getByRole("button", { name: "Create session" }).click();
+  await expect(page).toHaveURL("/sessions");
+
+  // Home is about this student: the session they host is first, marked.
+  await page.goto("/");
+  const upcoming = page.getByRole("region", { name: "Your upcoming sessions" });
+  await expect(upcoming).toContainText(topic);
+  await expect(upcoming).toContainText("You're hosting");
+  // No courses on their profile yet: one nudge instead of the course sections.
+  await expect(page.getByRole("link", { name: "Add your courses" })).toBeVisible();
+  // Nothing past yet.
+  await expect(page.getByRole("region", { name: "Your past sessions" })).toHaveCount(0);
+
+  // Cancel it (US-09): it leaves "upcoming" and shows as past, cancelled.
+  await upcoming
+    .locator("article")
+    .filter({ hasText: topic })
+    .getByRole("link", { name: /^CS 3251/ })
+    .click();
+  await expect(page).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+  await page.getByRole("button", { name: "Cancel session" }).click();
+  await page.getByRole("button", { name: "Yes, cancel it" }).click();
+  await expect(page.getByRole("region", { name: "Manage your session" })).toHaveCount(0);
+
+  await page.goto("/");
+  await expect(page.getByRole("region", { name: "Your upcoming sessions" })).not.toContainText(
+    topic,
+  );
+  const past = page.getByRole("region", { name: "Your past sessions" });
+  await expect(past).toContainText(topic);
+  await expect(past).toContainText("Cancelled");
+
+  // "Host it again" opens the create form with the course filled in (#124's prefill).
+  await past.getByRole("link", { name: "Host CS 3251 again" }).click();
+  await expect(page).toHaveURL(/\/sessions\/new\?department=CS&course=3251/);
+  await expect(page.getByLabel("Department")).toHaveValue("CS");
+  await expect(page.getByLabel("Course number")).toHaveValue("3251");
 });
 
 test("sign-out (US-21): the session ends, and private pages send the student back to sign in", async ({
