@@ -12,6 +12,7 @@ import {
   emailsTo,
   newStudentEmail,
   signInAsNewStudent,
+  signInCodeFor,
 } from "./helpers";
 
 // SEC-10: every journey runs under the real Content-Security-Policy, and
@@ -323,6 +324,44 @@ test("returning student (A6): signs back in with email and password, and no emai
 
   // The whole point: signing in again cost no email.
   expect(await emailsTo(email)).toBe(emailsBefore);
+});
+
+test("returning student by code (BUG-22): no password step unless they asked to reset it", async ({
+  page,
+}) => {
+  const email = newStudentEmail("codeagain");
+  await signInAsNewStudent(page, email, "Robin Return");
+
+  /** Sign out, then sign in by code from /login, via the given button. */
+  async function signInByCode(button: string) {
+    await page.getByRole("button", { name: "Account" }).click();
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL("/");
+    const before = await emailsTo(email);
+
+    await page.goto("/sessions");
+    await expect(page).toHaveURL(/\/login/);
+    await page.getByRole("button", { name: button }).click();
+    await page.getByLabel("Vanderbilt email").fill(email);
+    await page.getByRole("button", { name: "Send code" }).click();
+    await expect(page.getByRole("heading", { name: "Check your inbox" })).toBeVisible();
+    // The NEW email, not the one from the first sign-in.
+    await expect.poll(() => emailsTo(email)).toBeGreaterThan(before);
+    await page.getByLabel("Sign-in code").fill(await signInCodeFor(email));
+    await page.getByRole("button", { name: "Sign in" }).click();
+  }
+
+  // They already have a password: a code sign-in goes straight on.
+  await signInByCode("Get a sign-in code by email");
+  await expect(page).toHaveURL("/sessions");
+
+  // "Forgot your password?" is the one code sign-in that asks for a new one,
+  // and it can be kept instead.
+  await signInByCode("Forgot your password?");
+  await expect(page).toHaveURL(/\/login\/password/);
+  await expect(page.getByRole("heading", { name: "Choose a new password" })).toBeVisible();
+  await page.getByRole("link", { name: "Keep my current password" }).click();
+  await expect(page).toHaveURL("/sessions");
 });
 
 test("sign-out (US-21): the session ends, and private pages send the student back to sign in", async ({
