@@ -22,6 +22,9 @@
  *
  * The sheet also links to the student's profile (US-11), which is otherwise
  * only reachable from the desktop sidebar.
+ *
+ * Below Cancel, a quiet link to deleting the account (US-24). It only goes to
+ * /account/delete, which explains what is deleted and asks to confirm.
  */
 
 import Link from "next/link";
@@ -128,6 +131,13 @@ export default function AccountSheet({
               >
                 Cancel
               </button>
+              <Link
+                href="/account/delete"
+                onClick={() => setOpen(false)}
+                className="mt-2 flex min-h-11 w-full items-center justify-center text-sm font-semibold text-danger-on-light underline-offset-4 hover:underline"
+              >
+                Delete my account
+              </Link>
             </div>
           </div>,
           document.body,

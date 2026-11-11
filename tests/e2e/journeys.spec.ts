@@ -615,6 +615,67 @@ test("course filter (US-06, S8): filtering by course keeps only that course, and
   await expect(page.locator("article").filter({ hasText: topicB })).toBeVisible();
 });
 
+test("delete my account (US-24): the account and its data go, hosted sessions are cancelled, the password stops working", async ({
+  page,
+}) => {
+  const email = newStudentEmail("delete");
+  await signInAsNewStudent(page, email, "Dana Delete");
+
+  // Host a session first, so there is something deleting must cancel.
+  const topic = `E2E deletion journey ${Date.now()}`;
+  await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
+  await page.getByLabel("Course number").fill("3251");
+  await page.getByLabel("What are you studying?").fill(topic);
+  await chooseByKeyboard(page.getByLabel("Place"), "Feath", "ChIJ-FAKE-featheringill-hall");
+  await page.getByLabel("Starts").fill(campusTime(2));
+  await page.getByLabel("Ends").fill(campusTime(4));
+  await page.getByLabel("How many people, including you?").fill("4");
+  await page.getByRole("button", { name: "Create session" }).click();
+  await expect(page).toHaveURL("/sessions");
+
+  // From the account sheet to the confirm step, which says what goes.
+  await page.getByRole("button", { name: "Account" }).click();
+  await page.getByRole("link", { name: "Delete my account" }).click();
+  await expect(page).toHaveURL("/account/delete");
+  await expect(page.getByRole("heading", { name: "What's deleted" })).toBeVisible();
+
+  // Nothing happens without the box ticked.
+  await page.getByRole("button", { name: "Delete my account" }).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("Tick the box");
+  await expect(page).toHaveURL("/account/delete");
+
+  await page.getByLabel(/can't be recovered/).check();
+  await page.getByRole("button", { name: "Delete my account" }).click();
+  await expect(page).toHaveURL("/?account=deleted");
+  await expect(page.getByRole("status").filter({ hasText: "have been deleted" })).toBeVisible();
+  // Signed out on this device.
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+  await page.goto("/sessions");
+  await expect(page).toHaveURL(/\/login/);
+
+  // In the database: no account, no profile, and the hosted session cancelled
+  // with no host ("Deleted user") -- the trigger, in the same transaction.
+  const db = await connect();
+  try {
+    const { rows: users } = await db.query("select 1 from auth.users where email = $1", [email]);
+    expect(users).toEqual([]);
+    const { rows: sessions } = await db.query<{ status: string; host_id: string | null }>(
+      "select status, host_id from public.sessions where topic = $1",
+      [topic],
+    );
+    expect(sessions).toEqual([{ status: "cancelled", host_id: null }]);
+  } finally {
+    await db.end();
+  }
+
+  // The old password no longer signs anyone in.
+  await page.goto("/login");
+  await page.getByLabel("Vanderbilt email").fill(email);
+  await page.getByLabel("Password").fill(E2E_PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("don't match");
+});
+
 test("academic profile (US-11): a student fills in their major, year and courses, and they are saved", async ({
   page,
 }) => {
@@ -702,4 +763,48 @@ test("new in your courses (N1, US-17): another student's session in an enrolled 
   await page.goto("/");
   await expect(page.getByRole("region", { name: "New in your courses" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Sessions", exact: true })).toBeVisible();
+});
+
+test("report a user (US-18): a student reports the host from the roster, and only the team can see it", async ({
+  page,
+}) => {
+  if (hostedTopic === null) {
+    throw new Error("This journey reports the host of journey 2's session; journey 2 did not get that far.");
+  }
+  const topic = hostedTopic;
+
+  await signInAsNewStudent(page, newStudentEmail("report"), "Rory Reporter", "/sessions");
+  await page
+    .locator("article")
+    .filter({ hasText: topic })
+    .getByRole("link", { name: /^CS 3251/ })
+    .click();
+  await expect(page).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+  const sessionId = page.url().split("/").pop();
+
+  const roster = page.getByRole("region", { name: "Who's going" });
+  await roster.getByRole("button", { name: "Report Harper Host" }).click();
+  const form = roster.getByRole("form", { name: "Report Harper Host" });
+  await form.getByLabel("Made me feel unsafe").check();
+  await form.getByLabel(/Anything else/).fill("E2E report journey");
+  await form.getByRole("button", { name: "Send report" }).click();
+  await expect(roster.getByRole("status")).toContainText("Your report was sent");
+
+  // Filed through the real Data API with the student's own token: the
+  // reporter is them (set by the database), the reported student is the host.
+  const db = await connect();
+  try {
+    const { rows } = await db.query<{ reporter: string; reported: string; reason: string; session: string }>(
+      `select rp.display_name as reporter, rd.display_name as reported, r.reason, r.session_id::text as session
+         from public.reports r
+         join public.profiles rp on rp.id = r.reporter_id
+         join public.profiles rd on rd.id = r.reported_user_id
+        where r.note = 'E2E report journey'`,
+    );
+    expect(rows).toEqual([
+      { reporter: "Rory Reporter", reported: "Harper Host", reason: "safety", session: sessionId },
+    ]);
+  } finally {
+    await db.end();
+  }
 });

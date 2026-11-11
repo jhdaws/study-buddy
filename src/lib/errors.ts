@@ -30,6 +30,8 @@
 //     name, which is why both new entries are in CONSTRAINT_MESSAGES.
 //   - P1 (US-11): the academic profile's CHECKs and course limit
 //     (*_academic_profile.sql).
+//   - P2 (US-24): deleting an account through Supabase Auth's admin API.
+//   - P3 (US-18): the reports table's limit and note check (*_reports.sql).
 // Still to come:
 //   - Later: chat (US-05).
 
@@ -76,6 +78,9 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   // P1 (US-11): mirror profileSchema.
   profiles_major_check: "Keep your major to 1 to 80 characters, without spaces at either end.",
   profiles_minor_check: "Keep your minor to 1 to 80 characters, without spaces at either end.",
+  // P3 (US-18): mirror reportUserSchema.
+  reports_note_length: "Keep the note to 500 characters or fewer.",
+  reports_not_self: "You can't report yourself.",
   // R1 (US-16): one live request per student per course, so asking twice is
   // a unique violation rather than a second vote. Reached from two sides --
   // two tabs, or a direct API call -- so it needs a message either way.
@@ -112,6 +117,9 @@ const RAISED_MESSAGES: Record<string, string> = {
   host_cannot_leave: "As the host, you can't leave — cancel the session instead.",
   // P1 (US-11): the profile_courses_limit trigger (PROFILE_COURSES_MAX).
   profile_courses_limit: "List up to 8 current courses.",
+  // P3 (US-18): the reports_limit trigger (SQLSTATE PT429, REPORTS_PER_DAY).
+  report_limit_reached:
+    "You've sent 5 reports in the last day, which is the limit. If you are in danger right now, call 911.",
   // S7: update_session and cancel_session (US-09).
   not_session_host: "Only the host can change or cancel this session.",
   capacity_below_roster:
@@ -377,4 +385,24 @@ const MAP_UNAVAILABLE_MESSAGES: Record<MapUnavailableReason, string> = {
 /** A message for a map that cannot be shown, safe to show. */
 export function mapUnavailableMessage(reason: MapUnavailableReason): string {
   return MAP_UNAVAILABLE_MESSAGES[reason];
+}
+
+// ---------------------------------------------------------------------------
+// Deleting an account (US-24): auth.admin.deleteUser() in deleteAccount().
+// ---------------------------------------------------------------------------
+
+export const DELETE_ACCOUNT_FAILED_MESSAGE =
+  "We couldn't delete your account just now. Nothing was deleted — try again in a moment.";
+
+/**
+ * A message for an error from auth.admin.deleteUser(), safe to show.
+ * `user_not_found` means the account is already gone (a second tap, say), so
+ * the caller treats it as done and never shows this; anything else is ours
+ * to fix, and the deletion is one statement, so nothing was half-deleted.
+ */
+export function deleteAccountErrorMessage(error: AuthErrorLike | null | undefined): string {
+  if (error?.status === 429 || error?.code === "over_request_rate_limit") {
+    return CODE_RATE_LIMITED_MESSAGE;
+  }
+  return DELETE_ACCOUNT_FAILED_MESSAGE;
 }

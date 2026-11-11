@@ -4,6 +4,8 @@ import {
   CODE_RATE_LIMITED_MESSAGE,
   CODE_REJECTED_MESSAGE,
   databaseErrorMessage,
+  DELETE_ACCOUNT_FAILED_MESSAGE,
+  deleteAccountErrorMessage,
   GENERIC_ERROR_MESSAGE,
   mapUnavailableMessage,
   PASSWORD_REJECTED_MESSAGE,
@@ -225,6 +227,26 @@ describe("databaseErrorMessage: the academic profile (US-11)", () => {
   });
 });
 
+describe("databaseErrorMessage: reporting a user (US-18)", () => {
+  it("maps the daily limit without the trigger's text", () => {
+    const message = databaseErrorMessage({ code: "PT429", message: "report_limit_reached" });
+    expect(message).toMatch(/5 reports in the last day/);
+    expect(message).not.toMatch(RAW_TEXT);
+  });
+
+  it.each([
+    ["reports_note_length", /500 characters/],
+    ["reports_not_self", /can't report yourself/],
+  ])("maps a violation of %s", (constraint, expected) => {
+    const message = databaseErrorMessage({
+      code: "23514",
+      message: `new row for relation "reports" violates check constraint "${constraint}"`,
+    });
+    expect(message).toMatch(expected);
+    expect(message).not.toMatch(RAW_TEXT);
+  });
+});
+
 describe("signInErrorMessage", () => {
   it("maps both rate limits to the same message", () => {
     expect(
@@ -405,6 +427,24 @@ describe("databaseErrorMessage: study requests (R1, US-16)", () => {
     });
 
     expect(message).toBe("You don't have permission to do that.");
+  });
+});
+describe("deleteAccountErrorMessage (US-24)", () => {
+  it("says nothing was deleted, without Supabase's text", () => {
+    for (const error of [
+      { status: 500, code: "unexpected_failure", message: "Database error deleting user" },
+      { status: 403, code: "not_admin", message: "User not allowed" },
+      null,
+    ]) {
+      expect(deleteAccountErrorMessage(error)).toBe(DELETE_ACCOUNT_FAILED_MESSAGE);
+    }
+  });
+
+  it("asks a rate-limited student to wait", () => {
+    expect(deleteAccountErrorMessage({ status: 429 })).toBe(CODE_RATE_LIMITED_MESSAGE);
+    expect(deleteAccountErrorMessage({ code: "over_request_rate_limit" })).toBe(
+      CODE_RATE_LIMITED_MESSAGE,
+    );
   });
 });
 

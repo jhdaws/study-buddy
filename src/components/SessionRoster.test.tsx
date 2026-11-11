@@ -10,6 +10,8 @@ import SessionRoster, { type SessionRosterProps } from "./SessionRoster";
 // The real actions are a "use server" module that imports server-only code;
 // the database's side of joining is tested in tests/db/join-leave-session.test.ts.
 vi.mock("@/app/sessions/actions", () => ({ joinSession: vi.fn(), leaveSession: vi.fn() }));
+// Same for the report action (US-18); tests/db/reports.test.ts has its rules.
+vi.mock("@/app/reports/actions", () => ({ reportUser: vi.fn() }));
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 // The subscription itself is tested in src/lib/live-roster.test.ts; here,
@@ -42,6 +44,16 @@ function renderRoster(overrides: Partial<SessionRosterProps> = {}) {
   );
 }
 
+/**
+ * The join/leave buttons, leaving out the per-entry Report buttons (US-18),
+ * which every roster has -- a session that has ended can still be reported.
+ */
+function rosterButtons(): HTMLElement[] {
+  return screen
+    .queryAllByRole("button")
+    .filter((button) => !button.getAttribute("aria-label")?.startsWith("Report "));
+}
+
 async function click(name: string) {
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name }));
@@ -63,7 +75,8 @@ describe("SessionRoster", () => {
     renderRoster({ viewerId: "me", action: "leave" });
 
     const items = within(screen.getByRole("list")).getAllByRole("listitem");
-    expect(items.map((item) => item.textContent)).toEqual(["PPriyaHost", "AAlex (you)"]);
+    // Everyone but the viewer has a Report button (US-18).
+    expect(items.map((item) => item.textContent)).toEqual(["PPriyaHostReport", "AAlex (you)"]);
     expect(screen.getByText("2 of 4 going")).toBeTruthy();
     expect(screen.getByText("2 seats left")).toBeTruthy();
   });
@@ -78,10 +91,11 @@ describe("SessionRoster", () => {
     });
 
     const items = within(screen.getByRole("list")).getAllByRole("listitem");
+    // The viewer is someone else, so every entry also ends in US-18's Report.
     expect(items.map((item) => item.textContent)).toEqual([
-      "PPriyaComputer Science · JuniorHost",
-      "AAlexGraduate student",
-      "SSam",
+      "PPriyaComputer Science · JuniorHostReport",
+      "AAlexGraduate studentReport",
+      "SSamReport",
     ]);
   });
 
@@ -125,21 +139,65 @@ describe("SessionRoster", () => {
     renderRoster({ viewerId: "host", action: "hosting" });
 
     expect(screen.getByText("You're hosting this session.")).toBeTruthy();
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(rosterButtons()).toEqual([]);
   });
 
   it("says a cancelled session was cancelled, with no button", () => {
     renderRoster({ action: "cancelled" });
 
     expect(screen.getByRole("status").textContent).toBe("The host cancelled this session.");
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(rosterButtons()).toEqual([]);
   });
 
   it("says an ended session has ended, with no button", () => {
     renderRoster({ action: "ended" });
 
     expect(screen.getByText("This session has ended.")).toBeTruthy();
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(rosterButtons()).toEqual([]);
+  });
+});
+
+describe("SessionRoster: reporting someone (US-18)", () => {
+  it("offers Report on everyone but the viewer", () => {
+    renderRoster({ viewerId: "me", action: "leave" });
+    expect(screen.getByRole("button", { name: "Report Priya" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Report Alex" })).toBeNull();
+  });
+
+  it("names a student with no display name yet neutrally", () => {
+    renderRoster({
+      attendees: [{ userId: "anon", displayName: null, isHost: false }],
+    });
+    expect(screen.getByRole("button", { name: "Report this student" })).toBeTruthy();
+  });
+
+  it("opens one report form, for that student and this session, and closes it again", () => {
+    renderRoster({ viewerId: "me", action: "leave" });
+    const report = screen.getByRole("button", { name: "Report Priya" });
+    expect(report.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(report);
+    expect(report.getAttribute("aria-expanded")).toBe("true");
+    const form = screen.getByRole("form", { name: "Report Priya" }) as HTMLFormElement;
+    const data = new FormData(form);
+    expect(data.get("reportedUserId")).toBe("host");
+    expect(data.get("sessionId")).toBe(SESSION);
+
+    fireEvent.click(within(form).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("form", { name: "Report Priya" })).toBeNull();
+  });
+
+  it("still offers Report once a session has ended or been cancelled", () => {
+    for (const action of ["ended", "cancelled"] as const) {
+      renderRoster({ action });
+      expect(screen.getByRole("button", { name: "Report Priya" })).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it("is a 44px target (ADR 0004)", () => {
+    renderRoster();
+    expect(screen.getByRole("button", { name: "Report Priya" }).className).toContain("min-h-11");
   });
 
   describe("live roster", () => {
