@@ -868,7 +868,11 @@ test("block a user (US-22): A blocks B from a roster, B's later join is refused,
 }) => {
   test.setTimeout(60_000);
 
+  // Each helper opens its own page first. Sign-in lands on /sessions/new, but
+  // after that each student is wherever their last step left them (a session
+  // page, the list), so neither helper may assume where it starts.
   async function hostSession(actor: typeof page, topic: string) {
+    await actor.goto("/sessions/new");
     await chooseByKeyboard(actor.getByLabel("Department"), "CS", "CS");
     await actor.getByLabel("Course number").fill("3251");
     await actor.getByLabel("What are you studying?").fill(topic);
@@ -881,6 +885,7 @@ test("block a user (US-22): A blocks B from a roster, B's later join is refused,
   }
 
   async function openSession(actor: typeof page, topic: string) {
+    await actor.goto("/sessions");
     await actor
       .locator("article")
       .filter({ hasText: topic })
@@ -919,8 +924,10 @@ test("block a user (US-22): A blocks B from a roster, B's later join is refused,
     // refusal family as any other, never a message that says "blocked".
     await hostSession(page, secondTopic);
     await openSession(b, secondTopic);
-    await b.getByRole("region", { name: "Who's going" }).getByRole("button", { name: "Join session" }).click();
-    await expect(b.getByRole("alert")).toHaveText("You can't join this session.");
+    const bRoster = b.getByRole("region", { name: "Who's going" });
+    await bRoster.getByRole("button", { name: "Join session" }).click();
+    // Scoped to the roster: Next.js's route announcer is also role="alert".
+    await expect(bRoster.getByRole("alert")).toHaveText("You can't join this session.");
 
     // B hosts their own session. A no longer sees it in the list.
     await hostSession(b, blockedHostTopic);
