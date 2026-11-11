@@ -131,7 +131,12 @@ begin
   select coalesce(p.last_seen_sessions_at, 'epoch'::timestamptz) into v_since
   from public.profiles p where p.id = v_user;
 
-  update public.profiles set last_seen_sessions_at = now() where id = v_user;
+  -- Table-aliased: `id` is also this function's first OUT column (RETURNS
+  -- TABLE), so a bare `id` is ambiguous (the BUG-03 / BUG-14 pattern).
+  -- clock_timestamp(), not now(): "seen" is the moment of this call, which
+  -- inside a longer transaction (the db tests run in one) is later than its
+  -- start.
+  update public.profiles p set last_seen_sessions_at = clock_timestamp() where p.id = v_user;
 
   return query
     select s.id, s.topic, c.department_code, c.number, c.title, s.starts_at, s.ends_at, s.location_label
@@ -160,7 +165,7 @@ language sql
 security definer
 set search_path = ''
 as $$
-  update public.profiles set last_seen_sessions_at = now() where id = auth.uid();
+  update public.profiles p set last_seen_sessions_at = clock_timestamp() where p.id = auth.uid();
 $$;
 
 revoke all on function public.mark_sessions_seen() from public;

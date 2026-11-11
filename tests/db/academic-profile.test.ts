@@ -304,8 +304,13 @@ describe("profile_courses (US-11)", () => {
 describe("US-11b: another student's email is never readable", () => {
   it("returns another student's name, major and year -- and no email", async () => {
     await db.query("update public.profiles set major = 'History', class_year = 'senior' where id = $1", [other]);
+    // Every column a student may read (SELECT is granted per column since
+    // N1, US-17, so `select *` is refused; tests/db/idor.test.ts pins the list).
     const { rows } = await asUser(me, () =>
-      attempt("select * from public.profiles where id = $1", [other]),
+      attempt(
+        "select id, display_name, created_at, major, minor, class_year from public.profiles where id = $1",
+        [other],
+      ),
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ display_name: "Other", major: "History", class_year: "senior" });

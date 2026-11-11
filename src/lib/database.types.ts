@@ -349,14 +349,7 @@ isOneToOne: false
                            },
 "new_sessions_in_my_courses":
 { Args: Record<PropertyKey, never>; Returns: {
-              "id": string,
-"topic": string,
-"department_code": string,
-"course_number": string,
-"course_title": string | null,
-"starts_at": string,
-"ends_at": string,
-"location_label": string
+              "course_number": string,"course_title": string,"department_code": string,"ends_at": string,"id": string,"location_label": string,"starts_at": string,"topic": string
             }[]
                            },
 "normalize_course_number":
