@@ -246,6 +246,9 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"consume_rate_limit":
+{ Args: { "p_bucket": string }; Returns: number
+                           },
 "create_session":
 { Args: { "capacity": number,"course_id": string,"ends_at": string,"location_id": string,"location_label": string,"room": string,"starts_at": string,"topic": string }; Returns: {
               "capacity": number,

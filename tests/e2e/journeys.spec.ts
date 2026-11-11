@@ -14,6 +14,70 @@ import {
   signInAsNewStudent,
 } from "./helpers";
 
+// SEC-10: every journey runs under the real Content-Security-Policy, and
+// fails if the browser refused anything because of it -- a script, a style,
+// a connection. Chromium reports each refusal on the console.
+let cspViolations: string[] = [];
+test.beforeEach(({ page }) => {
+  cspViolations = [];
+  page.on("console", (message) => {
+    // Wording varies ("Refused to ...", "Applying inline style violates
+    // ...", "Content Security policy" for WebAssembly).
+    if (/content security policy/i.test(message.text())) cspViolations.push(message.text());
+  });
+});
+test.afterEach(() => {
+  expect(cspViolations, "the browser refused something under the CSP").toEqual([]);
+});
+
+test("security headers (SEC-10): a page carries the CSP and the other headers, and its scripts the nonce", async ({
+  page,
+}) => {
+  const response = await page.goto("/login");
+  expect(response?.status()).toBe(200);
+  const headers = response!.headers();
+
+  const policy = headers["content-security-policy"];
+  expect(policy).toContain("default-src 'self'");
+  expect(policy).toContain("frame-ancestors 'none'");
+  expect(policy).toContain("object-src 'none'");
+  expect(policy).toMatch(/script-src 'self' 'nonce-[^']+' 'strict-dynamic'/);
+  expect(policy).not.toContain("'unsafe-inline' 'strict-dynamic'");
+  expect(policy).not.toMatch(/script-src[^;]*'unsafe-eval'/);
+  // Realtime's WebSocket to the (local) Supabase project.
+  expect(policy).toMatch(/connect-src 'self' http:\/\/127\.0\.0\.1:\d+ ws:\/\/127\.0\.0\.1:\d+/);
+
+  expect(headers["x-content-type-options"]).toBe("nosniff");
+  expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
+  expect(headers["permissions-policy"]).toBe("camera=(), microphone=(), geolocation=(self)");
+  expect(headers["x-frame-options"]).toBe("DENY");
+  expect(headers["x-powered-by"]).toBeUndefined();
+
+  // Next stamped this response's nonce on every script it rendered. The
+  // browser hides the attribute once parsed; the property keeps it.
+  const nonce = /'nonce-([^']+)'/.exec(policy)?.[1];
+  const scriptNonces = await page
+    .locator("script")
+    .evaluateAll((scripts) => scripts.map((script) => (script as HTMLScriptElement).nonce));
+  expect(scriptNonces.length).toBeGreaterThan(0);
+  expect(new Set(scriptNonces)).toEqual(new Set([nonce]));
+  // The Maps API copies its <style> nonce from the first style[nonce]
+  // (src/app/layout.tsx); CI has no Maps key, so check the carrier itself.
+  const styleNonce = await page
+    .locator("style[nonce]")
+    .first()
+    .evaluate((style) => (style as HTMLStyleElement).nonce);
+  expect(styleNonce).toBe(nonce);
+
+  // And the scripts ran: this switch is client-side state.
+  await page.getByRole("button", { name: "Get a sign-in code by email" }).click();
+  await expect(page.getByRole("button", { name: "Send code" })).toBeVisible();
+
+  // A new nonce on the next request.
+  const again = await page.request.get("/login");
+  expect(again.headers()["content-security-policy"]).not.toContain(`'nonce-${nonce}'`);
+});
+
 test("journey 1: a new student signs in with a code, names themselves, and lands where they were going", async ({
   page,
 }) => {
