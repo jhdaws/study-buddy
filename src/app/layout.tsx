@@ -2,10 +2,13 @@ import type { Metadata } from "next";
 import "@fontsource-variable/manrope";
 import "./globals.css";
 
+import { Suspense } from "react";
+
 import AppShell from "@/components/AppShell";
 import SiteHeader from "@/components/SiteHeader";
 import SiteSidebar from "@/components/SiteSidebar";
 import TabBar from "@/components/TabBar";
+import TabBarWithBadge from "@/components/TabBarWithBadge";
 
 export const metadata: Metadata = {
   // Pages set a plain `title`; the template adds the app name after it.
@@ -42,7 +45,15 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full bg-paper">
-        <AppShell header={<SiteHeader />} sidebar={<SiteSidebar />} tabBar={<TabBar />}>
+        <AppShell
+          header={<SiteHeader />}
+          sidebar={<SiteSidebar />}
+          tabBar={
+            <Suspense fallback={<TabBar />}>
+              <TabBarWithBadge />
+            </Suspense>
+          }
+        >
           {children}
         </AppShell>
       </body>

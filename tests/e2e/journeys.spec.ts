@@ -581,3 +581,61 @@ test("academic profile (US-11): a student fills in their major, year and courses
   await page.getByRole("link", { name: "Your profile" }).click();
   await expect(page).toHaveURL("/profile");
 });
+
+test("new in your courses (N1, US-17): another student's session in an enrolled course shows up on Home, then clears", async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(60_000);
+
+  // Reese adds CS 3251 before anyone hosts one, so the host's session is
+  // created after Reese's own last_seen_sessions_at (defaults to account
+  // creation).
+  await signInAsNewStudent(page, newStudentEmail("n1reader"), "Reese Reader", "/profile");
+  await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
+  await page.getByLabel("Course number").fill("3251");
+  await page.getByRole("button", { name: "Add course" }).click();
+  await expect(page.getByRole("list", { name: "Your current courses" })).toContainText("CS 3251");
+  await page.getByRole("button", { name: "Save profile" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Profile saved." })).toBeVisible();
+
+  const topic = `E2E new-in-courses ${Date.now()}`;
+
+  // A different student hosts the session, in their own browser context --
+  // Reese must never host it themselves (US-17 excludes your own sessions).
+  const hostContext = await browser.newContext();
+  try {
+    const host = await hostContext.newPage();
+    await signInAsNewStudent(host, newStudentEmail("n1host"), "Hayden Host");
+    await chooseByKeyboard(host.getByLabel("Department"), "CS", "CS");
+    await host.getByLabel("Course number").fill("3251");
+    await host.getByLabel("What are you studying?").fill(topic);
+    await chooseByKeyboard(host.getByLabel("Place"), "Feath", "ChIJ-FAKE-featheringill-hall");
+    await host.getByLabel("Starts").fill(campusTime(2));
+    await host.getByLabel("Ends").fill(campusTime(4));
+    await host.getByLabel("How many people, including you?").fill("4");
+    await host.getByRole("button", { name: "Create session" }).click();
+    await expect(host).toHaveURL("/sessions");
+  } finally {
+    await hostContext.close();
+  }
+
+  // Reese opens Home: the new session shows up, in their own enrolled course.
+  await page.goto("/");
+  const section = page.getByRole("region", { name: "New in your courses" });
+  await expect(section).toContainText("CS 3251");
+  await expect(section).toContainText(topic);
+
+  // Opening it goes straight to the session page.
+  await section.getByRole("link").filter({ hasText: topic }).click();
+  await expect(page).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText(topic);
+
+  // Home already reset the clock on the visit above; a second one shows
+  // nothing new, and the nav badge (whose own count is a separate read, not
+  // guaranteed to land before or after Home's own reset on that first
+  // request) is unambiguous by now too.
+  await page.goto("/");
+  await expect(page.getByRole("region", { name: "New in your courses" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Sessions", exact: true })).toBeVisible();
+});
