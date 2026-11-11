@@ -3,10 +3,13 @@ import { headers } from "next/headers";
 import "@fontsource-variable/manrope";
 import "./globals.css";
 
+import { Suspense } from "react";
+
 import AppShell from "@/components/AppShell";
 import SiteHeader from "@/components/SiteHeader";
 import SiteSidebar from "@/components/SiteSidebar";
 import TabBar from "@/components/TabBar";
+import TabBarWithBadge from "@/components/TabBarWithBadge";
 import { NONCE_HEADER } from "@/lib/security-headers";
 
 export const metadata: Metadata = {
@@ -53,7 +56,15 @@ export default async function RootLayout({
     <html lang="en" className="h-full antialiased">
       <head>{nonce && <style nonce={nonce} />}</head>
       <body className="min-h-full bg-paper">
-        <AppShell header={<SiteHeader />} sidebar={<SiteSidebar />} tabBar={<TabBar />}>
+        <AppShell
+          header={<SiteHeader />}
+          sidebar={<SiteSidebar />}
+          tabBar={
+            <Suspense fallback={<TabBar />}>
+              <TabBarWithBadge />
+            </Suspense>
+          }
+        >
           {children}
         </AppShell>
       </body>
