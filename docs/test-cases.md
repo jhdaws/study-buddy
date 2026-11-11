@@ -42,7 +42,11 @@ verified end to end.**
 | US-06 / US-12 | 🚧 | Several sessions exist across courses and campus zones *(zone data no longer exists — US-12 needs rethinking, ADR 0008)* | A student applies a course or zone filter | Only matching sessions remain; clearing the filter restores all | Component test — Sprint 3. **So far (US-06, client side only):** `src/lib/session-filters.test.ts` and `SessionBrowser.test.tsx` — search by course code (any spelling), title, topic or place, plus Today / This week / Has seats chips, over the sessions already loaded. **Not yet:** filtering in `listSessions()` (sessions not loaded), and US-12 has no zone data |
 | US-16 | 🚧 | No sessions exist for a student's course | They open the session list | The empty state invites them to start one or post a request | Component test: `src/components/SessionBrowser.test.tsx` — an empty list shows an invitation linking to `/sessions/new`. **Not yet:** "for a student's course" needs the course filter (US-06); "post a request" needs study requests (later sprint) |
 | US-23 | ✅ | A student is deciding whether to walk across campus | They open a session | They see who is already attending before joining | **End to end (S6):** journey 4 in `tests/e2e/journeys.spec.ts` — before joining, the session page lists the host by name and "1 of 4 going". `SessionRoster.test.tsx` — names in roster order, host marked, the viewer marked "(you)"; `sessions.test.ts` — `getSession()` orders the host first and never selects an email (US-25). **Live (2026-10-26):** journey 5 — a student watching the session page sees another student's join and leave arrive without reloading; `src/lib/live-roster.test.ts` (joins filtered to this session, leaves matched on `old.session_id`, a catch-up refresh on every SUBSCRIBED, the token resolved before the first join); `tests/db/live-roster.test.ts` (the publication allowlist, the primary key a DELETE carries, no `anon` grant). Checked by hand against a full local stack, not automated: a signed-out Realtime listener receives joins as `401 Unauthorized` and leaves as empty records — no session or student ids |
-| US-11b | ⬜ | A signed-in student queries another student's profile row | They request the `email` column | The request is denied; name, major, and year are returned | Column-level access control — needs a DB test |
+| US-11b | ✅ | A signed-in student queries another student's profile row | They request the `email` column | The request is denied; name, major, and year are returned | `tests/db/academic-profile.test.ts`, "US-11b": another student's row returns name, major and year with no email field; `auth.users` gets 42501 for `authenticated`; no `%mail%` column exists in `public` or `graphql_public`. `tests/db/idor.test.ts` pins the readable `profiles` columns as an allow-list. |
+| US-11 | ✅ | A signed-in student is on `/profile` | They fill in major, year and a current course, and save | It is saved and shown again after a reload, and their major and year appear next to their name on rosters | E2E "academic profile (US-11)" in `tests/e2e/journeys.spec.ts`; `tests/db/academic-profile.test.ts` (grants, CHECKs, RLS, the 8-course limit, cascade); `src/app/profile/actions.test.ts`, `ProfileForm.test.tsx`, `SessionRoster.test.tsx` |
+| US-24 | ✅ | A signed-in student hosts an upcoming session | They confirm "Delete my account" | Their auth user, profile, roster rows and study requests are gone; the hosted session is cancelled and shows "Deleted user" as host; they are signed out with a confirmation; their old password no longer signs in | E2E "delete my account (US-24)" in `tests/e2e/journeys.spec.ts`; `tests/db/delete-account.test.ts` (cascade, hosted-session cancel in the same statement, only the auth server can delete); `src/app/account/actions.test.ts` (only the caller's id) |
+| US-18 (users) | ✅ | A signed-in student is on a session page | They press Report on another attendee, choose a reason and send it | The report is stored as theirs and they see a confirmation; nobody but the team can read it; a report about themselves, a forged reporter, and a sixth report in a day are all refused | E2E "report a user (US-18)" in `tests/e2e/journeys.spec.ts`; `tests/db/reports.test.ts`; `src/app/reports/actions.test.ts`, `ReportUserForm.test.tsx`, `SessionRoster.test.tsx` |
+| US-18 (messages) | ⬜ | A student sees an inappropriate chat message | They report it | — | Waits on chat (US-05) |
 
 ## US-07b is the one to write first
 
@@ -160,3 +164,34 @@ database, has RLS switched on everywhere, that the generated files are
 current, that the form rules behave, and that the screens render fixture
 data as intended — nothing more. Say that plainly in the report rather than letting
 "CI passing" do unearned work.
+
+## Security fixes (Sprint 4, #129)
+
+What each fix is proven to do, and what is still assumed. Severity, threat and
+evidence are in [`security/findings.md`](./security/findings.md).
+
+- **SEC-03 (T5), catalogue insert limit.** *Verified* in real Postgres
+  (`tests/db/catalogue-insert-limit.test.ts`): a direct insert past 10 an hour
+  or 30 a day is refused with `PT429`; students are counted separately; the
+  window rolls; backdating `created_at` is ignored; `get_or_create_course` still
+  resolves existing courses at the limit; two concurrent inserts cannot share
+  the last slot. HTTP 429 through PostgREST was checked by hand once.
+- **SEC-05 (T8), place lookup limit.** *Verified* in real Postgres
+  (`tests/db/place-lookup-rate-limit.test.ts`): the 21st call in 10 minutes is
+  refused, students are counted separately, the window rolls, unknown buckets
+  are refused. Unit tests: `createSession()` and `editSession()` never call
+  Google once refused, or when the check itself fails.
+- **SEC-09 (T12), security log.** *Verified* by unit tests at every call site
+  (password, code and link sign-in; join; create; edit; cancel): one line is
+  written, and the password, code, token hash, address and Postgres text never
+  appear. Seen in a real server log during `npm run test:e2e`.
+  *Not covered:* alerting, and how long Vercel keeps the logs.
+- **SEC-10 (T13), security headers.** *Verified* by unit tests
+  (`security-headers.test.ts`, `src/proxy.test.ts`) and e2e: the headers are
+  present, and every journey fails on a CSP refusal (mutation-checked). The live
+  map, the place picker and realtime were checked by hand in Chromium under the
+  production CSP. *Assumed:* Safari and Firefox, Vercel's own headers (HSTS),
+  and Maps features we did not open (Street View, user photos).
+- **BUG-19, Google key pair.** *Verified* by running `next.config.ts` with each
+  combination of the two keys; a Vercel production build with only one fails.
+

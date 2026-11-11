@@ -22,24 +22,30 @@
 
 import { z } from "zod";
 
+import { CLASS_YEARS } from "@/lib/academic";
 import { ALLOWED_EMAIL_DOMAIN } from "@/lib/env";
 import {
   DEPARTMENT_CODE_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
   LOCATION_LABEL_MAX_LENGTH,
+  MAJOR_MAX_LENGTH,
   MAX_CAPACITY,
   MAX_REPEAT_WEEKS,
   MIN_CAPACITY,
+  MINOR_MAX_LENGTH,
   MIN_REPEAT_WEEKS,
   OTP_CODE_MAX_LENGTH,
   OTP_CODE_MIN_LENGTH,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  PROFILE_COURSES_MAX,
+  REPORT_NOTE_MAX_LENGTH,
   ROOM_MAX_LENGTH,
   START_GRACE_MINUTES,
   STUDY_REQUEST_NOTE_MAX_LENGTH,
   TOPIC_MAX_LENGTH,
 } from "@/lib/limits";
+import { REPORT_REASONS } from "@/lib/reports";
 
 // The limits are part of this module's contract (docs/contracts.md); they
 // live in limits.ts so Client Components can have them without zod.
@@ -47,14 +53,18 @@ export {
   DEPARTMENT_CODE_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
   LOCATION_LABEL_MAX_LENGTH,
+  MAJOR_MAX_LENGTH,
   MAX_CAPACITY,
   MAX_REPEAT_WEEKS,
   MIN_CAPACITY,
+  MINOR_MAX_LENGTH,
   MIN_REPEAT_WEEKS,
   OTP_CODE_MAX_LENGTH,
   OTP_CODE_MIN_LENGTH,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  PROFILE_COURSES_MAX,
+  REPORT_NOTE_MAX_LENGTH,
   ROOM_MAX_LENGTH,
   START_GRACE_MINUTES,
   STUDY_REQUEST_NOTE_MAX_LENGTH,
@@ -520,3 +530,135 @@ export const studyRequestSchema = z.object({
 
 export type StudyRequestValues = z.output<typeof studyRequestSchema>;
 export type StudyRequestField = keyof StudyRequestValues;
+
+// ---------------------------------------------------------------------------
+// Academic profile (US-11) -- saveProfile() in src/app/profile/actions.ts.
+// The database twins are profiles_major_check, profiles_minor_check, the
+// class_year enum and the profile_courses_limit trigger
+// (*_academic_profile.sql).
+// ---------------------------------------------------------------------------
+
+// MAJOR_MAX_LENGTH, MINOR_MAX_LENGTH, PROFILE_COURSES_MAX: src/lib/limits.ts.
+
+/** Optional free text: trimmed, and blank becomes null -- never stored as "". */
+function optionalText(max: number, tooLong: string) {
+  return z
+    .string()
+    .trim()
+    .max(max, { error: tooLong })
+    .optional()
+    .transform((text) => text || null);
+}
+
+/**
+ * One current course as the form submits it: `CS 3251` -- the department,
+ * a space, the number. Both halves are normalised as the session form's are,
+ * so `cs 3251` and `C.S. 3251` are the same course.
+ */
+const profileCourseSchema = z
+  .string()
+  .trim()
+  .transform((raw, ctx) => {
+    const space = raw.lastIndexOf(" ");
+    const departmentCode = normalizeDepartmentCode(space < 0 ? "" : raw.slice(0, space));
+    const courseNumber = normalizeCourseNumber(space < 0 ? raw : raw.slice(space + 1));
+    if (departmentCode === "" || departmentCode.length > DEPARTMENT_CODE_MAX_LENGTH) {
+      ctx.addIssue({ code: "custom", message: `Choose a department for ${raw || "each course"}.` });
+      return z.NEVER;
+    }
+    if (!COURSE_NUMBER_PATTERN.test(courseNumber)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `“${raw}” isn't a course number. Use 4 digits, like 3251 or 2100W.`,
+      });
+      return z.NEVER;
+    }
+    return { departmentCode, courseNumber };
+  });
+
+export const profileSchema = z.object({
+  major: optionalText(MAJOR_MAX_LENGTH, `Keep your major to ${MAJOR_MAX_LENGTH} characters or fewer.`),
+  minor: optionalText(MINOR_MAX_LENGTH, `Keep your minor to ${MINOR_MAX_LENGTH} characters or fewer.`),
+  // "" is the select's "Prefer not to say": no year.
+  classYear: z
+    .preprocess(
+      blankAsMissing,
+      z.enum(CLASS_YEARS, { error: "Choose your year from the list." }).optional(),
+    )
+    .transform((year) => year ?? null),
+  // Repeats of one course collapse to one; the limit counts what is left.
+  courses: z
+    .array(profileCourseSchema)
+    .default([])
+    .transform((courses) => {
+      const seen = new Set<string>();
+      return courses.filter((course) => {
+        const key = `${course.departmentCode} ${course.courseNumber}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    })
+    .refine((courses) => courses.length <= PROFILE_COURSES_MAX, {
+      error: `List up to ${PROFILE_COURSES_MAX} current courses.`,
+    }),
+});
+
+export type ProfileValues = z.output<typeof profileSchema>;
+export type ProfileField = keyof ProfileValues;
+
+// ---------------------------------------------------------------------------
+// Delete my account (US-24) -- deleteAccount() in src/app/account/actions.ts.
+// ---------------------------------------------------------------------------
+
+/**
+ * The confirmation step: a checkbox, `confirm`, submitted as "yes" when
+ * ticked (and absent when not). Nothing else is read from the form -- above
+ * all, no user id: the account deleted is always the caller's own.
+ */
+export const deleteAccountSchema = z.object({
+  confirm: z.literal("yes", {
+    error: "Tick the box to confirm you want your account deleted.",
+  }),
+});
+
+export type DeleteAccountValues = z.output<typeof deleteAccountSchema>;
+export type DeleteAccountField = keyof DeleteAccountValues;
+
+// ---------------------------------------------------------------------------
+// Report a user (US-18) -- reportUser() in src/app/reports/actions.ts. The
+// database twins: the report_reason enum, reports_note_length, and the
+// reports_insert_own policy (*_reports.sql).
+// ---------------------------------------------------------------------------
+
+/** A uuid as Postgres prints one. Anything else cannot be a profile or session. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The report form: who (a hidden field, from the roster), the session it was
+ * sent from (hidden, optional), a reason, and an optional note. Never who is
+ * reporting: that is the signed-in student, set by the database.
+ */
+export const reportUserSchema = z.object({
+  reportedUserId: z
+    .string({ error: "Choose who you're reporting." })
+    .regex(UUID_PATTERN, { error: "Choose who you're reporting." }),
+  sessionId: z
+    .string()
+    .trim()
+    .optional()
+    .transform((id) => id || null)
+    .refine((id) => id === null || UUID_PATTERN.test(id), { error: "That session isn't valid." }),
+  reason: z.enum(REPORT_REASONS, { error: "Choose a reason." }),
+  note: z
+    .string()
+    .trim()
+    .max(REPORT_NOTE_MAX_LENGTH, {
+      error: `Keep the note to ${REPORT_NOTE_MAX_LENGTH} characters or fewer.`,
+    })
+    .optional()
+    .transform((note) => note || null),
+});
+
+export type ReportUserValues = z.output<typeof reportUserSchema>;
+export type ReportUserField = keyof ReportUserValues;

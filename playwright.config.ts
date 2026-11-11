@@ -43,6 +43,11 @@ function pointAtLocalSupabase(): void {
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = status.ANON_KEY;
   process.env.TEST_DATABASE_URL = status.DB_URL;
   process.env.MAILPIT_URL = mailpitUrl;
+  // Deleting an account (US-24) needs the secret key, as in production. The
+  // local stack's is the CLI's fixed demo key -- not a secret -- and the
+  // refusal above means it can only ever be this machine's.
+  const secretKey = status.SECRET_KEY ?? status.SERVICE_ROLE_KEY;
+  if (secretKey) process.env.SUPABASE_SECRET_KEY = secretKey;
   // No Google keys: the picker offers the fixture places (LocationPicker.tsx),
   // which resolve without Google (src/lib/places.ts), and global-setup.ts
   // gives them location rows. Set to "" rather than deleted: Next.js fills a

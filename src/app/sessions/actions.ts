@@ -17,9 +17,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { databaseErrorMessage, type DatabaseErrorLike } from "@/lib/errors";
+import { databaseErrorMessage, databaseErrorReason, type DatabaseErrorLike } from "@/lib/errors";
 import { PlaceError, resolvePlace } from "@/lib/places";
+import { logSecurityEvent } from "@/lib/security-log";
 import { getSession } from "@/lib/sessions";
+import { consumeRateLimit } from "@/lib/rate-limit";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import {
   createSessionSchema,
@@ -54,11 +56,19 @@ export async function createSession(
   _prev: CreateSessionState,
   formData: FormData,
 ): Promise<CreateSessionState> {
-  await requireUser();
+  const user = await requireUser();
 
   const parsed = createSessionSchema().safeParse(Object.fromEntries(formData));
   if (!parsed.success) {
     return invalidFormState(parsed.error, formData);
+  }
+
+  // SEC-05: resolvePlace() can be a billed Google call, so spend one of this
+  // student's place lookups first (limits.ts, counted in the database by
+  // auth.uid()). Refused, or the check itself failing: no lookup.
+  const limitError = await consumeRateLimit("place_lookup");
+  if (limitError) {
+    return databaseFailure("consume_rate_limit", limitError, formData, user.id);
   }
 
   let locationId: string;
@@ -70,6 +80,7 @@ export async function createSession(
     }));
   } catch (error) {
     if (error instanceof PlaceError) {
+      logSecurityEvent({ event: "session_create_refused", reason: error.reason, userId: user.id });
       return {
         fieldErrors: { placeId: [error.message] },
         values: formValues(formData),
@@ -90,7 +101,7 @@ export async function createSession(
     },
   );
   if (courseError) {
-    return databaseFailure("get_or_create_course", courseError, formData);
+    return databaseFailure("get_or_create_course", courseError, formData, user.id);
   }
 
   // Place is validated ONCE above (US-20): every weekly copy reuses this
@@ -111,7 +122,7 @@ export async function createSession(
       p_weeks: parsed.data.weeks,
     });
     if (seriesError) {
-      return databaseFailure("create_sessions_weekly", seriesError, formData);
+      return databaseFailure("create_sessions_weekly", seriesError, formData, user.id);
     }
   } else {
     // S1's create_session: one session and the host as its first attendee.
@@ -128,7 +139,7 @@ export async function createSession(
       capacity: parsed.data.capacity,
     });
     if (sessionError) {
-      return databaseFailure("create_session", sessionError, formData);
+      return databaseFailure("create_session", sessionError, formData, user.id);
     }
   }
 
@@ -165,7 +176,7 @@ export async function editSession(
   _prev: EditSessionState,
   formData: FormData,
 ): Promise<EditSessionState> {
-  await requireUser();
+  const user = await requireUser();
 
   const session = await getSession(sessionId);
   if (!session) {
@@ -179,11 +190,24 @@ export async function editSession(
     return invalidFormState(parsed.error, formData);
   }
 
+  // SEC-05: the same per-student lookup budget as createSession() -- an edit
+  // can call Google too. Refused, or the check itself failing: no lookup.
+  const limitError = await consumeRateLimit("place_lookup");
+  if (limitError) {
+    return editFailure("consume_rate_limit", limitError, formData, user.id, sessionId);
+  }
+
   let locationId: string;
   try {
     ({ locationId } = await resolvePlace(parsed.data.placeId));
   } catch (error) {
     if (error instanceof PlaceError) {
+      logSecurityEvent({
+        event: "session_edit_refused",
+        reason: error.reason,
+        userId: user.id,
+        sessionId,
+      });
       return { fieldErrors: { placeId: [error.message] }, values: formValues(formData) };
     }
     throw error;
@@ -196,7 +220,7 @@ export async function editSession(
     p_course_number: parsed.data.courseNumber,
   });
   if (courseError) {
-    return editFailure("get_or_create_course", courseError, formData);
+    return editFailure("get_or_create_course", courseError, formData, user.id, sessionId);
   }
 
   const { error: updateError } = await supabase.rpc("update_session", {
@@ -213,7 +237,7 @@ export async function editSession(
     p_capacity: parsed.data.capacity,
   });
   if (updateError) {
-    return editFailure("update_session", updateError, formData);
+    return editFailure("update_session", updateError, formData, user.id, sessionId);
   }
 
   revalidatePath(`/sessions/${sessionId}`);
@@ -234,7 +258,7 @@ export async function cancelSession(
   _prev: SessionActionState,
   _formData: FormData,
 ): Promise<SessionActionState> {
-  await requireUser();
+  const user = await requireUser();
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("cancel_session", { p_session_id: sessionId });
@@ -242,6 +266,12 @@ export async function cancelSession(
     console.error("cancelSession: cancel_session failed", {
       code: error.code,
       message: error.message,
+    });
+    logSecurityEvent({
+      event: "session_cancel_refused",
+      reason: databaseErrorReason(error),
+      userId: user.id,
+      sessionId,
     });
     return { error: databaseErrorMessage(error) };
   }
@@ -274,12 +304,19 @@ export async function joinSession(
   _prev: SessionActionState,
   _formData: FormData,
 ): Promise<SessionActionState> {
-  await requireUser();
+  const user = await requireUser();
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("join_session", { session_id: sessionId });
   if (error) {
     console.error("joinSession: join_session failed", { code: error.code, message: error.message });
+    // SEC-09: e.g. session_full, already_joined -- the name, not the text.
+    logSecurityEvent({
+      event: "session_join_refused",
+      reason: databaseErrorReason(error),
+      userId: user.id,
+      sessionId,
+    });
     return { error: databaseErrorMessage(error) };
   }
 
@@ -435,14 +472,17 @@ function studyRequestFailure(
 
 /**
  * The student sees our own message; the server log keeps Postgres's code
- * and text, so a generic "Something went wrong" can still be traced.
+ * and text, so a generic "Something went wrong" can still be traced. The
+ * security log (SEC-09) gets only the name the error was mapped by.
  */
 function databaseFailure(
   rpc: string,
   error: DatabaseErrorLike,
   formData: FormData,
+  userId: string,
 ): CreateSessionState {
   console.error(`createSession: ${rpc} failed`, { code: error.code, message: error.message });
+  logSecurityEvent({ event: "session_create_refused", reason: databaseErrorReason(error), userId });
   return { formError: databaseErrorMessage(error), values: formValues(formData) };
 }
 
@@ -451,7 +491,15 @@ function editFailure(
   rpc: string,
   error: DatabaseErrorLike,
   formData: FormData,
+  userId: string,
+  sessionId: string,
 ): EditSessionState {
   console.error(`editSession: ${rpc} failed`, { code: error.code, message: error.message });
+  logSecurityEvent({
+    event: "session_edit_refused",
+    reason: databaseErrorReason(error),
+    userId,
+    sessionId,
+  });
   return { formError: databaseErrorMessage(error), values: formValues(formData) };
 }

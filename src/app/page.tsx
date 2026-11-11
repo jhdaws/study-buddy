@@ -16,6 +16,9 @@
  * listSessions() is still the W4 fixture stub until S4 (#21); this page does
  * not change when it lands. A failure to load it shows an inline message
  * rather than taking the page down.
+ *
+ * `?account=deleted` (US-24): deleteAccount() lands here, signed out, and
+ * the page confirms the deletion above the signed-out home.
  */
 
 import type { Metadata } from "next";
@@ -32,6 +35,7 @@ import {
   PANEL,
   SECTION_TITLE,
 } from "@/components/ui/styles";
+import { isAccountDeletedNotice } from "@/lib/account";
 import { campusDayOffset, isInProgress } from "@/lib/format";
 import { groupByDay } from "@/lib/session-filters";
 import { listSessions, type SessionListItem } from "@/lib/sessions";
@@ -44,7 +48,11 @@ export const metadata: Metadata = {
 /** Sessions listed after "Next up" before "See all sessions". */
 const LATER_LIMIT = 5;
 
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await connection();
   const supabase = await createClient();
   const {
@@ -52,7 +60,7 @@ export default async function HomePage() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return <SignedOutHome />;
+    return <SignedOutHome accountDeleted={isAccountDeletedNotice(await searchParams)} />;
   }
 
   const [displayName, sessions] = await Promise.all([
@@ -180,9 +188,17 @@ const STEPS = [
   },
 ];
 
-function SignedOutHome() {
+function SignedOutHome({ accountDeleted = false }: { accountDeleted?: boolean }) {
   return (
     <main className="min-w-0">
+      {accountDeleted && (
+        <p
+          role="status"
+          className="mb-5 rounded-xl border border-line bg-white px-4 py-3 text-[15px] font-semibold text-ink"
+        >
+          Your account and your data have been deleted. Thanks for studying with us.
+        </p>
+      )}
       <section className="rounded-2xl bg-brand px-6 py-10 text-white sm:px-10 sm:py-14">
         <p className="text-sm font-semibold text-blue-200">For Vanderbilt students</p>
         <h1 className="mt-2 max-w-xl text-[34px] leading-[1.1] font-bold tracking-tight sm:text-[44px]">
