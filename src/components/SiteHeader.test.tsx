@@ -64,13 +64,14 @@ describe("<AccountMenu>", () => {
   it("keeps Tab and Shift+Tab inside the sheet", () => {
     render(<AccountMenu signedIn displayName="Moses" />);
     fireEvent.click(screen.getByRole("button", { name: "Account" }));
-    const signOutButton = screen.getByRole("button", { name: "Sign out" });
-    // The sheet's last control since US-24: the link to delete the account.
+    // The sheet's controls, in order: the profile link (US-11), Sign out,
+    // Cancel, and the link to delete the account (US-24).
+    const profile = screen.getByRole("link", { name: "Your profile" });
     const deleteLink = screen.getByRole("link", { name: "Delete my account" });
 
     deleteLink.focus();
     fireEvent.keyDown(document, { key: "Tab" });
-    expect(document.activeElement).toBe(signOutButton);
+    expect(document.activeElement).toBe(profile);
     fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
     expect(document.activeElement).toBe(deleteLink);
   });
@@ -83,6 +84,14 @@ describe("<AccountMenu>", () => {
     expect(link.className).toContain("min-h-11");
     // Focus still starts on Cancel: Enter straight after opening deletes nothing.
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
+  });
+
+  it("links to the student's profile (US-11)", () => {
+    render(<AccountMenu signedIn displayName="Moses" />);
+    fireEvent.click(screen.getByRole("button", { name: "Account" }));
+    const profile = screen.getByRole("link", { name: "Your profile" });
+    expect(profile.getAttribute("href")).toBe("/profile");
+    expect(profile.className).toContain("min-h-11");
   });
 
   it("falls back to a neutral avatar without a display name", () => {

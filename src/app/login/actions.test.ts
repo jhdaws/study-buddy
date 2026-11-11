@@ -90,6 +90,8 @@ beforeEach(() => {
   server.pathAfterSignIn.mockImplementation(async (_client, _id, next) => safeNext(next));
   server.update.mockImplementation(() => ({ eq: server.eq }));
   server.eq.mockImplementation(() => ({ select: server.select }));
+  // The security log (SEC-09); asserted on in its own block at the end.
+  vi.spyOn(console, "warn").mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -457,5 +459,110 @@ describe("signOut", () => {
     const path = await redirectOf(signOut());
     expect(auth.signOut).toHaveBeenCalledWith({ scope: "local" });
     expect(path).toBe("/");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The security log (SEC-09, src/lib/security-log.ts): one line per refused
+// sign-in, and nothing a guesser typed -- not the password, not the code,
+// not the address -- and none of Supabase's own text.
+// ---------------------------------------------------------------------------
+
+// `printf 'jane@vanderbilt.edu' | shasum -a 256`
+const JANE_HASH = "9cf968134a5b36bb008913e2977899e28cd8f2d16047e465f82be320a63c4eb1";
+
+/** Every console.warn call so far, as one string, for "never contains" checks. */
+function everythingWarned(): string {
+  return JSON.stringify(vi.mocked(console.warn).mock.calls);
+}
+
+/** The one security line logged, parsed. */
+function securityLine(): Record<string, string> {
+  expect(console.warn).toHaveBeenCalledTimes(1);
+  return JSON.parse(vi.mocked(console.warn).mock.calls[0][0] as string);
+}
+
+describe("security log (SEC-09)", () => {
+  it("logs a refused password once: the reason and a hash of the address, never the password", async () => {
+    auth.signInWithPassword.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { code: "invalid_credentials", status: 400, message: "Invalid login credentials" },
+    });
+    await signInWithPassword(
+      {},
+      form({ email: " Jane@Vanderbilt.EDU ", password: "hunter2-guess", next: "/sessions" }),
+    );
+
+    expect(securityLine()).toMatchObject({
+      log: "security",
+      event: "sign_in_password_failed",
+      reason: "invalid_credentials",
+      emailHash: JANE_HASH,
+    });
+    const warned = everythingWarned();
+    expect(warned).not.toContain("hunter2-guess");
+    expect(warned.toLowerCase()).not.toContain("jane@vanderbilt.edu");
+    expect(warned).not.toContain("Invalid login credentials");
+  });
+
+  it("logs a refused code once: the reason and a hash of the address, never the code", async () => {
+    auth.verifyOtp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { code: "otp_expired", status: 403, message: "Token has expired or is invalid" },
+    });
+    await verifyCode({}, form({ email: "jane@vanderbilt.edu", code: "482913" }));
+
+    expect(securityLine()).toMatchObject({
+      log: "security",
+      event: "sign_in_code_failed",
+      reason: "otp_expired",
+      emailHash: JANE_HASH,
+    });
+    const warned = everythingWarned();
+    expect(warned).not.toContain("482913");
+    expect(warned).not.toContain("jane@vanderbilt.edu");
+    expect(warned).not.toContain("Token has expired");
+  });
+
+  it("logs a refused emailed link once: the reason only, never the token hash", async () => {
+    auth.verifyOtp.mockResolvedValue({
+      data: { user: null, session: null },
+      error: { code: "otp_expired", status: 403, message: "Email link is invalid or has expired" },
+    });
+    await redirectOf(
+      confirmSignIn(form({ token_hash: "abc123", type: "email", next: "/sessions" })),
+    );
+
+    expect(securityLine()).toMatchObject({
+      log: "security",
+      event: "sign_in_link_failed",
+      reason: "otp_expired",
+    });
+    const warned = everythingWarned();
+    expect(warned).not.toContain("abc123");
+    expect(warned).not.toContain("Email link is invalid");
+  });
+
+  it("logs a sign-in that came back with no user and no error as no_user", async () => {
+    auth.signInWithPassword.mockResolvedValue({ data: { user: null, session: null }, error: null });
+    await signInWithPassword({}, form({ email: "jane@vanderbilt.edu", password: "pw" }));
+    expect(securityLine()).toMatchObject({ event: "sign_in_password_failed", reason: "no_user" });
+  });
+
+  it("logs nothing for a sign-in that worked", async () => {
+    auth.signInWithPassword.mockResolvedValue({
+      data: { user: { id: "u1", user_metadata: { has_password: true } } },
+      error: null,
+    });
+    await redirectOf(signInWithPassword({}, form({ email: "jane@vanderbilt.edu", password: "pw" })));
+    auth.verifyOtp.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    await redirectOf(verifyCode({}, form({ email: "jane@vanderbilt.edu", code: "123456" })));
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it("logs nothing for a form refused before Supabase was asked", async () => {
+    await signInWithPassword({}, form({ email: "jane@gmail.com", password: "pw" }));
+    await verifyCode({}, form({ email: "jane@vanderbilt.edu", code: "12ab" }));
+    expect(console.warn).not.toHaveBeenCalled();
   });
 });

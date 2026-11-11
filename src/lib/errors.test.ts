@@ -135,6 +135,29 @@ describe("databaseErrorMessage: creating a session (S1-S3)", () => {
   });
 });
 
+// SEC-03: the catalogue trigger (*_catalogue_insert_limit.sql), as
+// supabase.rpc("get_or_create_course") or a direct insert hands it back.
+describe("databaseErrorMessage: the catalogue insert limit (SEC-03)", () => {
+  const raised = {
+    code: "PT429",
+    message: "catalogue_limit_reached",
+    details: "courses: 10 added in the last hour, 10 in the last day",
+  };
+
+  it("maps catalogue_limit_reached to the limit, in the student's words", () => {
+    expect(databaseErrorMessage(raised)).toBe(
+      "You've added a lot of new courses and departments lately — the limit is 10 of each an " +
+        "hour and 30 a day. Choose one that's already listed, or try again later.",
+    );
+  });
+
+  it("never shows the trigger's details, which name the table", () => {
+    const message = databaseErrorMessage(raised);
+    expect(message).not.toMatch(RAW_TEXT);
+    expect(message).not.toMatch(/catalogue_limit_reached|added in the last|PT429/);
+  });
+});
+
 // What join_session and leave_session can raise (S5).
 describe("databaseErrorMessage: joining and leaving a session (S5)", () => {
   it.each([
@@ -181,6 +204,26 @@ describe("placeSearchErrorMessage (M2)", () => {
     ]) {
       expect(message).not.toMatch(/API|key|PERMISSION|referer|quota/i);
     }
+  });
+});
+
+describe("databaseErrorMessage: the academic profile (US-11)", () => {
+  it.each([
+    ["profiles_major_check", /major/],
+    ["profiles_minor_check", /minor/],
+  ])("maps a violation of %s without raw text", (constraint, expected) => {
+    const message = databaseErrorMessage({
+      code: "23514",
+      message: `new row for relation "profiles" violates check constraint "${constraint}"`,
+    });
+    expect(message).toMatch(expected);
+    expect(message).not.toMatch(RAW_TEXT);
+  });
+
+  it("maps the profile_courses_limit trigger's refusal", () => {
+    expect(databaseErrorMessage({ code: "P0001", message: "profile_courses_limit" })).toBe(
+      "List up to 8 current courses.",
+    );
   });
 });
 
@@ -382,5 +425,20 @@ describe("deleteAccountErrorMessage (US-24)", () => {
     expect(deleteAccountErrorMessage({ code: "over_request_rate_limit" })).toBe(
       CODE_RATE_LIMITED_MESSAGE,
     );
+  });
+});
+
+// SEC-05: consume_rate_limit() at the limit, as supabase.rpc() hands it back.
+describe("databaseErrorMessage: the place lookup rate limit (SEC-05)", () => {
+  it("maps place_lookup_rate_limited, and never shows the count in its details", () => {
+    const message = databaseErrorMessage({
+      code: "PT429",
+      message: "place_lookup_rate_limited",
+      details: "20 of 20 hits used in the last 00:10:00",
+    });
+    expect(message).toBe(
+      "You've tried a lot of places in the last few minutes. Wait a few minutes, then try again.",
+    );
+    expect(message).not.toMatch(/rate_limited|hits|PT429/);
   });
 });
