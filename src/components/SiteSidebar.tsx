@@ -54,31 +54,40 @@ async function SidebarAccount() {
 
   const displayName = await fetchDisplayName(supabase, user.id).catch(() => null);
   return (
-    <div className="flex items-center gap-3 border-t border-line pt-4">
-      <span
-        aria-hidden
-        className="grid size-9 shrink-0 place-items-center rounded-full bg-brand text-sm font-bold text-white"
-      >
-        {formatInitial(displayName)}
-      </span>
-      {/* The name opens the student's profile (US-11). */}
-      <Link
-        href="/profile"
-        title="Your profile"
-        className="flex min-h-11 min-w-0 flex-1 items-center truncate text-[15px] font-semibold text-ink hover:underline"
-      >
-        <span className="truncate">{displayName ?? "Signed in"}</span>
-      </Link>
-      <form action={signOut}>
-        <button
-          type="submit"
-          aria-label="Sign out"
-          title="Sign out"
-          className="grid size-11 place-items-center rounded-lg text-ink-2 hover:bg-paper hover:text-ink"
+    <div className="border-t border-line pt-4">
+      <div className="flex items-center gap-3">
+        <span
+          aria-hidden
+          className="grid size-9 shrink-0 place-items-center rounded-full bg-brand text-sm font-bold text-white"
         >
-          <Icon name="logout" />
-        </button>
-      </form>
+          {formatInitial(displayName)}
+        </span>
+        {/* The name opens the student's profile (US-11). */}
+        <Link
+          href="/profile"
+          title="Your profile"
+          className="flex min-h-11 min-w-0 flex-1 items-center truncate text-[15px] font-semibold text-ink hover:underline"
+        >
+          <span className="truncate">{displayName ?? "Signed in"}</span>
+        </Link>
+        <form action={signOut}>
+          <button
+            type="submit"
+            aria-label="Sign out"
+            title="Sign out"
+            className="grid size-11 place-items-center rounded-lg text-ink-2 hover:bg-paper hover:text-ink"
+          >
+            <Icon name="logout" />
+          </button>
+        </form>
+      </div>
+      {/* US-24: explains what is deleted and asks to confirm first. */}
+      <Link
+        href="/account/delete"
+        className="mt-1 flex min-h-11 items-center px-1 text-sm text-ink-2 hover:text-danger-on-light hover:underline"
+      >
+        Delete my account
+      </Link>
     </div>
   );
 }

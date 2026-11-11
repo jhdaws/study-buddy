@@ -572,3 +572,21 @@ export const profileSchema = z.object({
 
 export type ProfileValues = z.output<typeof profileSchema>;
 export type ProfileField = keyof ProfileValues;
+
+// ---------------------------------------------------------------------------
+// Delete my account (US-24) -- deleteAccount() in src/app/account/actions.ts.
+// ---------------------------------------------------------------------------
+
+/**
+ * The confirmation step: a checkbox, `confirm`, submitted as "yes" when
+ * ticked (and absent when not). Nothing else is read from the form -- above
+ * all, no user id: the account deleted is always the caller's own.
+ */
+export const deleteAccountSchema = z.object({
+  confirm: z.literal("yes", {
+    error: "Tick the box to confirm you want your account deleted.",
+  }),
+});
+
+export type DeleteAccountValues = z.output<typeof deleteAccountSchema>;
+export type DeleteAccountField = keyof DeleteAccountValues;

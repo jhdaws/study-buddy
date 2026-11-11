@@ -66,7 +66,7 @@ from the session page, and each has a browser journey or a component test
 | US-21 | P1 | ⬜ | As a signed-in student, I want to sign out, so that I can leave my account on a shared or borrowed device. *(Missing entirely from the report.)* | 2 |
 | US-22 | P2 | ⬜ | As a student, I want to block another user, so that I never see or get joined by someone who made me uncomfortable. | 8 |
 | US-23 | P1 | ✅ | As a student deciding whether to walk somewhere, I want to see who is already attending before I commit. *(Should be visible from the list view, not only the session page.)* | 4 |
-| US-24 | P2 | ⬜ | As a student, I want to delete my account and my data. | 5 |
+| US-24 | P2 | ✅ | As a student, I want to delete my account and my data. | 5 |
 | US-25 | P1 | ⬜ | As a student, I want my email address hidden from other users, so that joining a session does not hand out my contact details. *(The report's Part C assumed a tiered-visibility profile that has no story behind it — this is the minimum honest version. Note that row-level access rules do not restrict columns; hiding a field takes a separate mechanism.)* | 3 |
 
 **A note on safety.** US-18, US-22, and US-23 are not polish. This product's

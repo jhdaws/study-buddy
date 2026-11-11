@@ -30,6 +30,7 @@
 //     name, which is why both new entries are in CONSTRAINT_MESSAGES.
 //   - P1 (US-11): the academic profile's CHECKs and course limit
 //     (*_academic_profile.sql).
+//   - P2 (US-24): deleting an account through Supabase Auth's admin API.
 // Still to come:
 //   - Later: chat (US-05).
 
@@ -377,4 +378,24 @@ const MAP_UNAVAILABLE_MESSAGES: Record<MapUnavailableReason, string> = {
 /** A message for a map that cannot be shown, safe to show. */
 export function mapUnavailableMessage(reason: MapUnavailableReason): string {
   return MAP_UNAVAILABLE_MESSAGES[reason];
+}
+
+// ---------------------------------------------------------------------------
+// Deleting an account (US-24): auth.admin.deleteUser() in deleteAccount().
+// ---------------------------------------------------------------------------
+
+export const DELETE_ACCOUNT_FAILED_MESSAGE =
+  "We couldn't delete your account just now. Nothing was deleted — try again in a moment.";
+
+/**
+ * A message for an error from auth.admin.deleteUser(), safe to show.
+ * `user_not_found` means the account is already gone (a second tap, say), so
+ * the caller treats it as done and never shows this; anything else is ours
+ * to fix, and the deletion is one statement, so nothing was half-deleted.
+ */
+export function deleteAccountErrorMessage(error: AuthErrorLike | null | undefined): string {
+  if (error?.status === 429 || error?.code === "over_request_rate_limit") {
+    return CODE_RATE_LIMITED_MESSAGE;
+  }
+  return DELETE_ACCOUNT_FAILED_MESSAGE;
 }
