@@ -216,13 +216,7 @@ export async function listSessions(
 
   let query = supabase
     .from("sessions")
-    .select(
-      `id, topic, location_label, room, starts_at, ends_at, capacity, host_id,
-       courses!inner (department_code, number, title),
-       locations!inner (lat, lng),
-       profiles!sessions_host_id_fkey (display_name),
-       session_attendees (count)`,
-    )
+    .select(SESSION_LIST_SELECT)
     .eq("status", "open")
     .gt("ends_at", "now");
 
@@ -253,31 +247,150 @@ export async function listSessions(
 
   return (data ?? [])
     .filter((row) => row.host_id === null || !blocked.has(row.host_id))
-    .map((row) => {
-      const attendeeCount = row.session_attendees[0]?.count ?? 0;
+    .map(toListItem);
+}
 
-      return {
-        id: row.id,
-        course: {
-          departmentCode: row.courses.department_code,
-          number: row.courses.number,
-          title: row.courses.title,
-        },
-        topic: row.topic,
-        locationLabel: row.location_label,
-        room: row.room,
-        lat: row.locations.lat,
-        lng: row.locations.lng,
-        startsAt: row.starts_at,
-        endsAt: row.ends_at,
-        capacity: row.capacity,
-        attendeeCount,
-        seatsLeft: Math.max(0, row.capacity - attendeeCount),
-        // A deleted account leaves host_id null, so the embed yields null and
-        // the card shows "Deleted user".
-        hostDisplayName: row.profiles?.display_name ?? null,
-      };
-    });
+/**
+ * What listSessions() and the Home readers below select: one card's worth.
+ * The host is embedded through the NAMED foreign key -- a bare `profiles`
+ * embed is ambiguous (PGRST201): sessions also reach profiles through
+ * session_attendees.
+ */
+const SESSION_LIST_SELECT = `id, topic, location_label, room, starts_at, ends_at, capacity, host_id, status,
+       courses!inner (department_code, number, title),
+       locations!inner (lat, lng),
+       profiles!sessions_host_id_fkey (display_name),
+       session_attendees (count)`;
+
+type SessionListRow = {
+  id: string;
+  topic: string;
+  location_label: string;
+  room: string | null;
+  starts_at: string;
+  ends_at: string;
+  capacity: number;
+  host_id: string | null;
+  status: "open" | "cancelled";
+  courses: { department_code: string; number: string; title: string | null };
+  locations: { lat: number; lng: number };
+  profiles: { display_name: string | null } | null;
+  session_attendees: { count: number }[];
+};
+
+function toListItem(row: SessionListRow): SessionListItem {
+  const attendeeCount = row.session_attendees[0]?.count ?? 0;
+  return {
+    id: row.id,
+    course: {
+      departmentCode: row.courses.department_code,
+      number: row.courses.number,
+      title: row.courses.title,
+    },
+    topic: row.topic,
+    locationLabel: row.location_label,
+    room: row.room,
+    lat: row.locations.lat,
+    lng: row.locations.lng,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    capacity: row.capacity,
+    attendeeCount,
+    seatsLeft: Math.max(0, row.capacity - attendeeCount),
+    // A deleted account leaves host_id null, so the embed yields null and
+    // the card shows "Deleted user".
+    hostDisplayName: row.profiles?.display_name ?? null,
+  };
+}
+
+// ===========================================================================
+// Home (H1, #128; US-15, #133): the student's own sessions.
+//
+// "Their own" means on the roster -- the host included, since create_session
+// seats the host. Read in two steps, the roster rows then the sessions, rather
+// than one `session_attendees!inner` embed filtered on user_id: that inner
+// embed would also replace the `session_attendees (count)` the card needs.
+// Both reads go through the same policies as the session list (any signed-in
+// student may read sessions and rosters), so nothing new is exposed.
+// ===========================================================================
+
+/** A session on the student's own roster, with whether they host it. */
+export type MySession = SessionListItem & {
+  /** The student hosts it (and so may edit or cancel it, US-09). */
+  hosting: boolean;
+};
+
+/** A past session for "Host it again" (US-15). */
+export type PastSession = MySession & {
+  /** Cancelled by its host, rather than simply over. */
+  cancelled: boolean;
+};
+
+/** How many past sessions Home lists. */
+export const PAST_SESSIONS_LIMIT = 10;
+
+/** The ids of every session `userId` is on the roster of. */
+async function rosterSessionIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("session_attendees")
+    .select("session_id")
+    .eq("user_id", userId);
+  if (error) {
+    throw new Error(`Could not load your sessions: ${error.message}`);
+  }
+  return (data ?? []).map((row) => row.session_id);
+}
+
+/**
+ * Open sessions `userId` is going to or hosting that have not ended,
+ * soonest first. Cancelled and ended ones are listPastSessions()'s.
+ */
+export async function listMySessions(userId: string): Promise<MySession[]> {
+  const supabase = await createClient();
+  const ids = await rosterSessionIds(supabase, userId);
+  if (ids.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("sessions")
+    .select(SESSION_LIST_SELECT)
+    .in("id", ids)
+    .eq("status", "open")
+    .gt("ends_at", "now")
+    .order("starts_at", { ascending: true });
+  if (error) {
+    throw new Error(`Could not load your sessions: ${error.message}`);
+  }
+  return (data ?? []).map((row) => ({ ...toListItem(row), hosting: row.host_id === userId }));
+}
+
+/**
+ * Sessions `userId` was on that have ended or been cancelled, most recent
+ * first, at most PAST_SESSIONS_LIMIT (US-15). Nothing is deleted when a
+ * session ends ("ended" is derived, ADR 0008 rule 3), so this is a read.
+ */
+export async function listPastSessions(userId: string): Promise<PastSession[]> {
+  const supabase = await createClient();
+  const ids = await rosterSessionIds(supabase, userId);
+  if (ids.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("sessions")
+    .select(SESSION_LIST_SELECT)
+    .in("id", ids)
+    .or("status.eq.cancelled,ends_at.lte.now")
+    .order("starts_at", { ascending: false })
+    .limit(PAST_SESSIONS_LIMIT);
+  if (error) {
+    throw new Error(`Could not load your past sessions: ${error.message}`);
+  }
+  return (data ?? []).map((row) => ({
+    ...toListItem(row),
+    hosting: row.host_id === userId,
+    cancelled: row.status === "cancelled",
+  }));
 }
 
 // ===========================================================================

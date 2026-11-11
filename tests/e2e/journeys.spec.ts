@@ -364,6 +364,58 @@ test("returning student by code (BUG-22): no password step unless they asked to 
   await expect(page).toHaveURL("/sessions");
 });
 
+test("home (H1, US-15): your own sessions first, then your past ones with \"Host it again\"", async ({
+  page,
+}) => {
+  await signInAsNewStudent(page, newStudentEmail("home"), "Hollis Home");
+
+  const topic = `E2E home journey ${Date.now()}`;
+  await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
+  await page.getByLabel("Course number").fill("3251");
+  await page.getByLabel("What are you studying?").fill(topic);
+  await chooseByKeyboard(page.getByLabel("Place"), "Feath", "ChIJ-FAKE-featheringill-hall");
+  await page.getByLabel("Starts").fill(campusTime(2));
+  await page.getByLabel("Ends").fill(campusTime(4));
+  await page.getByLabel("How many people, including you?").fill("4");
+  await page.getByRole("button", { name: "Create session" }).click();
+  await expect(page).toHaveURL("/sessions");
+
+  // Home is about this student: the session they host is first, marked.
+  await page.goto("/");
+  const upcoming = page.getByRole("region", { name: "Your upcoming sessions" });
+  await expect(upcoming).toContainText(topic);
+  await expect(upcoming).toContainText("You're hosting");
+  // No courses on their profile yet: one nudge instead of the course sections.
+  await expect(page.getByRole("link", { name: "Add your courses" })).toBeVisible();
+  // Nothing past yet.
+  await expect(page.getByRole("region", { name: "Your past sessions" })).toHaveCount(0);
+
+  // Cancel it (US-09): it leaves "upcoming" and shows as past, cancelled.
+  await upcoming
+    .locator("article")
+    .filter({ hasText: topic })
+    .getByRole("link", { name: /^CS 3251/ })
+    .click();
+  await expect(page).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+  await page.getByRole("button", { name: "Cancel session" }).click();
+  await page.getByRole("button", { name: "Yes, cancel it" }).click();
+  await expect(page.getByRole("region", { name: "Manage your session" })).toHaveCount(0);
+
+  await page.goto("/");
+  await expect(page.getByRole("region", { name: "Your upcoming sessions" })).not.toContainText(
+    topic,
+  );
+  const past = page.getByRole("region", { name: "Your past sessions" });
+  await expect(past).toContainText(topic);
+  await expect(past).toContainText("Cancelled");
+
+  // "Host it again" opens the create form with the course filled in (#124's prefill).
+  await past.getByRole("link", { name: "Host CS 3251 again" }).click();
+  await expect(page).toHaveURL(/\/sessions\/new\?department=CS&course=3251/);
+  await expect(page.getByLabel("Department")).toHaveValue("CS");
+  await expect(page.getByLabel("Course number")).toHaveValue("3251");
+});
+
 test("sign-out (US-21): the session ends, and private pages send the student back to sign in", async ({
   page,
 }) => {
