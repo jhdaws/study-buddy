@@ -14,6 +14,8 @@
 //     and the CHECKs on sessions, departments and courses
 //     (*_s1_session_rules.sql, *_s2_course_normalization.sql,
 //     *_session_text_limits.sql).
+//   - SEC-03: the per-student cap on new departments and courses
+//     (*_catalogue_insert_limit.sql).
 //   - S5: what join_session and leave_session raise
 //     (*_join_leave_session.sql).
 //   - S7 (US-09): what update_session and cancel_session raise
@@ -28,6 +30,8 @@
 //     name, which is why both new entries are in CONSTRAINT_MESSAGES.
 // Still to come:
 //   - Later: chat (US-05).
+
+import { CATALOGUE_INSERTS_PER_DAY, CATALOGUE_INSERTS_PER_HOUR } from "@/lib/limits";
 
 /** For anything we have not mapped. Says nothing about the cause. */
 export const GENERIC_ERROR_MESSAGE =
@@ -87,6 +91,12 @@ const RAISED_MESSAGES: Record<string, string> = {
   starts_in_past: "That start time has already passed.",
   department_required: "Choose or add a department.",
   invalid_course_number: "Enter a 4-digit course number, like 3251 or 2100W.",
+  // SEC-03: the catalogue trigger (SQLSTATE PT429). It fires inside
+  // get_or_create_course too, which is how it reaches the create form.
+  catalogue_limit_reached:
+    "You've added a lot of new courses and departments lately — the limit is " +
+    `${CATALOGUE_INSERTS_PER_HOUR} of each an hour and ${CATALOGUE_INSERTS_PER_DAY} a day. ` +
+    "Choose one that's already listed, or try again later.",
   // S5: join_session and leave_session.
   session_not_found: "That session doesn't exist anymore.",
   session_cancelled: "This session has been cancelled.",
@@ -99,6 +109,10 @@ const RAISED_MESSAGES: Record<string, string> = {
   not_session_host: "Only the host can change or cancel this session.",
   capacity_below_roster:
     "That's fewer seats than the students already coming. Nobody is removed by an edit.",
+  // SEC-05: consume_rate_limit() (*_place_lookup_rate_limit.sql, SQLSTATE
+  // PT429), which createSession() calls before every place lookup.
+  place_lookup_rate_limited:
+    "You've tried a lot of places in the last few minutes. Wait a few minutes, then try again.",
 };
 
 /** SQLSTATE codes with one meaning wherever they come from. */
@@ -106,6 +120,28 @@ const SQLSTATE_MESSAGES: Record<string, string> = {
   // insufficient_privilege: a grant or RLS policy refused the write.
   "42501": "You don't have permission to do that.",
 };
+
+/**
+ * What the security log records for a database error (SEC-09,
+ * src/lib/security-log.ts): the name databaseErrorMessage() matched it by --
+ * a raised name such as `session_full`, a constraint name, or
+ * `sqlstate_<code>` -- and never Postgres's text. `unmapped` is an error
+ * with nothing to name it by; `none` is no error at all. Checks in the same
+ * order as databaseErrorMessage(), so the two always agree (errors.test.ts).
+ */
+export function databaseErrorReason(error: DatabaseErrorLike | null | undefined): string {
+  if (!error) return "none";
+  if (error.message && Object.hasOwn(RAISED_MESSAGES, error.message)) return error.message;
+  const text = `${error.message ?? ""} ${error.details ?? ""}`;
+  for (const constraint of Object.keys(CONSTRAINT_MESSAGES)) {
+    if (text.includes(`"${constraint}"`)) return constraint;
+  }
+  // A SQLSTATE (5 characters) or PostgREST code (PGRST116) is a code, not text.
+  if (error.code && /^[0-9A-Za-z]{5,8}$/.test(error.code)) {
+    return `sqlstate_${error.code.toLowerCase()}`;
+  }
+  return "unmapped";
+}
 
 /** A message for a database error, safe to show a student. */
 export function databaseErrorMessage(error: DatabaseErrorLike | null | undefined): string {
@@ -165,6 +201,20 @@ export type AuthErrorLike = {
   status?: number | null;
   message?: string | null;
 };
+
+/**
+ * What the security log records for a Supabase Auth error (SEC-09): its
+ * `code` -- auth-js's ErrorCode, such as `invalid_credentials` or
+ * `otp_expired` -- or `http_<status>` when an older server sent none. Never
+ * the message. `no_user` is Supabase answering without an error but without
+ * a user either.
+ */
+export function authErrorReason(error: AuthErrorLike | null | undefined): string {
+  if (!error) return "no_user";
+  if (error.code && /^[a-z0-9_]{1,64}$/.test(error.code)) return error.code;
+  if (typeof error.status === "number") return `http_${error.status}`;
+  return "unmapped";
+}
 
 export const SIGN_IN_RATE_LIMITED_MESSAGE =
   "Too many sign-in emails have gone out recently. Try again in a few minutes.";

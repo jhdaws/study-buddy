@@ -50,6 +50,18 @@ export const ROOM_MAX_LENGTH = 50;
  */
 export const DEPARTMENT_CODE_MAX_LENGTH = 10;
 
+/**
+ * SEC-03: how many new departments -- and, counted separately, how many new
+ * courses -- one student may add, per rolling hour and per rolling day. A
+ * sanity limit against scripted junk in the shared picker, far above normal
+ * use. THE DATABASE IS THE ENFORCEMENT: a trigger in
+ * *_catalogue_insert_limit.sql, which a direct PostgREST insert cannot skip.
+ * These copies only word the error message (errors.ts) and size the tests.
+ * Change one, change the other.
+ */
+export const CATALOGUE_INSERTS_PER_HOUR = 10;
+export const CATALOGUE_INSERTS_PER_DAY = 30;
+
 /** The host counts as one (ADR 0008 rule 2). S1: `CHECK (capacity >= 2)`. */
 export const MIN_CAPACITY = 2;
 
@@ -101,3 +113,15 @@ export const SESSION_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
 
 /** The cookie options every Supabase client in the app passes. */
 export const SUPABASE_COOKIE_OPTIONS = { maxAge: SESSION_COOKIE_MAX_AGE_SECONDS } as const;
+
+/**
+ * SEC-05: place lookups per student -- at most PLACE_LOOKUPS_PER_WINDOW in any
+ * rolling PLACE_LOOKUP_WINDOW_MINUTES. createSession() spends one before every
+ * resolvePlace(), accepted place or not, since each real place id is a billed
+ * Google call. THE DATABASE HOLDS AND ENFORCES THESE: the `place_lookup` row of
+ * private.rate_limit_rules (*_place_lookup_rate_limit.sql), which
+ * consume_rate_limit() reads -- it never takes a limit from its caller. These
+ * copies document it and size the tests, which check the two agree.
+ */
+export const PLACE_LOOKUPS_PER_WINDOW = 20;
+export const PLACE_LOOKUP_WINDOW_MINUTES = 10;

@@ -22,6 +22,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import {
+  authErrorReason,
   databaseErrorMessage,
   passwordSignInErrorMessage,
   setPasswordErrorMessage,
@@ -30,6 +31,7 @@ import {
 } from "@/lib/errors";
 import { isAcceptedLinkType, loginWithLinkError } from "@/lib/email-link";
 import { requestOrigin } from "@/lib/request-origin";
+import { logSecurityEvent } from "@/lib/security-log";
 import {
   DEFAULT_NEXT_PATH,
   loginPath,
@@ -167,6 +169,8 @@ export async function verifyCode(
   const supabase = await createClient();
   const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
   if (error || !data.user) {
+    // SEC-09: the reason code and a hash of the address; never the code.
+    logSecurityEvent({ event: "sign_in_code_failed", reason: authErrorReason(error), email });
     return { formError: verifyCodeErrorMessage(error), values: formValues(formData) };
   }
 
@@ -204,6 +208,9 @@ export async function confirmSignIn(formData: FormData): Promise<void> {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
   if (error || !data.user) {
+    // SEC-09: the reason code only. A link carries no email, and the token
+    // hash is a credential, so neither is logged.
+    logSecurityEvent({ event: "sign_in_link_failed", reason: authErrorReason(error) });
     redirect(loginWithLinkError(next));
   }
 
@@ -239,6 +246,8 @@ export async function signInWithPassword(
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.user) {
+    // SEC-09: the reason code and a hash of the address; never the password.
+    logSecurityEvent({ event: "sign_in_password_failed", reason: authErrorReason(error), email });
     return { formError: passwordSignInErrorMessage(error), values: { email } };
   }
 
