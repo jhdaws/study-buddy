@@ -24,6 +24,7 @@
 import "server-only";
 
 import type { ClassYear } from "@/lib/academic";
+import { listBlockedUserIds } from "@/lib/blocks";
 import type { CourseFilter } from "@/lib/session-course";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeCourseNumber, normalizeDepartmentCode } from "@/lib/validation";
@@ -101,6 +102,12 @@ export type Attendee = {
    */
   major?: string | null;
   classYear?: ClassYear | null;
+  /**
+   * US-22: the VIEWER has blocked this attendee (never the reverse -- the
+   * viewer cannot read whether they themselves are blocked). getSession()
+   * always sets it; optional for the same reason major/classYear are.
+   */
+  isBlocked?: boolean;
 };
 
 /**
@@ -210,7 +217,7 @@ export async function listSessions(
   let query = supabase
     .from("sessions")
     .select(
-      `id, topic, location_label, room, starts_at, ends_at, capacity,
+      `id, topic, location_label, room, starts_at, ends_at, capacity, host_id,
        courses!inner (department_code, number, title),
        locations!inner (lat, lng),
        profiles!sessions_host_id_fkey (display_name),
@@ -228,37 +235,49 @@ export async function listSessions(
       .eq("courses.number", options.course.number);
   }
 
-  const { data, error } = await query.order("starts_at", { ascending: true });
+  // US-22: filtered here, in JS, rather than as a `host_id=not.in.(...)`
+  // PostgREST filter -- a NOT IN list drops a NULL host_id (a deleted
+  // account) too, since `NULL IN (...)` is neither true nor false in SQL. A
+  // plain Set membership check in the map below has no such trap, and
+  // blockedIds is typically empty, so the common case costs nothing extra.
+  const [blockedIds, { data, error }] = await Promise.all([
+    listBlockedUserIds(),
+    query.order("starts_at", { ascending: true }),
+  ]);
 
   if (error) {
     throw new Error(`Could not load the session list: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => {
-    const attendeeCount = row.session_attendees[0]?.count ?? 0;
+  const blocked = new Set(blockedIds);
 
-    return {
-      id: row.id,
-      course: {
-        departmentCode: row.courses.department_code,
-        number: row.courses.number,
-        title: row.courses.title,
-      },
-      topic: row.topic,
-      locationLabel: row.location_label,
-      room: row.room,
-      lat: row.locations.lat,
-      lng: row.locations.lng,
-      startsAt: row.starts_at,
-      endsAt: row.ends_at,
-      capacity: row.capacity,
-      attendeeCount,
-      seatsLeft: Math.max(0, row.capacity - attendeeCount),
-      // A deleted account leaves host_id null, so the embed yields null and
-      // the card shows "Deleted user".
-      hostDisplayName: row.profiles?.display_name ?? null,
-    };
-  });
+  return (data ?? [])
+    .filter((row) => row.host_id === null || !blocked.has(row.host_id))
+    .map((row) => {
+      const attendeeCount = row.session_attendees[0]?.count ?? 0;
+
+      return {
+        id: row.id,
+        course: {
+          departmentCode: row.courses.department_code,
+          number: row.courses.number,
+          title: row.courses.title,
+        },
+        topic: row.topic,
+        locationLabel: row.location_label,
+        room: row.room,
+        lat: row.locations.lat,
+        lng: row.locations.lng,
+        startsAt: row.starts_at,
+        endsAt: row.ends_at,
+        capacity: row.capacity,
+        attendeeCount,
+        seatsLeft: Math.max(0, row.capacity - attendeeCount),
+        // A deleted account leaves host_id null, so the embed yields null and
+        // the card shows "Deleted user".
+        hostDisplayName: row.profiles?.display_name ?? null,
+      };
+    });
 }
 
 // ===========================================================================
@@ -287,22 +306,30 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
 
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("sessions")
-    .select(
-      `id, topic, location_label, room, starts_at, ends_at, capacity, status, host_id,
+  // US-22: run alongside the session query, not after -- the roster needs
+  // the viewer's own blocks to mark which attendees are blocked (never the
+  // reverse: nobody can read whether they themselves are blocked).
+  const [{ data, error }, blockedIds] = await Promise.all([
+    supabase
+      .from("sessions")
+      .select(
+        `id, topic, location_label, room, starts_at, ends_at, capacity, status, host_id,
        courses!inner (department_code, number, title),
        locations!inner (place_id),
        profiles!sessions_host_id_fkey (display_name),
        session_attendees (user_id, joined_at, profiles (display_name, major, class_year))`,
-    )
-    .eq("id", id)
-    .maybeSingle();
+      )
+      .eq("id", id)
+      .maybeSingle(),
+    listBlockedUserIds(),
+  ]);
 
   if (error) {
     throw new Error(`Could not load the session: ${error.message}`);
   }
   if (!data) return null;
+
+  const blocked = new Set(blockedIds);
 
   const attendees: Attendee[] = [...data.session_attendees]
     .sort((a, b) => {
@@ -315,6 +342,7 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
       isHost: row.user_id === data.host_id,
       major: row.profiles?.major ?? null,
       classYear: row.profiles?.class_year ?? null,
+      isBlocked: blocked.has(row.user_id),
     }));
 
   return {
