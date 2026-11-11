@@ -61,9 +61,14 @@ async function SidebarAccount() {
       >
         {formatInitial(displayName)}
       </span>
-      <p className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink">
-        {displayName ?? "Signed in"}
-      </p>
+      {/* The name opens the student's profile (US-11). */}
+      <Link
+        href="/profile"
+        title="Your profile"
+        className="flex min-h-11 min-w-0 flex-1 items-center truncate text-[15px] font-semibold text-ink hover:underline"
+      >
+        <span className="truncate">{displayName ?? "Signed in"}</span>
+      </Link>
       <form action={signOut}>
         <button
           type="submit"

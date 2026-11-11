@@ -240,12 +240,15 @@ describe("A01 IDOR: another signed-in student cannot act on someone else's rows"
     );
     expect(profileEmail.error?.code).toBe("42703");
 
-    // What she can read about Alice is her id, name and join date.
+    // What she can read about Alice is her id, name and join date, and since
+    // US-11 the academic profile classmates are meant to see on a roster
+    // (major, minor, class year). An allow-list on purpose: a new column on
+    // profiles fails here until someone decides it may be public.
     const visible = await as(mallory, () =>
       attempt("select * from public.profiles where id = $1", [alice]),
     );
     expect(Object.keys(visible.rows[0] ?? {}).sort()).toEqual(
-      ["created_at", "display_name", "id"],
+      ["class_year", "created_at", "display_name", "id", "major", "minor"],
     );
 
     // No table or view in a schema the Data API exposes (config.toml [api])

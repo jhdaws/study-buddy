@@ -205,6 +205,26 @@ describe("placeSearchErrorMessage (M2)", () => {
   });
 });
 
+describe("databaseErrorMessage: the academic profile (US-11)", () => {
+  it.each([
+    ["profiles_major_check", /major/],
+    ["profiles_minor_check", /minor/],
+  ])("maps a violation of %s without raw text", (constraint, expected) => {
+    const message = databaseErrorMessage({
+      code: "23514",
+      message: `new row for relation "profiles" violates check constraint "${constraint}"`,
+    });
+    expect(message).toMatch(expected);
+    expect(message).not.toMatch(RAW_TEXT);
+  });
+
+  it("maps the profile_courses_limit trigger's refusal", () => {
+    expect(databaseErrorMessage({ code: "P0001", message: "profile_courses_limit" })).toBe(
+      "List up to 8 current courses.",
+    );
+  });
+});
+
 describe("signInErrorMessage", () => {
   it("maps both rate limits to the same message", () => {
     expect(

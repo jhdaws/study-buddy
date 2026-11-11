@@ -95,16 +95,42 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
-                },"profiles": {
+                },"profile_courses": {
                   Row: {
-                    "created_at": string,"display_name": string | null,"id": string
+                    "added_at": string,"course_id": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"display_name"?: string | null,"id": string
+                    "added_at"?: string,"course_id": string,"user_id"?: string
                   }
                   Update: {
-                    "created_at"?: string,"display_name"?: string | null,"id"?: string
+                    "added_at"?: string,"course_id"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "profile_courses_course_id_fkey"
+      columns: ["course_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "profile_courses_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"profiles": {
+                  Row: {
+                    "class_year": Database["public"]['Enums']["class_year"] | null,"created_at": string,"display_name": string | null,"id": string,"major": string | null,"minor": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "class_year"?: Database["public"]['Enums']["class_year"] | null,"created_at"?: string,"display_name"?: string | null,"id": string,"major"?: string | null,"minor"?: string | null
+                  }
+                  Update: {
+                    "class_year"?: Database["public"]['Enums']["class_year"] | null,"created_at"?: string,"display_name"?: string | null,"id"?: string,"major"?: string | null,"minor"?: string | null
                   }
                   Relationships: [
                     
@@ -291,7 +317,7 @@ isOneToOne: false
       } }
           }
           Enums: {
-            "session_status": "open"|"cancelled"
+            "class_year": "first_year"|"sophomore"|"junior"|"senior"|"graduate","session_status": "open"|"cancelled"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -411,7 +437,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "session_status": ["open", "cancelled"]
+            "class_year": ["first_year", "sophomore", "junior", "senior", "graduate"],"session_status": ["open", "cancelled"]
           }
         }
 } as const

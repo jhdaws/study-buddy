@@ -22,17 +22,21 @@
 
 import { z } from "zod";
 
+import { CLASS_YEARS } from "@/lib/academic";
 import { ALLOWED_EMAIL_DOMAIN } from "@/lib/env";
 import {
   DEPARTMENT_CODE_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
   LOCATION_LABEL_MAX_LENGTH,
+  MAJOR_MAX_LENGTH,
   MAX_CAPACITY,
   MIN_CAPACITY,
+  MINOR_MAX_LENGTH,
   OTP_CODE_MAX_LENGTH,
   OTP_CODE_MIN_LENGTH,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  PROFILE_COURSES_MAX,
   ROOM_MAX_LENGTH,
   START_GRACE_MINUTES,
   STUDY_REQUEST_NOTE_MAX_LENGTH,
@@ -45,12 +49,15 @@ export {
   DEPARTMENT_CODE_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
   LOCATION_LABEL_MAX_LENGTH,
+  MAJOR_MAX_LENGTH,
   MAX_CAPACITY,
   MIN_CAPACITY,
+  MINOR_MAX_LENGTH,
   OTP_CODE_MAX_LENGTH,
   OTP_CODE_MIN_LENGTH,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  PROFILE_COURSES_MAX,
   ROOM_MAX_LENGTH,
   START_GRACE_MINUTES,
   STUDY_REQUEST_NOTE_MAX_LENGTH,
@@ -489,3 +496,79 @@ export const studyRequestSchema = z.object({
 
 export type StudyRequestValues = z.output<typeof studyRequestSchema>;
 export type StudyRequestField = keyof StudyRequestValues;
+
+// ---------------------------------------------------------------------------
+// Academic profile (US-11) -- saveProfile() in src/app/profile/actions.ts.
+// The database twins are profiles_major_check, profiles_minor_check, the
+// class_year enum and the profile_courses_limit trigger
+// (*_academic_profile.sql).
+// ---------------------------------------------------------------------------
+
+// MAJOR_MAX_LENGTH, MINOR_MAX_LENGTH, PROFILE_COURSES_MAX: src/lib/limits.ts.
+
+/** Optional free text: trimmed, and blank becomes null -- never stored as "". */
+function optionalText(max: number, tooLong: string) {
+  return z
+    .string()
+    .trim()
+    .max(max, { error: tooLong })
+    .optional()
+    .transform((text) => text || null);
+}
+
+/**
+ * One current course as the form submits it: `CS 3251` -- the department,
+ * a space, the number. Both halves are normalised as the session form's are,
+ * so `cs 3251` and `C.S. 3251` are the same course.
+ */
+const profileCourseSchema = z
+  .string()
+  .trim()
+  .transform((raw, ctx) => {
+    const space = raw.lastIndexOf(" ");
+    const departmentCode = normalizeDepartmentCode(space < 0 ? "" : raw.slice(0, space));
+    const courseNumber = normalizeCourseNumber(space < 0 ? raw : raw.slice(space + 1));
+    if (departmentCode === "" || departmentCode.length > DEPARTMENT_CODE_MAX_LENGTH) {
+      ctx.addIssue({ code: "custom", message: `Choose a department for ${raw || "each course"}.` });
+      return z.NEVER;
+    }
+    if (!COURSE_NUMBER_PATTERN.test(courseNumber)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `“${raw}” isn't a course number. Use 4 digits, like 3251 or 2100W.`,
+      });
+      return z.NEVER;
+    }
+    return { departmentCode, courseNumber };
+  });
+
+export const profileSchema = z.object({
+  major: optionalText(MAJOR_MAX_LENGTH, `Keep your major to ${MAJOR_MAX_LENGTH} characters or fewer.`),
+  minor: optionalText(MINOR_MAX_LENGTH, `Keep your minor to ${MINOR_MAX_LENGTH} characters or fewer.`),
+  // "" is the select's "Prefer not to say": no year.
+  classYear: z
+    .preprocess(
+      blankAsMissing,
+      z.enum(CLASS_YEARS, { error: "Choose your year from the list." }).optional(),
+    )
+    .transform((year) => year ?? null),
+  // Repeats of one course collapse to one; the limit counts what is left.
+  courses: z
+    .array(profileCourseSchema)
+    .default([])
+    .transform((courses) => {
+      const seen = new Set<string>();
+      return courses.filter((course) => {
+        const key = `${course.departmentCode} ${course.courseNumber}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    })
+    .refine((courses) => courses.length <= PROFILE_COURSES_MAX, {
+      error: `List up to ${PROFILE_COURSES_MAX} current courses.`,
+    }),
+});
+
+export type ProfileValues = z.output<typeof profileSchema>;
+export type ProfileField = keyof ProfileValues;
