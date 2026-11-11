@@ -937,3 +937,94 @@ test("block a user (US-22): A blocks B from a roster, B's later join is refused,
     await bContext.close();
   }
 });
+
+test("session chat (US-05, C1): two students in one session exchange messages live; a non-attendee sees none", async ({
+  page,
+  browser,
+}) => {
+  // Two sign-ins, each through a real emailed code.
+  test.setTimeout(120_000);
+  const topic = `E2E chat ${Date.now()}`;
+
+  // The host creates a session of their own, so this journey depends on no other.
+  await signInAsNewStudent(page, newStudentEmail("chathost"), "Cary Chathost");
+  await chooseByKeyboard(page.getByLabel("Department"), "CS", "CS");
+  await page.getByLabel("Course number").fill("3251");
+  await page.getByLabel("What are you studying?").fill(topic);
+  await chooseByKeyboard(page.getByLabel("Place"), "Feath", "ChIJ-FAKE-featheringill-hall");
+  await page.getByLabel("Starts").fill(campusTime(2));
+  await page.getByLabel("Ends").fill(campusTime(4));
+  await page.getByLabel("How many people, including you?").fill("4");
+  await page.getByRole("button", { name: "Create session" }).click();
+  await expect(page).toHaveURL("/sessions");
+
+  const openSession = async (student: typeof page) => {
+    await student
+      .locator("article")
+      .filter({ hasText: topic })
+      .getByRole("link", { name: /^CS 3251/ })
+      .click();
+    await expect(student).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+  };
+
+  await openSession(page);
+  const hostChat = page.getByRole("region", { name: "Chat" });
+  await expect(hostChat.getByText("No messages yet. Say hello to the group.")).toBeVisible();
+
+  const guestContext = await browser.newContext();
+  try {
+    const guest = await guestContext.newPage();
+    await signInAsNewStudent(guest, newStudentEmail("chatguest"), "Gale Guest", "/sessions");
+    await openSession(guest);
+    const guestChat = guest.getByRole("region", { name: "Chat" });
+
+    // Not on the roster yet: a prompt, and no transcript (US-05b).
+    await expect(guestChat).toContainText("Join to see the chat.");
+    await expect(guestChat.getByRole("log")).toHaveCount(0);
+
+    await guest.getByRole("region", { name: "Who's going" }).getByRole("button", { name: "Join session" }).click();
+    await expect(guestChat.getByRole("textbox", { name: "Message" })).toBeVisible();
+
+    // The guest posts; the host, who has not reloaded, sees it arrive through
+    // Realtime (subscribeToChat()), tagged with the sender.
+    await guestChat.getByRole("textbox", { name: "Message" }).fill("Hi from the guest");
+    await guestChat.getByRole("button", { name: "Send" }).click();
+    await expect(guestChat.getByRole("log")).toContainText("Hi from the guest");
+    await expect(guestChat.getByRole("textbox", { name: "Message" })).toHaveValue("");
+
+    const hostLog = hostChat.getByRole("log");
+    await expect(hostLog.getByRole("listitem").filter({ hasText: "Hi from the guest" })).toContainText(
+      "Gale Guest",
+    );
+
+    // And back the other way, sent with Enter.
+    await hostChat.getByRole("textbox", { name: "Message" }).fill("Welcome! Table by the window");
+    await hostChat.getByRole("textbox", { name: "Message" }).press("Enter");
+    await expect(
+      guestChat.getByRole("log").getByRole("listitem").filter({ hasText: "Welcome! Table by the window" }),
+    ).toContainText("Cary Chathost");
+
+    // Both were saved through the Data API as their senders -- the database
+    // set author_id, not the browser.
+    const db = await connect();
+    try {
+      const { rows } = await db.query<{ author: string; body: string }>(
+        `select p.display_name as author, m.body
+           from public.session_messages m
+           join public.sessions s on s.id = m.session_id
+           join public.profiles p on p.id = m.author_id
+          where s.topic = $1
+          order by m.created_at`,
+        [topic],
+      );
+      expect(rows).toEqual([
+        { author: "Gale Guest", body: "Hi from the guest" },
+        { author: "Cary Chathost", body: "Welcome! Table by the window" },
+      ]);
+    } finally {
+      await db.end();
+    }
+  } finally {
+    await guestContext.close();
+  }
+});

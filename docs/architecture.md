@@ -433,8 +433,8 @@ and the locked database function above. The session page subscribes directly
 to Supabase Realtime for that session's roster — any signed-in viewer, since
 the roster is readable before joining (US-23) — and refetches the page on
 each change rather than applying the event (`src/lib/live-roster.ts`). Once on
-the roster, the browser will subscribe to the session's messages the same
-way. Chat visibility is enforced by policy, not by the client choosing not
+the roster, the browser subscribes to the session's messages the same way
+(`subscribeToChat()`, C1). Chat visibility is enforced by policy, not by the client choosing not
 to render — a non-attendee subscribing to the channel directly receives
 nothing.
 

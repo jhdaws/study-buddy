@@ -166,3 +166,21 @@ export const REPORT_NOTE_MAX_LENGTH = 500;
  * the error message. Change one, change the other.
  */
 export const REPORTS_PER_DAY = 5;
+
+/**
+ * US-05: a chat message, 1 to 1000 characters after trimming. Mirrored as
+ * `session_messages_body_check` in *_session_chat.sql.
+ */
+export const CHAT_MESSAGE_MAX_LENGTH = 1000;
+
+/**
+ * US-05, ADR 0008 rule 4: a session's chat takes new messages until this many
+ * days after the session ends, then is read-only. THE DATABASE IS THE
+ * ENFORCEMENT -- the `session_messages_insert_attendees` policy in
+ * *_session_chat.sql; this copy only decides whether to show the send form.
+ * Change one, change the other.
+ */
+export const CHAT_OPEN_DAYS_AFTER_END = 7;
+
+/** How many of a session's most recent messages the page loads. */
+export const CHAT_HISTORY_LIMIT = 200;

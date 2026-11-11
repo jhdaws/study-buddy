@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import {
+  CHAT_MESSAGE_MAX_LENGTH,
+  chatMessageSchema,
   DEPARTMENT_CODE_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
   MIN_CAPACITY,
@@ -675,5 +677,27 @@ describe("createSessionSchema: repeat weekly (US-20)", () => {
         createSessionSchema(NOW).safeParse(validSession({ repeatWeekly: "on", weeks: "1" })),
       ).weeks,
     ).toEqual(["Repeat for at least 2 weeks."]);
+  });
+});
+
+describe("chatMessageSchema (US-05)", () => {
+  const parse = (body: unknown) => chatMessageSchema.safeParse({ body });
+
+  it("trims the message, keeping line breaks inside it", () => {
+    expect(parse("  Room 204\nsecond floor \n").data).toEqual({ body: "Room 204\nsecond floor" });
+  });
+
+  it("refuses an empty, blank or missing message", () => {
+    for (const body of ["", "   ", "\n\t", undefined]) {
+      expect(parse(body).error?.issues[0].message).toBe("Write a message first.");
+    }
+  });
+
+  it("allows exactly CHAT_MESSAGE_MAX_LENGTH characters, and no more", () => {
+    expect(CHAT_MESSAGE_MAX_LENGTH).toBe(1000);
+    expect(parse("x".repeat(1000)).success).toBe(true);
+    expect(parse("x".repeat(1001)).error?.issues[0].message).toBe(
+      "Keep messages to 1000 characters or fewer.",
+    );
   });
 });
