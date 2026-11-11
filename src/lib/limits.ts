@@ -141,3 +141,18 @@ export const PROFILE_COURSES_MAX = 8;
  */
 export const PLACE_LOOKUPS_PER_WINDOW = 20;
 export const PLACE_LOOKUP_WINDOW_MINUTES = 10;
+
+/**
+ * US-18: a report's optional note, at most 500 characters after trimming
+ * (blank is saved as null). Mirrored as `reports_note_length` in
+ * *_reports.sql.
+ */
+export const REPORT_NOTE_MAX_LENGTH = 500;
+
+/**
+ * US-18: how many reports one student may send in any rolling 24 hours.
+ * THE DATABASE IS THE ENFORCEMENT -- the `reports_limit` trigger in
+ * *_reports.sql, which a direct API call cannot skip. This copy only words
+ * the error message. Change one, change the other.
+ */
+export const REPORTS_PER_DAY = 5;

@@ -706,3 +706,47 @@ test("academic profile (US-11): a student fills in their major, year and courses
   await page.getByRole("link", { name: "Your profile" }).click();
   await expect(page).toHaveURL("/profile");
 });
+
+test("report a user (US-18): a student reports the host from the roster, and only the team can see it", async ({
+  page,
+}) => {
+  if (hostedTopic === null) {
+    throw new Error("This journey reports the host of journey 2's session; journey 2 did not get that far.");
+  }
+  const topic = hostedTopic;
+
+  await signInAsNewStudent(page, newStudentEmail("report"), "Rory Reporter", "/sessions");
+  await page
+    .locator("article")
+    .filter({ hasText: topic })
+    .getByRole("link", { name: /^CS 3251/ })
+    .click();
+  await expect(page).toHaveURL(/\/sessions\/[0-9a-f-]{36}$/);
+  const sessionId = page.url().split("/").pop();
+
+  const roster = page.getByRole("region", { name: "Who's going" });
+  await roster.getByRole("button", { name: "Report Harper Host" }).click();
+  const form = roster.getByRole("form", { name: "Report Harper Host" });
+  await form.getByLabel("Made me feel unsafe").check();
+  await form.getByLabel(/Anything else/).fill("E2E report journey");
+  await form.getByRole("button", { name: "Send report" }).click();
+  await expect(roster.getByRole("status")).toContainText("Your report was sent");
+
+  // Filed through the real Data API with the student's own token: the
+  // reporter is them (set by the database), the reported student is the host.
+  const db = await connect();
+  try {
+    const { rows } = await db.query<{ reporter: string; reported: string; reason: string; session: string }>(
+      `select rp.display_name as reporter, rd.display_name as reported, r.reason, r.session_id::text as session
+         from public.reports r
+         join public.profiles rp on rp.id = r.reporter_id
+         join public.profiles rd on rd.id = r.reported_user_id
+        where r.note = 'E2E report journey'`,
+    );
+    expect(rows).toEqual([
+      { reporter: "Rory Reporter", reported: "Harper Host", reason: "safety", session: sessionId },
+    ]);
+  } finally {
+    await db.end();
+  }
+});

@@ -37,11 +37,13 @@ import {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   PROFILE_COURSES_MAX,
+  REPORT_NOTE_MAX_LENGTH,
   ROOM_MAX_LENGTH,
   START_GRACE_MINUTES,
   STUDY_REQUEST_NOTE_MAX_LENGTH,
   TOPIC_MAX_LENGTH,
 } from "@/lib/limits";
+import { REPORT_REASONS } from "@/lib/reports";
 
 // The limits are part of this module's contract (docs/contracts.md); they
 // live in limits.ts so Client Components can have them without zod.
@@ -58,6 +60,7 @@ export {
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
   PROFILE_COURSES_MAX,
+  REPORT_NOTE_MAX_LENGTH,
   ROOM_MAX_LENGTH,
   START_GRACE_MINUTES,
   STUDY_REQUEST_NOTE_MAX_LENGTH,
@@ -590,3 +593,41 @@ export const deleteAccountSchema = z.object({
 
 export type DeleteAccountValues = z.output<typeof deleteAccountSchema>;
 export type DeleteAccountField = keyof DeleteAccountValues;
+
+// ---------------------------------------------------------------------------
+// Report a user (US-18) -- reportUser() in src/app/reports/actions.ts. The
+// database twins: the report_reason enum, reports_note_length, and the
+// reports_insert_own policy (*_reports.sql).
+// ---------------------------------------------------------------------------
+
+/** A uuid as Postgres prints one. Anything else cannot be a profile or session. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The report form: who (a hidden field, from the roster), the session it was
+ * sent from (hidden, optional), a reason, and an optional note. Never who is
+ * reporting: that is the signed-in student, set by the database.
+ */
+export const reportUserSchema = z.object({
+  reportedUserId: z
+    .string({ error: "Choose who you're reporting." })
+    .regex(UUID_PATTERN, { error: "Choose who you're reporting." }),
+  sessionId: z
+    .string()
+    .trim()
+    .optional()
+    .transform((id) => id || null)
+    .refine((id) => id === null || UUID_PATTERN.test(id), { error: "That session isn't valid." }),
+  reason: z.enum(REPORT_REASONS, { error: "Choose a reason." }),
+  note: z
+    .string()
+    .trim()
+    .max(REPORT_NOTE_MAX_LENGTH, {
+      error: `Keep the note to ${REPORT_NOTE_MAX_LENGTH} characters or fewer.`,
+    })
+    .optional()
+    .transform((note) => note || null),
+});
+
+export type ReportUserValues = z.output<typeof reportUserSchema>;
+export type ReportUserField = keyof ReportUserValues;

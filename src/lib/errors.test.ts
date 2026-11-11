@@ -227,6 +227,26 @@ describe("databaseErrorMessage: the academic profile (US-11)", () => {
   });
 });
 
+describe("databaseErrorMessage: reporting a user (US-18)", () => {
+  it("maps the daily limit without the trigger's text", () => {
+    const message = databaseErrorMessage({ code: "PT429", message: "report_limit_reached" });
+    expect(message).toMatch(/5 reports in the last day/);
+    expect(message).not.toMatch(RAW_TEXT);
+  });
+
+  it.each([
+    ["reports_note_length", /500 characters/],
+    ["reports_not_self", /can't report yourself/],
+  ])("maps a violation of %s", (constraint, expected) => {
+    const message = databaseErrorMessage({
+      code: "23514",
+      message: `new row for relation "reports" violates check constraint "${constraint}"`,
+    });
+    expect(message).toMatch(expected);
+    expect(message).not.toMatch(RAW_TEXT);
+  });
+});
+
 describe("signInErrorMessage", () => {
   it("maps both rate limits to the same message", () => {
     expect(
