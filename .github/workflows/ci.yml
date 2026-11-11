@@ -145,8 +145,15 @@ jobs:
       - name: Start local Supabase (database, auth, API, Realtime, Mailpit)
         run: npx supabase start -x studio,imgproxy,storage-api,edge-runtime,logflare,vector,supavisor,postgres-meta
 
+      # Browser only, no --with-deps. The runner image already has every
+      # library Chromium needs; --with-deps only adds fallback fonts (CJK,
+      # Thai, X11) through apt, and the journeys check no screenshots. On
+      # 2026-11-11 the Ubuntu mirrors stopped resolving from the runners and
+      # apt retried for 10 minutes before failing the job. The timeout makes
+      # a stalled download fail fast instead of eating the job's 20 minutes.
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 5
+        run: npx playwright install chromium
 
       - name: End-to-end journeys
         run: npm run test:e2e
