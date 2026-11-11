@@ -331,6 +331,7 @@ test("returning student by code (BUG-22): no password step unless they asked to 
 }) => {
   const email = newStudentEmail("codeagain");
   await signInAsNewStudent(page, email, "Robin Return");
+  let lastSentAt = Date.now();
 
   /** Sign out, then sign in by code from /login, via the given button. */
   async function signInByCode(button: string) {
@@ -343,7 +344,13 @@ test("returning student by code (BUG-22): no password step unless they asked to 
     await expect(page).toHaveURL(/\/login/);
     await page.getByRole("button", { name: button }).click();
     await page.getByLabel("Vanderbilt email").fill(email);
+    // Supabase refuses a second email to one address within
+    // `[auth.email] max_frequency` (1s locally, counted in whole seconds), and
+    // this journey can get from one send to the next in about a second. Wait
+    // it out, with margin, so the refusal never decides the test.
+    await page.waitForTimeout(Math.max(0, lastSentAt + 2_000 - Date.now()));
     await page.getByRole("button", { name: "Send code" }).click();
+    lastSentAt = Date.now();
     await expect(page.getByRole("heading", { name: "Check your inbox" })).toBeVisible();
     // The NEW email, not the one from the first sign-in.
     await expect.poll(() => emailsTo(email)).toBeGreaterThan(before);
