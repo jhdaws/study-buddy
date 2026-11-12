@@ -1,14 +1,15 @@
 # Security scans -- Study Buddy   (docs/security/scans.md)
 
-Last run: 2026-11-08, on branch `claude/focused-davinci-up2a1t` (from main @ `3e89506`).
+Last run: 2026-11-11, on main @ `9d0a6fd` (all three scans, locally and in CI). First run: 2026-11-08, on main @ `3e89506`; section 2 keeps both.
 In CI these scans are the `security` job in `.github/workflows/ci.yml`. It runs on every pull
 request and every push to main, beside `verify`. Finding IDs (`SEC-nn`, `Tn`) come from
 `docs/security/threat-model.md` (#86).
 
 Triage labels: **TP** true positive · **FP** false positive (with a reason) · **AR** accepted
-risk (with a reason and an owner). **No suppressions exist.** Nothing adds a `nosemgrep`
-comment, a `.semgrepignore`, a `.gitleaksignore` or a gitleaks config. If you add one later,
-give it a comment saying why, and add a row here.
+risk (with a reason and an owner). **One suppression exists:** `.gitleaksignore` lists three false positives (a made-up
+Places session token in tests), each with its reason; see the gitleaks triage below. Nothing
+adds a `nosemgrep` comment, a `.semgrepignore` or a gitleaks config. If you add one, give it a
+comment saying why, and add a row here.
 
 ## 1. Tools and commands
 
@@ -39,7 +40,8 @@ high). The two high rows are `sharp` and `source-map-js`.
 
 | Scan | ERROR | WARNING | INFO | Result |
 | --- | --- | --- | --- | --- |
-| Semgrep, 74 rules | 0 | 0 | 0 | passes |
+| Semgrep, 74 rules (2026-11-08) | 0 | 0 | 0 | passes |
+| Semgrep, 74 rules, 120 files (2026-11-11) | 0 | 0 | 0 | passes |
 
 | Scan | Findings | Result |
 | --- | --- | --- |
@@ -127,6 +129,7 @@ and are never given untrusted input.
 | --- | --- | --- | --- |
 | After the Next.js upgrade (SEC-06) | 0 | 2 | 11 |
 | After the dev-dependency refresh | 0 | 0 | 8 |
+| 2026-11-11, main @ `9d0a6fd` | 0 | 0 | 7 (all the same minimatch advisory, below) |
 
 **Fixed in the dev-dependency refresh (TP, fixed):**
 
@@ -171,8 +174,9 @@ semgrep scan --metrics=off --config p/javascript --config p/typescript --config 
 ```
 
 ```bash
-gitleaks git --redact --verbose .
+gitleaks git --log-opts=HEAD --redact --verbose .
 ```
 
-For gitleaks, use version 8.30.1 from its GitHub releases. Run `git fetch --all` first so every
-branch is scanned.
+For gitleaks, use version 8.30.1 from its GitHub releases. `--log-opts=HEAD` scans the full
+history of the branch you have checked out, as CI does (BUG-18): scanning every branch would
+fail on another branch's test values.

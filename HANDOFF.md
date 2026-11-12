@@ -74,6 +74,29 @@ spends its first hour rediscovering the same dead end.
 
 
 
+## 2026-11-11 · Sprint 4 cleanup: last fixes, Group 3's review, and every doc brought up to date
+
+**Branch:** `sprint4-cleanup`, from `main` at `9d0a6fd` · **Commits made:** this PR
+
+### What changed
+- Review follow-ups for #123–#125, rebased onto #129: an edit with an unchanged place spends no Google lookup and no SEC-05 budget.
+- Group 3's review of #85: four accepted fixes (unique Realtime topic, setAuth logged, aria-atomic, a db test pinning the roster read policy); dispositions in `docs/code-review/group3-review-received.md`.
+- SEC-12 and SEC-13 regression tests (`src/lib/auth-settings.test.ts`), SEC-13's deploy guard, SEC-14's grant migration, SEC-17's comments, and US-17 skipping blocked hosts.
+- Docs: findings statuses, scans refresh, bug log statuses, backlog statuses and %, test cases, ADR 0011, tickets, CLAUDE.md's current state and two AI-audit rules, eleven AI-log rows.
+
+### Verified versus assumed
+- **Verified locally, on an isolated stack:** lint, typecheck, unit, db and e2e (numbers in the PR). The SEC-12/13 tests fail without their fix; the SEC-14 refusals are real (`truncate` as a student gets 42501).
+- **Not verified by this session:** the SEC-01, SEC-08 and SEC-11 rows say dashboard settings were checked. Jack must make those checks (Supabase Users, Vercel's Preview environment variables, Supabase "Confirm email"); if any differs, change its row back.
+- The backlog (81%) counts #140 (chat) and #141 (Home), both merged before this PR.
+
+### Open questions for the user
+- The Group 3 deferral (an end-to-end Realtime test) is #142.
+- Replies to Group 3 on #85 must be posted by 2026-11-12, with links to this PR's commits.
+
+### Things the next agent should be careful about
+- SEC-14 means a client **cannot** write `sessions` or `session_attendees` directly, and `anon` can read nothing. A new feature that writes them needs a SECURITY DEFINER function, not a policy.
+- `npx supabase migration new <name>` reads the migration body from stdin when not run in a terminal; run with `< /dev/null` and write the file afterwards, or it hangs.
+
 ## 2026-11-03 · Threat model draft (ICA 15, Sprint 4 Part 2a)
 
 **Branch:** `ica15-threat-model` · **Commits made:** this PR

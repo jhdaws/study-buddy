@@ -10,18 +10,15 @@ failed. The template and the rules for writing an entry are in that file.
 
 ## Current state
 
-Sprint 2 is in progress (`docs/tickets.md`). The database has a schema
-skeleton (RLS on), a seed of starter departments and courses, and generated
-TypeScript types; the hosted project has the same. Policies so far: A2's on
-`profiles`, and M3's on `locations` (signed-in users may read it; client write
-grants revoked). Every other table still has **no policies**.
-The screens — header, session list, create-session form — are built, but on
-**stubs returning fixture data**: nothing is saved or read. Sign-in (Track A:
-an emailed code or link, Vanderbilt only, a display-name step, route
-protection) is written, but waits on the hosted auth settings in
-`supabase/README.md`. Every stub, its owner, and what its real body must do is in
-`docs/contracts.md`. Routes and components for later sprints are still
-comment-only stubs.
+Sprint 4 is done (2026-11-12); `docs/backlog.md` has what is finished and the
+backlog-done percentage. The app runs on Vercel against hosted Supabase:
+sign-in by emailed code then a password, Vanderbilt only; create, edit,
+cancel, join and leave sessions with a live roster; a list and a map; study
+requests; course filter; academic profile; report, block and delete account;
+Home about the student. Every table has RLS and policies, and the client roles
+hold only the grants the app uses (SEC-14). Writes that need a rule enforced
+go through SECURITY DEFINER functions, and rate limits live in the database
+(ADR 0011). The security audit is in `docs/security/`.
 
 **Read the stub comment before you fill one in** — several record a constraint
 that is easy to miss and expensive to get wrong.
@@ -57,6 +54,15 @@ that PR** — the log is part of the change, not a separate chore. Leave
 "Verified by" as `⬜ pending` until a human has genuinely reviewed the output;
 putting your name there is a claim that you understood it and would defend it.
 
+Two rules from the Sprint 4 AI-code audit (`docs/security/ai-code-audit.md`):
+
+- **When your change makes another file's comment wrong, fix that comment in
+  the same PR.** Before finishing, search `src/`, `supabase/` and `docs/` for
+  the names of what you changed, and update any comment that argues from the
+  old behaviour, security comments first.
+- **A security control you put off gets an ID in the same PR**: a row in
+  `docs/security/findings.md` or a ticket, not only a "not done yet" comment.
+
 ## Before you open a PR
 
 ```bash
@@ -65,7 +71,13 @@ npm run lint && npm run typecheck && npm test && npm run build
 
 CI runs exactly this, plus a seed-freshness check (`supabase/seed.sql` must
 match `data/`) and, in the `db` job, a check that `src/lib/database.types.ts`
-matches the migrations.
+matches the migrations, plus the `security` job (npm audit, Semgrep,
+gitleaks), which fails on a High finding.
+
+Add at least one failure-path or accessibility check to every PR, not only the
+happy path. Group 3's review of #85 found two problems our tests could not
+see: a quick remount, and what a screen reader hears
+(`docs/code-review/group3-review-received.md`).
 
 ## Testing
 

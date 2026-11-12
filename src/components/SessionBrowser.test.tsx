@@ -440,6 +440,26 @@ describe("<SessionBrowser> course filter (US-06)", () => {
     expect(router.push).toHaveBeenCalledWith("/sessions");
   });
 
+  it("keeps every course's chip while filtered, when the page passes the full course list", () => {
+    render(
+      <SessionBrowser
+        sessions={sessions.filter((item) => item.course.departmentCode === "CS")}
+        now={now}
+        courseFilter={{ departmentCode: "CS", number: "3251" }}
+        courses={[
+          { departmentCode: "CS", number: "3251" },
+          { departmentCode: "MATH", number: "2300" },
+        ]}
+      />,
+    );
+
+    const group = screen.getByRole("group", { name: "Filter by course" });
+    // Without `courses`, MATH 2300's chip would be gone: the filtered list
+    // only holds CS sessions.
+    fireEvent.click(within(group).getByRole("button", { name: "MATH 2300" }));
+    expect(router.push).toHaveBeenCalledWith("/sessions?course=MATH-2300");
+  });
+
   it("says so when the course filter matched nothing", () => {
     render(
       <SessionBrowser

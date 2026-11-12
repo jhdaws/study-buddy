@@ -106,6 +106,11 @@ so, and its finding is rated as if the setting is wrong until someone records it
 | A10 Mishandling of Exceptional Conditions | Tapan | Errors mapped through `src/lib/errors.ts` (no raw Postgres text); `requireUser()` fails closed; `error.tsx` pages; `resolvePlace` failure paths | **Pass.**<br>• `databaseErrorMessage()` returns only allowlisted raise, constraint and SQLSTATE messages, with a generic fallback.<br>• `requireUser()` fails closed: no user means a redirect, and a failed profile read throws to the error boundary.<br>• `sessions/error.tsx` never shows `error.message`.<br>• Every `resolvePlace` failure becomes `lookup_failed` or a named reason, and Google's and Postgres's text goes only to logs.<br>Info: there is no root `error.tsx` or `global-error.tsx`. Errors outside `/sessions` get Next's default page, which in production is generic with no stack trace. |
 
 ## 5. Top 3 risks and next actions
+
+**Status after Sprint 4 (2026-11-11):** all three are fixed. SEC-06 by #88,
+SEC-01 by confirming the demo account is gone, SEC-08 by giving Vercel
+previews no production keys. Every finding's status is in
+[`findings.md`](./findings.md). The plan below is kept as written.
 1. **SEC-06: the deployed Next.js 16.4.0 has a critical advisory.** Upgrade `next` to 16.4.4 or later in its own PR, triage which advisories we were exposed to, and add `npm audit --audit-level=high` to the CI security stage so this blocks a pull request next time.
 2. **SEC-01: a demo password is public in the repo.** Check Supabase Auth -> Users for `njpm@vanderbilt.edu` and delete it if it exists. Add gitleaks to CI so a committed credential fails the build.
 3. **SEC-08: pull-request previews use the production database.** Create the staging Supabase project (W10, #54), give Vercel's Preview environment its keys, and set staging's `SUPABASE_PROJECT_ID` so migrations reach it first.

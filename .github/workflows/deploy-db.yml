@@ -22,7 +22,9 @@ on:
     types: [completed]
     branches: [main]
   # Re-run by hand (Actions -> Deploy database -> Run workflow), e.g. after
-  # fixing a secret. Deploys main's current migrations.
+  # fixing a secret. Deploys main's current migrations -- and ONLY main's:
+  # "Run workflow" offers every branch, so the jobs below refuse any other
+  # ref (SEC-13). src/lib/auth-settings.test.ts checks the guard is here.
   workflow_dispatch:
 
 permissions:
@@ -34,11 +36,14 @@ concurrency:
 
 jobs:
   staging:
-    # Only after a green CI run for a push to main -- never for a PR's run.
+    # Only after a green CI run for a push to main -- never for a PR's run --
+    # or by hand from main itself (SEC-13). Production `needs` this job, so
+    # when it is skipped production is too.
     if: >-
-      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
       (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push')
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
     uses: ./.github/workflows/push-migrations.yml
     with:
       environment: staging

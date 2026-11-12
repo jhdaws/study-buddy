@@ -483,15 +483,12 @@ describe("grants on update_session and cancel_session (S7)", () => {
     const { host, hostId } = await hostAndStranger();
     const sessionId = await hostSession(host, hostId);
 
-    // No UPDATE policy exists, so RLS's implicit USING(false) filters the row
-    // out before the UPDATE runs: 0 rows affected rather than an error, the
-    // same shape as the DELETE case in join-leave-session.test.ts. The host's
-    // own connection, to show that even the owner cannot bypass the function.
-    const result = await host.query(
-      "update public.sessions set topic = 'Direct write' where id = $1",
-      [sessionId],
-    );
-    expect(result.rowCount).toBe(0);
+    // Since SEC-14 the client role has no UPDATE on sessions at all, so this
+    // is refused outright (before, RLS matched 0 rows). The host's own
+    // connection, to show that even the owner cannot bypass the function.
+    await expect(
+      host.query("update public.sessions set topic = 'Direct write' where id = $1", [sessionId]),
+    ).rejects.toMatchObject({ code: "42501" });
 
     const { rows } = await host.query<{ topic: string }>(
       "select topic from public.sessions where id = $1",
@@ -504,11 +501,9 @@ describe("grants on update_session and cancel_session (S7)", () => {
     const { host, hostId } = await hostAndStranger();
     const sessionId = await hostSession(host, hostId);
 
-    const result = await host.query(
-      "update public.sessions set status = 'cancelled' where id = $1",
-      [sessionId],
-    );
-    expect(result.rowCount).toBe(0);
+    await expect(
+      host.query("update public.sessions set status = 'cancelled' where id = $1", [sessionId]),
+    ).rejects.toMatchObject({ code: "42501" });
     expect(await statusOf(host, sessionId)).toBe("open");
   });
 });

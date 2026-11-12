@@ -136,13 +136,25 @@ function listen(
 
   // setAuth() with no token asks supabase-js for the session's. It only
   // rejects if that lookup itself throws; subscribing anyway then costs
-  // nothing, and Realtime refuses it just as it would have.
+  // nothing, and Realtime refuses it just as it would have. Logged (Group 3's
+  // review of #85) so a list that never updates leaves a trace -- the error
+  // name only, never the error object, which could carry the token.
   client.realtime
     .setAuth()
-    .catch(() => undefined)
+    .catch((error: unknown) => {
+      console.warn("realtime: could not set the token", {
+        error: error instanceof Error ? error.name : "unknown",
+      });
+    })
     .then(() => {
       if (stopped) return;
-      channel = bind(client.channel(name), changed).subscribe((status) => {
+      // A topic of its own per subscription (Group 3's review of #85):
+      // channel() hands back an existing channel with the same topic, and
+      // removeChannel() is async, so a component remounting for the same
+      // session -- or two on one page -- would get the old, closing channel
+      // back and quietly stop updating.
+      const topic = `${name}:${crypto.randomUUID()}`;
+      channel = bind(client.channel(topic), changed).subscribe((status) => {
         if (status === "SUBSCRIBED") changed();
       });
     });

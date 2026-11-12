@@ -84,4 +84,19 @@ describe("live roster publication", () => {
       await anon.end();
     }
   });
+
+  it("keeps the roster readable by every signed-in student while it is published", async () => {
+    // Realtime does not apply RLS to DELETE events, so every subscriber gets
+    // every leave. That is only harmless because any signed-in student may
+    // read any roster anyway. If this policy is ever narrowed (private
+    // sessions, say), this test fails, and live updates need rethinking
+    // before the narrowing ships (Group 3's review of #85).
+    const { rows } = await db.query<{ roles: string[]; qual: string }>(`
+      select roles::text[] as roles, qual
+      from pg_policies
+      where schemaname = 'public' and tablename = 'session_attendees' and cmd = 'SELECT'
+    `);
+    expect(rows).toEqual([{ roles: ["authenticated"], qual: "true" }]);
+  });
+
 });

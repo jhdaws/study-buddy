@@ -268,9 +268,11 @@ describe("study_requests read policy", () => {
     await seedRequest(db, author);
 
     await db.query("set role anon");
-    const { rowCount } = await db.query(`select 1 from public.study_requests`);
-
-    expect(rowCount).toBe(0);
+    // Refused outright since SEC-14 (anon holds no privilege on public
+    // tables); before, RLS returned no rows.
+    await expect(db.query(`select 1 from public.study_requests`)).rejects.toMatchObject({
+      code: "42501",
+    });
   });
 });
 

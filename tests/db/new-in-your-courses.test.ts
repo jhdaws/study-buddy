@@ -197,6 +197,24 @@ describe("count_new_sessions_in_my_courses / new_sessions_in_my_courses", () => 
     expect(await listNew(me)).toEqual([]);
   });
 
+  it("leaves out a session hosted by someone the student has blocked (US-22)", async () => {
+    const me = await createStudent("Me");
+    const blocked = await createStudent("Blocked");
+    const other = await createStudent("Other");
+    const course = await createCourse();
+    await enroll(me, course);
+    await hostSession(blocked, course);
+    const visible = await hostSession(other, course);
+    // As the database's own role: blocks rows are the blocker's to write.
+    await db.query("insert into public.blocks (blocker_id, blocked_id) values ($1, $2)", [
+      me,
+      blocked,
+    ]);
+
+    expect(await countNew(me)).toBe(1);
+    expect((await listNew(me)).map((row) => row.id)).toEqual([visible]);
+  });
+
   it("does not count a session in a course the student is not enrolled in", async () => {
     const me = await createStudent("Me");
     const host = await createStudent("Host");

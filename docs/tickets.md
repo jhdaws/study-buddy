@@ -6,6 +6,27 @@ story (`w2-schema-skeleton`, `s3-us-02-create-session`).
 **Sizes:** S ≈ 1–2h · M ≈ 3–4h · L ≈ 5–6h — guesses; re-size after this sprint.
 **Status:** ⬜ not started · 🚧 in progress · ✅ done
 
+## Sprint 4 (2026-10-27 to 2026-11-12)
+
+Sprint 4's tickets live as GitHub issues on the project board ("Study Buddy",
+milestone "Sprint 4"), not in this file:
+
+| Ticket | Story | Owner | PR | Status |
+| --- | --- | --- | --- | --- |
+| S7 | US-09 edit or cancel a session | Nate | #123 | ✅ |
+| R1 | US-16 study requests | Nate | #124 | ✅ |
+| S8 | US-06 filter by course | Nate | #125 | ✅ |
+| S10 | US-20 repeat weekly | Nate | #137 | ✅ |
+| N1 | US-17 new in your courses | Tapan | #138 | ✅ |
+| P4 | US-22 block a user | Tapan | #139 | ✅ |
+| P1 | US-11 academic profile | Jack | #130 | ✅ |
+| P2 | US-24 delete my account | Jack | #131 | ✅ |
+| P3 | US-18 report a user | Jack | #132 | 🚧 users done; messages wait on chat |
+| C1 | US-05 session chat | Jack | #140 | ✅ |
+| H1 | US-03 / US-15 Home and past sessions | Jack | #141 | ✅ |
+| S9 | US-02 courses from the official catalogue | Jack | #115 | ⬜ next |
+| SEC-* | security findings | various | #88–#103, #129, cleanup PR | see `docs/security/findings.md` |
+
 ## Sprint 3 focus (from 2026-10-12, ends Oct 20)
 
 Everything aims at the Sprint 3 finish line; demo-only work waits for

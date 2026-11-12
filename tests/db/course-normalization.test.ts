@@ -176,11 +176,11 @@ describe("RLS on departments and courses (S2)", () => {
 
     const anon = await connection();
     await anon.query("set role anon");
-    const departments = await anon.query(
-      "select code from public.departments where code = $1",
-      ["HIDDEN"],
-    );
-    expect(departments.rows).toEqual([]);
+    // Refused outright since SEC-14 (anon holds no privilege on public
+    // tables); before, RLS returned no rows.
+    await expect(
+      anon.query("select code from public.departments where code = $1", ["HIDDEN"]),
+    ).rejects.toMatchObject({ code: "42501" });
   });
 
   it("refuses a direct INSERT claiming someone else as the creator", async () => {

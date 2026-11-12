@@ -174,14 +174,15 @@ describe("A01 IDOR: another signed-in student cannot act on someone else's rows"
     expect(other.error?.code).toBe("42501");
 
     // Take Carol's seat by rewriting her row, or remove her from the roster.
+    // Since SEC-14 the role has no UPDATE or DELETE on the table at all, so
+    // both are refused outright (before, RLS matched 0 rows).
     const takeSeat = await as(mallory, () =>
       attempt(
         "update public.session_attendees set user_id = $2 where session_id = $1 and user_id = $3",
         [sessionId, mallory, carol],
       ),
     );
-    expect(takeSeat.error).toBeUndefined();
-    expect(takeSeat.rowCount).toBe(0);
+    expect(takeSeat.error?.code).toBe("42501");
 
     const removeCarol = await as(mallory, () =>
       attempt("delete from public.session_attendees where session_id = $1 and user_id = $2", [
@@ -189,8 +190,7 @@ describe("A01 IDOR: another signed-in student cannot act on someone else's rows"
         carol,
       ]),
     );
-    expect(removeCarol.error).toBeUndefined();
-    expect(removeCarol.rowCount).toBe(0);
+    expect(removeCarol.error?.code).toBe("42501");
 
     expect(await roster()).toEqual([alice, carol].sort());
   });
@@ -279,19 +279,19 @@ describe("A01 IDOR: another signed-in student cannot act on someone else's rows"
   });
 
   it("cannot change, delete or forge someone else's session", async () => {
+    // Refused outright since SEC-14: sessions change only through
+    // update_session() and cancel_session(), which check the host.
     const update = await as(mallory, () =>
       attempt("update public.sessions set topic = 'Cancelled, go home' where id = $1", [
         sessionId,
       ]),
     );
-    expect(update.error).toBeUndefined();
-    expect(update.rowCount).toBe(0);
+    expect(update.error?.code).toBe("42501");
 
     const remove = await as(mallory, () =>
       attempt("delete from public.sessions where id = $1", [sessionId]),
     );
-    expect(remove.error).toBeUndefined();
-    expect(remove.rowCount).toBe(0);
+    expect(remove.error?.code).toBe("42501");
 
     // A session "hosted" by Alice that Alice never created.
     const forged = await as(mallory, () =>
@@ -329,9 +329,10 @@ describe("A01 IDOR: another signed-in student cannot act on someone else's rows"
 
 describe("A01: a signed-out visitor with the public anon key", () => {
   it("sees no session, no roster and no profile", async () => {
+    // Since SEC-14 anon holds no privilege on any public table, so this is
+    // refused outright (before, RLS returned no rows).
     const sessions = await as(null, () => attempt("select id from public.sessions"));
-    expect(sessions.error).toBeUndefined();
-    expect(sessions.rows).toEqual([]);
+    expect(sessions.error?.code).toBe("42501");
 
     // Live roster revokes anon on session_attendees (same pattern as A2 on
     // profiles): Realtime does not apply RLS to DELETE events, so a grant
@@ -355,4 +356,34 @@ describe("A01: the SECURITY DEFINER functions cannot be redirected", () => {
     `);
     expect(rows).toEqual([{ authenticated: false, anon: false }]);
   });
+
+  it("SEC-14: client roles hold no TRUNCATE, TRIGGER or REFERENCES, and anon holds nothing", async () => {
+    // Read as the database's own role: information_schema shows it every
+    // grant. TRUNCATE ignores RLS, so it is the one that matters most.
+    const { rows: risky } = await db.query<{ table_name: string; grantee: string; privilege: string }>(`
+      select table_name, grantee, privilege_type as privilege
+      from information_schema.role_table_grants
+      where table_schema = 'public'
+        and grantee in ('anon', 'authenticated')
+        and (grantee = 'anon' or privilege_type in ('TRUNCATE', 'TRIGGER', 'REFERENCES'))
+      order by 1, 2, 3
+    `);
+    expect(risky).toEqual([]);
+
+    // Sessions and rosters change only through SECURITY DEFINER functions.
+    const { rows: writes } = await db.query<{ table_name: string; privilege: string }>(`
+      select table_name, privilege_type as privilege
+      from information_schema.role_table_grants
+      where table_schema = 'public'
+        and grantee = 'authenticated'
+        and table_name in ('sessions', 'session_attendees')
+        and privilege_type in ('INSERT', 'UPDATE', 'DELETE')
+    `);
+    expect(writes).toEqual([]);
+
+    // And the refusal is real, not just a catalogue entry.
+    const truncate = await as(mallory, () => attempt("truncate public.sessions"));
+    expect(truncate.error?.code).toBe("42501");
+  });
+
 });
