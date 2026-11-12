@@ -11,8 +11,11 @@
  * <SetPasswordForm>; setPassword() saves it and goes on to `next`.
  *
  * - Signed out: to /login, keeping `next`.
- * - Already has a password: the page still works, as "choose a new
- *   password", with a way out ("Keep my current password") to `next`.
+ * - Already has a password: the page works, as "choose a new password",
+ *   with a way out ("Keep my current password") to `next`, but only within
+ *   15 minutes of signing in by code (SEC-15, canChoosePassword()).
+ *   Otherwise it explains why and offers to sign this device out and get a
+ *   code; setPassword() enforces the same rule.
  *
  * Not under /sessions, so the proxy does not guard it; this page checks for
  * itself. It must NOT call requireUser(), which would redirect a student
@@ -24,11 +27,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { restartWithCode } from "@/app/login/actions";
 import AuthScene from "@/components/AuthScene";
 import SetPasswordForm from "@/components/SetPasswordForm";
 import { LINK_ON_DARK } from "@/components/ui/styles";
 import { firstParam, loginPath, safeNextPath } from "@/lib/safe-next";
-import { getCurrentUser, hasPassword } from "@/lib/supabase/server";
+import { PASSWORD_CHANGE_NEEDS_CODE_MESSAGE } from "@/lib/errors";
+import { canChoosePassword, createClient, getCurrentUser, hasPassword } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Choose a password",
@@ -44,6 +49,28 @@ export default async function PasswordPage({
   const user = await getCurrentUser();
   if (!user) {
     redirect(loginPath(next));
+  }
+
+  if (!(await canChoosePassword(await createClient(), user))) {
+    return (
+      <AuthScene>
+        <main>
+          <h1 className="text-center text-[26px] leading-tight font-bold tracking-tight">
+            Get a code to change your password
+          </h1>
+          <p className="mt-2 mb-6 text-center text-base text-white/80">{PASSWORD_CHANGE_NEEDS_CODE_MESSAGE}</p>
+          <form action={restartWithCode}>
+            {next && <input type="hidden" name="next" value={next} />}
+            <button
+              type="submit"
+              className="h-11 w-full rounded-lg bg-white text-base font-semibold text-ink hover:bg-white/90"
+            >
+              Sign out and get a code
+            </button>
+          </form>
+        </main>
+      </AuthScene>
+    );
   }
 
   return (

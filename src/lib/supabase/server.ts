@@ -13,6 +13,7 @@ import { redirect } from "next/navigation";
 import { cache } from "react";
 
 import type { Database } from "@/lib/database.types";
+import { mayChoosePassword } from "@/lib/password-change";
 import { supabaseEnv } from "@/lib/env";
 import { SUPABASE_COOKIE_OPTIONS } from "@/lib/limits";
 import {
@@ -109,6 +110,31 @@ export async function fetchDisplayName(
  * for one; Supabase alone decides whether a password signs anyone in.
  */
 export const HAS_PASSWORD = "has_password";
+
+/**
+ * Whether this session may choose a password now (SEC-15): always without a
+ * password yet; with one, only within FRESH_CODE_SECONDS of signing in by an
+ * emailed code. The proof is the access token's signed `amr` claim, read
+ * with getClaims(), which verifies the token. Any failure reading it is a
+ * "no": the student can always get a fresh code.
+ */
+export async function canChoosePassword(
+  supabase: ServerClient,
+  user: Pick<User, "user_metadata">,
+): Promise<boolean> {
+  if (!hasPassword(user)) return true;
+  try {
+    const { data, error } = await supabase.auth.getClaims();
+    if (error || !data) return false;
+    return mayChoosePassword({
+      hasPassword: true,
+      amr: data.claims.amr,
+      nowSeconds: Math.floor(Date.now() / 1000),
+    });
+  } catch {
+    return false;
+  }
+}
 
 /** True once the student has chosen a password (see HAS_PASSWORD). */
 export function hasPassword(user: Pick<User, "user_metadata">): boolean {

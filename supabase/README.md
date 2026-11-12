@@ -290,9 +290,11 @@ In the dashboard (Authentication → Sign In / Providers → Email, see step 3):
   the student's before it can have a password. With it off, anyone could call
   Supabase's sign-up API with any `@vanderbilt.edu` address and a password of
   their choosing.
-- **"Secure password change": leave off** (the default). With it on, changing
-  a password more than a day after signing in needs a fresh code; the app
-  only asks for a password straight after a code anyway.
+- **"Secure password change": leave off** (the default). The app enforces a
+  stricter rule itself (SEC-15, `src/lib/password-change.ts`): a student who
+  already has a password can change it only within 15 minutes of signing in
+  with a code. Supabase's version would allow a change up to a day after any
+  sign-in, password sign-ins included.
 
 **Students who signed up before passwords** are asked to choose one, once,
 the next time they open a page while signed in (`requireUser()`). Signed
