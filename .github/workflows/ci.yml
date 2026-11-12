@@ -121,10 +121,10 @@ jobs:
           }
 
   # The main journeys in a real browser (W8, #37): the app built for
-  # production, against the full local Supabase stack -- database, auth, API
-  # and the Mailpit inbox the sign-in codes are read from. Not a required check
-  # yet: add it to the ruleset once it has run a week without flaking
-  # (docs/tickets.md, W8). See playwright.config.ts.
+  # production, against the full local Supabase stack -- database, auth, API,
+  # Realtime and the Mailpit inbox the sign-in codes are read from. Not a
+  # required check yet: add it to the ruleset once it has run a week without
+  # flaking (docs/tickets.md, W8). See playwright.config.ts.
   e2e:
     needs: verify
     runs-on: ubuntu-latest
@@ -141,11 +141,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Start local Supabase (database, auth, API, Mailpit)
-        run: npx supabase start -x studio,imgproxy,storage-api,realtime,edge-runtime,logflare,vector,supavisor,postgres-meta
+      # Realtime too: journey 5 watches the roster update live (live roster).
+      - name: Start local Supabase (database, auth, API, Realtime, Mailpit)
+        run: npx supabase start -x studio,imgproxy,storage-api,edge-runtime,logflare,vector,supavisor,postgres-meta
 
+      # Browser only, no --with-deps. The runner image already has every
+      # library Chromium needs; --with-deps only adds fallback fonts (CJK,
+      # Thai, X11) through apt, and the journeys check no screenshots. On
+      # 2026-11-11 the Ubuntu mirrors stopped resolving from the runners and
+      # apt retried for 10 minutes before failing the job. The timeout makes
+      # a stalled download fail fast instead of eating the job's 20 minutes.
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        timeout-minutes: 5
+        run: npx playwright install chromium
 
       - name: End-to-end journeys
         run: npm run test:e2e

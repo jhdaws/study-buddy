@@ -23,8 +23,13 @@
 
 import "server-only";
 
+import type { ClassYear } from "@/lib/academic";
+import { listBlockedUserIds } from "@/lib/blocks";
+import type { CourseFilter } from "@/lib/session-course";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeCourseNumber, normalizeDepartmentCode } from "@/lib/validation";
+
+export type { CourseFilter };
 
 // ---------------------------------------------------------------------------
 // Types -- what the UI reads. Deliberately not database rows: camelCase,
@@ -42,8 +47,8 @@ export type CourseLabel = {
 };
 
 /**
- * One card in the session list (US-03). Everything W5's card needs, and
- * nothing it does not -- no host id, no roster, no coordinates.
+ * One card in the session list (US-03), and one pin on its map (M4). Everything
+ * the card and the map need, and nothing they do not -- no host id, no roster.
  */
 export type SessionListItem = {
   /** `sessions.id` -- for the link to /sessions/[id] (S6). */
@@ -54,6 +59,13 @@ export type SessionListItem = {
   locationLabel: string;
   /** Null when the host left it blank -- normal for a cafe. */
   room: string | null;
+  /**
+   * Where the map puts the pin (M4): the coordinates resolvePlace() validated
+   * and stored in `locations` -- Google's, never the host's. Degrees, WGS 84.
+   */
+  lat: number;
+  /** Degrees, like `lat`. */
+  lng: number;
   /**
    * ISO 8601 in UTC (`2026-10-01T19:30:00.000Z`), as Supabase returns
    * `timestamptz`. FORMAT WITH AN EXPLICIT TIME ZONE: a Server Component on
@@ -83,20 +95,40 @@ export type Attendee = {
   /** Never an email (US-25). Null only for a profile with no name yet. */
   displayName: string | null;
   isHost: boolean;
+  /**
+   * From their academic profile (US-11); null when they have not said.
+   * getSession() always sets both; optional so a roster built by hand (a
+   * test, a fixture) need not.
+   */
+  major?: string | null;
+  classYear?: ClassYear | null;
+  /**
+   * US-22: the VIEWER has blocked this attendee (never the reverse -- the
+   * viewer cannot read whether they themselves are blocked). getSession()
+   * always sets it; optional for the same reason major/classYear are.
+   */
+  isBlocked?: boolean;
 };
 
 /**
  * The session page (S6, #52): a list item, plus what only the page shows --
  * whether it was cancelled, who hosts it, and who is going. Unlike the list,
  * cancelled and ended sessions are returned too: someone holding a link to
- * one should be told what happened, not shown a 404.
+ * one should be told what happened, not shown a 404. No coordinates: the page
+ * has no map, so getSession() does not embed `locations`.
  */
-export type SessionDetail = SessionListItem & {
+export type SessionDetail = Omit<SessionListItem, "lat" | "lng"> & {
   status: "open" | "cancelled";
   /** Null when the host deleted their account. */
   hostId: string | null;
   /** The host first, then everyone else in the order they joined. */
   attendees: Attendee[];
+  /**
+   * The Google Places id behind `locationLabel`. Only the edit form uses it
+   * (S7, US-09): <LocationPicker> needs the current place to prefill, or a
+   * host who edits the topic would silently clear their own location.
+   */
+  placeId: string;
 };
 
 /** A department for the create-session department picker. */
@@ -125,7 +157,7 @@ export const COURSE_SUGGESTION_LIMIT = 8;
 // ===========================================================================
 // listSessions (S4, #21)
 //
-// Four things in this query are less obvious than they look:
+// Five things in this query are less obvious than they look:
 //
 //   - `profiles!sessions_host_id_fkey`. Plain `profiles` is AMBIGUOUS and
 //     fails at runtime with PGRST201: PostgREST finds two ways to get from a
@@ -144,55 +176,221 @@ export const COURSE_SUGGESTION_LIMIT = 8;
 //     attendeeCount is never read from a stored counter (ADR 0008 rule 9).
 //     PostgREST returns the aggregate as `[{ count: n }]`.
 //
+//   - `locations!inner (lat, lng)` gives the map its pins (M4). Reading it
+//     needs M3's read policy on `locations`, which allows any signed-in user
+//     -- the same reader this query already requires. `!inner`, like
+//     `courses!inner`, because `sessions.location_id` is NOT NULL: the only
+//     way the embed comes back empty is a broken policy, and then the session
+//     is left out rather than handed to the mapping below without
+//     coordinates. tests/db/session-rules.test.ts checks that a signed-in
+//     student who is not the host can read both halves.
+//
 //   - No view, so no `security_invoker` question to get wrong (ADR 0008,
 //     "Watch"). The query runs through the cookie-bound client, so S1's
 //     policies apply as the signed-in user; signed out it returns nothing,
 //     which is checked in tests/db/session-lists.test.ts.
+//
+//   - The optional course filter (US-06) is applied HERE, on the embedded
+//     `courses` columns, not afterwards in the browser. Filtering a result
+//     the page already has cannot drop sessions that were never loaded; the
+//     URL is what makes a filtered view shareable. `courses.department_code`
+//     / `courses.number` are PostgREST's embed filters -- they need the
+//     `!inner` above or a missing course would quietly leave the session in.
 // ===========================================================================
 
+/** Options for listSessions(). All optional; omit for the unfiltered list. */
+export type ListSessionsOptions = {
+  /**
+   * Restrict to one course (US-06). From `?course=CS-3251` via
+   * parseCourseParam(); never a free-text string -- the parser has already
+   * normalised and validated it.
+   */
+  course?: CourseFilter;
+};
+
 /** Open sessions that have not ended, soonest first (US-03). */
-export async function listSessions(): Promise<SessionListItem[]> {
+export async function listSessions(
+  options: ListSessionsOptions = {},
+): Promise<SessionListItem[]> {
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("sessions")
-    .select(
-      `id, topic, location_label, room, starts_at, ends_at, capacity,
-       courses!inner (department_code, number, title),
-       profiles!sessions_host_id_fkey (display_name),
-       session_attendees (count)`,
-    )
+    .select(SESSION_LIST_SELECT)
     .eq("status", "open")
-    .gt("ends_at", "now")
-    .order("starts_at", { ascending: true });
+    .gt("ends_at", "now");
+
+  if (options.course) {
+    // Embed filters: PostgREST applies these to the joined courses row.
+    // Two eq() calls, not an or(), because both halves of the course must
+    // match -- "CS" alone would return every CS session.
+    query = query
+      .eq("courses.department_code", options.course.departmentCode)
+      .eq("courses.number", options.course.number);
+  }
+
+  // US-22: filtered here, in JS, rather than as a `host_id=not.in.(...)`
+  // PostgREST filter -- a NOT IN list drops a NULL host_id (a deleted
+  // account) too, since `NULL IN (...)` is neither true nor false in SQL. A
+  // plain Set membership check in the map below has no such trap, and
+  // blockedIds is typically empty, so the common case costs nothing extra.
+  const [blockedIds, { data, error }] = await Promise.all([
+    listBlockedUserIds(),
+    query.order("starts_at", { ascending: true }),
+  ]);
 
   if (error) {
     throw new Error(`Could not load the session list: ${error.message}`);
   }
 
-  return (data ?? []).map((row) => {
-    const attendeeCount = row.session_attendees[0]?.count ?? 0;
+  const blocked = new Set(blockedIds);
 
-    return {
-      id: row.id,
-      course: {
-        departmentCode: row.courses.department_code,
-        number: row.courses.number,
-        title: row.courses.title,
-      },
-      topic: row.topic,
-      locationLabel: row.location_label,
-      room: row.room,
-      startsAt: row.starts_at,
-      endsAt: row.ends_at,
-      capacity: row.capacity,
-      attendeeCount,
-      seatsLeft: Math.max(0, row.capacity - attendeeCount),
-      // A deleted account leaves host_id null, so the embed yields null and
-      // the card shows "Deleted user".
-      hostDisplayName: row.profiles?.display_name ?? null,
-    };
-  });
+  return (data ?? [])
+    .filter((row) => row.host_id === null || !blocked.has(row.host_id))
+    .map(toListItem);
+}
+
+/**
+ * What listSessions() and the Home readers below select: one card's worth.
+ * The host is embedded through the NAMED foreign key -- a bare `profiles`
+ * embed is ambiguous (PGRST201): sessions also reach profiles through
+ * session_attendees.
+ */
+const SESSION_LIST_SELECT = `id, topic, location_label, room, starts_at, ends_at, capacity, host_id, status,
+       courses!inner (department_code, number, title),
+       locations!inner (lat, lng),
+       profiles!sessions_host_id_fkey (display_name),
+       session_attendees (count)`;
+
+type SessionListRow = {
+  id: string;
+  topic: string;
+  location_label: string;
+  room: string | null;
+  starts_at: string;
+  ends_at: string;
+  capacity: number;
+  host_id: string | null;
+  status: "open" | "cancelled";
+  courses: { department_code: string; number: string; title: string | null };
+  locations: { lat: number; lng: number };
+  profiles: { display_name: string | null } | null;
+  session_attendees: { count: number }[];
+};
+
+function toListItem(row: SessionListRow): SessionListItem {
+  const attendeeCount = row.session_attendees[0]?.count ?? 0;
+  return {
+    id: row.id,
+    course: {
+      departmentCode: row.courses.department_code,
+      number: row.courses.number,
+      title: row.courses.title,
+    },
+    topic: row.topic,
+    locationLabel: row.location_label,
+    room: row.room,
+    lat: row.locations.lat,
+    lng: row.locations.lng,
+    startsAt: row.starts_at,
+    endsAt: row.ends_at,
+    capacity: row.capacity,
+    attendeeCount,
+    seatsLeft: Math.max(0, row.capacity - attendeeCount),
+    // A deleted account leaves host_id null, so the embed yields null and
+    // the card shows "Deleted user".
+    hostDisplayName: row.profiles?.display_name ?? null,
+  };
+}
+
+// ===========================================================================
+// Home (H1, #128; US-15, #133): the student's own sessions.
+//
+// "Their own" means on the roster -- the host included, since create_session
+// seats the host. Read in two steps, the roster rows then the sessions, rather
+// than one `session_attendees!inner` embed filtered on user_id: that inner
+// embed would also replace the `session_attendees (count)` the card needs.
+// Both reads go through the same policies as the session list (any signed-in
+// student may read sessions and rosters), so nothing new is exposed.
+// ===========================================================================
+
+/** A session on the student's own roster, with whether they host it. */
+export type MySession = SessionListItem & {
+  /** The student hosts it (and so may edit or cancel it, US-09). */
+  hosting: boolean;
+};
+
+/** A past session for "Host it again" (US-15). */
+export type PastSession = MySession & {
+  /** Cancelled by its host, rather than simply over. */
+  cancelled: boolean;
+};
+
+/** How many past sessions Home lists. */
+export const PAST_SESSIONS_LIMIT = 10;
+
+/** The ids of every session `userId` is on the roster of. */
+async function rosterSessionIds(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<string[]> {
+  const { data, error } = await supabase
+    .from("session_attendees")
+    .select("session_id")
+    .eq("user_id", userId);
+  if (error) {
+    throw new Error(`Could not load your sessions: ${error.message}`);
+  }
+  return (data ?? []).map((row) => row.session_id);
+}
+
+/**
+ * Open sessions `userId` is going to or hosting that have not ended,
+ * soonest first. Cancelled and ended ones are listPastSessions()'s.
+ */
+export async function listMySessions(userId: string): Promise<MySession[]> {
+  const supabase = await createClient();
+  const ids = await rosterSessionIds(supabase, userId);
+  if (ids.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("sessions")
+    .select(SESSION_LIST_SELECT)
+    .in("id", ids)
+    .eq("status", "open")
+    .gt("ends_at", "now")
+    .order("starts_at", { ascending: true });
+  if (error) {
+    throw new Error(`Could not load your sessions: ${error.message}`);
+  }
+  return (data ?? []).map((row) => ({ ...toListItem(row), hosting: row.host_id === userId }));
+}
+
+/**
+ * Sessions `userId` was on that have ended or been cancelled, most recent
+ * first, at most PAST_SESSIONS_LIMIT (US-15). Nothing is deleted when a
+ * session ends ("ended" is derived, ADR 0008 rule 3), so this is a read.
+ */
+export async function listPastSessions(userId: string): Promise<PastSession[]> {
+  const supabase = await createClient();
+  const ids = await rosterSessionIds(supabase, userId);
+  if (ids.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from("sessions")
+    .select(SESSION_LIST_SELECT)
+    .in("id", ids)
+    .or("status.eq.cancelled,ends_at.lte.now")
+    .order("starts_at", { ascending: false })
+    .limit(PAST_SESSIONS_LIMIT);
+  if (error) {
+    throw new Error(`Could not load your past sessions: ${error.message}`);
+  }
+  return (data ?? []).map((row) => ({
+    ...toListItem(row),
+    hosting: row.host_id === userId,
+    cancelled: row.status === "cancelled",
+  }));
 }
 
 // ===========================================================================
@@ -206,6 +404,8 @@ export async function listSessions(): Promise<SessionListItem[]> {
 // Reading the roster needs S1's session_attendees_select policy and A2's
 // profiles read policy; both allow any signed-in user, so a student can see
 // who is going before they join (US-23). Emails are never selected (US-25).
+// Each attendee's major and year come from the same profile row (US-11), so
+// they cost nothing extra.
 // ===========================================================================
 
 /** A session id is a uuid; anything else cannot match a row. */
@@ -219,21 +419,30 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
 
   const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from("sessions")
-    .select(
-      `id, topic, location_label, room, starts_at, ends_at, capacity, status, host_id,
+  // US-22: run alongside the session query, not after -- the roster needs
+  // the viewer's own blocks to mark which attendees are blocked (never the
+  // reverse: nobody can read whether they themselves are blocked).
+  const [{ data, error }, blockedIds] = await Promise.all([
+    supabase
+      .from("sessions")
+      .select(
+        `id, topic, location_label, room, starts_at, ends_at, capacity, status, host_id,
        courses!inner (department_code, number, title),
+       locations!inner (place_id),
        profiles!sessions_host_id_fkey (display_name),
-       session_attendees (user_id, joined_at, profiles (display_name))`,
-    )
-    .eq("id", id)
-    .maybeSingle();
+       session_attendees (user_id, joined_at, profiles (display_name, major, class_year))`,
+      )
+      .eq("id", id)
+      .maybeSingle(),
+    listBlockedUserIds(),
+  ]);
 
   if (error) {
     throw new Error(`Could not load the session: ${error.message}`);
   }
   if (!data) return null;
+
+  const blocked = new Set(blockedIds);
 
   const attendees: Attendee[] = [...data.session_attendees]
     .sort((a, b) => {
@@ -244,6 +453,9 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
       userId: row.user_id,
       displayName: row.profiles?.display_name ?? null,
       isHost: row.user_id === data.host_id,
+      major: row.profiles?.major ?? null,
+      classYear: row.profiles?.class_year ?? null,
+      isBlocked: blocked.has(row.user_id),
     }));
 
   return {
@@ -265,6 +477,7 @@ export async function getSession(id: string): Promise<SessionDetail | null> {
     status: data.status,
     hostId: data.host_id,
     attendees,
+    placeId: data.locations.place_id,
   };
 }
 

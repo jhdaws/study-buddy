@@ -4,6 +4,7 @@ import {
   campusDayOffset,
   formatDateTile,
   formatInitial,
+  formatMessageTime,
   formatStartTime,
   formatCampusDay,
   formatCourseCode,
@@ -142,5 +143,22 @@ describe("formatInitial", () => {
     expect(formatInitial("  priya")).toBe("P");
     expect(formatInitial("")).toBe("?");
     expect(formatInitial(null)).toBe("?");
+  });
+});
+
+describe("formatMessageTime (US-05)", () => {
+  it("shows only the time for a message sent today, in campus time", () => {
+    // 14:05 UTC is 9:05 AM in Nashville (CDT).
+    expect(plain(formatMessageTime("2026-10-01T14:05:00Z", now))).toBe("9:05 AM");
+  });
+
+  it("names the day otherwise", () => {
+    expect(plain(formatMessageTime("2026-09-30T23:30:00Z", now))).toBe("Yesterday, 6:30 PM");
+    expect(plain(formatMessageTime("2026-09-28T17:00:00Z", now))).toBe("Mon, Sep 28, 12:00 PM");
+  });
+
+  it("goes by the campus day, not the UTC one", () => {
+    // 02:00 UTC on Oct 1 is still Sep 30 in Nashville.
+    expect(plain(formatMessageTime("2026-10-01T02:00:00Z", now))).toBe("Yesterday, 9:00 PM");
   });
 });

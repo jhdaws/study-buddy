@@ -22,6 +22,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import {
+  authErrorReason,
   databaseErrorMessage,
   PASSWORD_CHANGE_NEEDS_CODE_MESSAGE,
   passwordSignInErrorMessage,
@@ -29,7 +30,9 @@ import {
   signInErrorMessage,
   verifyCodeErrorMessage,
 } from "@/lib/errors";
+import { isAcceptedLinkType, loginWithLinkError } from "@/lib/email-link";
 import { requestOrigin } from "@/lib/request-origin";
+import { logSecurityEvent } from "@/lib/security-log";
 import {
   DEFAULT_NEXT_PATH,
   loginPath,
@@ -94,11 +97,15 @@ export type DisplayNameState = FormState<DisplayNameField>;
 // Form fields: `email`, and an optional hidden `next` (where to go after
 // signing in; dropped unless safeNextPath() accepts it).
 //
-// The email carries a one-time code only (A1's template,
-// supabase/templates/magic_link.html; the link was dropped on 2026-10-12 at
-// the user's request). `emailRedirectTo` is still passed so that an email
-// built from an older template, or Supabase's default one, still lands on
-// /auth/confirm on this origin rather than somewhere that cannot sign in.
+// The email carries ONLY the one-time code (A1's template,
+// supabase/templates/magic_link.html). The link was dropped again on
+// 2026-11-11: Vanderbilt's Outlook filtering held emails that carried one.
+// `emailRedirectTo` is still set, for links already in inboxes: such a link
+// is `emailRedirectTo` plus `&token_hash=…&type=email`, so it lands on
+// /auth/confirm on this origin and works on any device. The token
+// is spent only by the "Continue signing in" button on /login/continue
+// (confirmSignIn() below), so a mail scanner that opens the link first
+// spends nothing, and the code still works too.
 //
 // Same reply whether or not the address already has an account:
 // signInWithOtp() signs up a new address and signs in a known one, and both
@@ -166,15 +173,58 @@ export async function verifyCode(
   const supabase = await createClient();
   const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
   if (error || !data.user) {
+    // SEC-09: the reason code and a hash of the address; never the code.
+    logSecurityEvent({ event: "sign_in_code_failed", reason: authErrorReason(error), email });
     return { formError: verifyCodeErrorMessage(error), values: formValues(formData) };
   }
 
-  // The name step first if there is no name (A4), then the password step.
+  // The name step first if there is no name (A4), then the password step --
+  // but only for a student with no password yet, or one who came from
+  // "Forgot your password?" (reset=1). A returning student who simply signed
+  // in by code goes straight on (BUG-22: every code sign-in used to be sent
+  // to choose a password).
   const destination = await pathAfterSignIn(supabase, data.user, formData.get("next"), {
-    choosePassword: true,
+    choosePassword: formData.get("reset") === "1",
   });
   // Outside any try/catch: redirect() works by throwing.
   redirect(destination);
+}
+
+// ---------------------------------------------------------------------------
+// confirmSignIn -- A7. The "Continue signing in" button on /login/continue.
+//
+// The emailed link lands on that page instead of being verified on GET
+// (src/app/auth/confirm/route.ts), so a mail scanner that opens the link
+// spends nothing: only this POST, made when the student presses the button,
+// uses the one-time token. Form fields, all hidden: `token_hash`, `type`,
+// `next`.
+//
+// Like a code sign-in, this always goes on to the password step (and the
+// name step first if needed): the emailed link is for signing up and for a
+// forgotten password, the same as the code.
+// ---------------------------------------------------------------------------
+
+/** Sign in with the token from the emailed link, once the student asks to. */
+export async function confirmSignIn(formData: FormData): Promise<void> {
+  const tokenHash = formData.get("token_hash");
+  const type = formData.get("type");
+  const next = formData.get("next");
+  if (typeof tokenHash !== "string" || tokenHash === "" || !isAcceptedLinkType(type)) {
+    redirect(loginWithLinkError(next));
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.auth.verifyOtp({ type, token_hash: tokenHash });
+  if (error || !data.user) {
+    // SEC-09: the reason code only. A link carries no email, and the token
+    // hash is a credential, so neither is logged.
+    logSecurityEvent({ event: "sign_in_link_failed", reason: authErrorReason(error) });
+    redirect(loginWithLinkError(next));
+  }
+
+  // As verifyCode(): the password step only if they have none yet (BUG-22).
+  // Emails no longer carry a link; this serves links already sent.
+  redirect(await pathAfterSignIn(supabase, data.user, next));
 }
 
 // ---------------------------------------------------------------------------
@@ -206,6 +256,8 @@ export async function signInWithPassword(
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.user) {
+    // SEC-09: the reason code and a hash of the address; never the password.
+    logSecurityEvent({ event: "sign_in_password_failed", reason: authErrorReason(error), email });
     return { formError: passwordSignInErrorMessage(error), values: { email } };
   }
 

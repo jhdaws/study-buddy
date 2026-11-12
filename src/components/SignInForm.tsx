@@ -7,7 +7,7 @@
  *
  * Opens on PASSWORD (A6): Vanderbilt email + password,
  * `useActionState(signInWithPassword, {})`, which redirects on success and
- * sends no email. "New here, or forgot your password?" switches to the code
+ * sends no email. "New here?" and "Forgot your password?" switch to the code
  * flow below, and "I have a password" switches back, without a round trip.
  * After a code sign-in the student chooses a password (/login/password), so
  * the code flow is needed once per student, not once per visit -- which is
@@ -20,9 +20,13 @@
  *      replaces this one.
  *   2. CODE -- "Check your inbox", naming the address, with a field for the
  *      one-time code from the email: `useActionState(verifyCode, {})`,
- *      which redirects on success. The same email has a link that signs in
- *      without the code; why both, and the catch (they are one token), is
- *      at verifyCode() in src/app/login/actions.ts. "Use a different email"
+ *      which redirects on success. The email carries ONLY the code -- no
+ *      link (2026-11-11): Vanderbilt's Outlook filtering held emails with a
+ *      sign-in link. /auth/confirm still accepts an older emailed link. A
+ *      code from "Forgot your password?" posts `reset=1`, which sends the
+ *      student on to choose a new password; any other code sign-in only asks
+ *      for one if they have none yet (pathAfterSignIn). They are one token:
+ *      whichever is used first works, and the other then fails. "Use a different email"
  *      goes back to step 1 without a round trip. "Resend code" posts the
  *      same address to signIn again, after a countdown.
  *
@@ -90,6 +94,9 @@ export default function SignInForm({
   initialMode = "password",
 }: SignInFormProps) {
   const [mode, setMode] = useState(initialMode);
+  // "Forgot your password?" rather than "New here?": the code step then
+  // posts reset=1, so verifyCode() goes on to choose a new password.
+  const [reset, setReset] = useState(false);
   const [state, formAction, pending] = useActionState(signIn, initialState);
   // The state whose code step the student left with "Use a different
   // email". A new send produces a new state object, so its step shows again.
@@ -105,7 +112,15 @@ export default function SignInForm({
   }
 
   if (mode === "password") {
-    return <PasswordStep next={next} onUseCode={() => setMode("code")} />;
+    return (
+      <PasswordStep
+        next={next}
+        onUseCode={(forgot) => {
+          setReset(forgot);
+          setMode("code");
+        }}
+      />
+    );
   }
   if (state.sentTo && dismissed !== state) {
     return (
@@ -113,6 +128,7 @@ export default function SignInForm({
         key={round}
         email={state.sentTo}
         next={next}
+        reset={reset}
         resend={formAction}
         resending={pending}
         onChangeEmail={() => setDismissed(state)}
@@ -125,12 +141,20 @@ export default function SignInForm({
       formAction={formAction}
       pending={pending}
       next={next}
+      reset={reset}
       onUsePassword={() => setMode("password")}
     />
   );
 }
 
-function PasswordStep({ next, onUseCode }: { next?: string; onUseCode: () => void }) {
+function PasswordStep({
+  next,
+  onUseCode,
+}: {
+  next?: string;
+  /** `true` for "Forgot your password?", `false` for "New here?". */
+  onUseCode: (forgot: boolean) => void;
+}) {
   const [state, formAction, pending] = useActionState<PasswordSignInState, FormData>(
     signInWithPassword,
     {},
@@ -212,10 +236,15 @@ function PasswordStep({ next, onUseCode }: { next?: string; onUseCode: () => voi
         </button>
       </form>
       <div className="mt-4 border-t border-white/10 pt-4 text-center">
-        <p className="text-sm text-white/72">New here, or forgot your password?</p>
-        <button type="button" onClick={onUseCode} className={LINK_ON_DARK}>
+        <p className="text-sm text-white/72">New here?</p>
+        <button type="button" onClick={() => onUseCode(false)} className={LINK_ON_DARK}>
           Get a sign-in code by email
         </button>
+        <p className="mt-2">
+          <button type="button" onClick={() => onUseCode(true)} className={LINK_ON_DARK}>
+            Forgot your password?
+          </button>
+        </p>
       </div>
     </section>
   );
@@ -235,12 +264,14 @@ function EmailStep({
   formAction,
   pending,
   next,
+  reset,
   onUsePassword,
 }: {
   state: SignInState;
   formAction: (formData: FormData) => void;
   pending: boolean;
   next?: string;
+  reset: boolean;
   onUsePassword: () => void;
 }) {
   const prefix = useId();
@@ -255,11 +286,12 @@ function EmailStep({
   return (
     <section aria-labelledby={ids.heading}>
       <h1 id={ids.heading} className="text-center text-[26px] leading-tight font-bold tracking-tight">
-        Get a sign-in code
+        {reset ? "Reset your password" : "Get a sign-in code"}
       </h1>
       <p className="mt-2 mb-6 text-center text-base text-white/80">
-        New here, or forgot your password? We&apos;ll email your Vanderbilt address a code.
-        Then you&apos;ll choose a password.
+        {reset
+          ? "We'll email your Vanderbilt address a code. Then you'll choose a new password."
+          : "We'll email your Vanderbilt address a code. If you're new, you'll then choose a password."}
       </p>
       <form action={formAction} noValidate className="flex flex-col gap-4">
         {next && <input type="hidden" name="next" value={next} />}
@@ -320,12 +352,15 @@ function EmailStep({
 function CodeStep({
   email,
   next,
+  reset,
   resend,
   resending,
   onChangeEmail,
 }: {
   email: string;
   next?: string;
+  /** Came from "Forgot your password?": go on to choose a new one. */
+  reset: boolean;
   resend: (formData: FormData) => void;
   resending: boolean;
   onChangeEmail: () => void;
@@ -374,14 +409,13 @@ function CodeStep({
       <p role="status" className="mt-2 mb-6 text-center text-base text-white/80">
         We sent a sign-in code to{" "}
         <strong className="block font-bold text-white [overflow-wrap:anywhere]">{email}</strong>
-        <span className="mt-1 block text-sm text-white/72">
-          Enter the code from that email below.
-        </span>
+        <span className="mt-1 block text-sm text-white/72">Enter it below.</span>
       </p>
 
       <form action={formAction} noValidate className="flex flex-col gap-4">
         <input type="hidden" name="email" value={email} />
         {next && <input type="hidden" name="next" value={next} />}
+        {reset && <input type="hidden" name="reset" value="1" />}
         <div className={FIELD}>
           <label htmlFor={ids.code} className="sr-only">
             Sign-in code
@@ -476,7 +510,7 @@ function CodeStep({
         </button>
       </div>
       <p className="mt-2 border-t border-white/10 pt-4 text-center text-sm text-white/72">
-        Codes work once, for an hour.
+        Codes work once, for 10 minutes. Nothing there? Check your junk folder.
       </p>
     </section>
   );

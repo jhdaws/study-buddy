@@ -27,16 +27,18 @@ detail than the table below. Read it before you start.
 | Display name | `src/app/login/actions.ts` | `saveDisplayName(prev: DisplayNameState, formData: FormData): Promise<DisplayNameState>` | A4 [#17](https://github.com/jhdaws/study-buddy/issues/17) | **Replaced by A4.** | Done: `getCurrentUser()` (signed out → `/login`); `displayNameSchema`; updates the caller's own `profiles` row through their client (A2's RLS and column grant); database errors via `databaseErrorMessage()`; no row updated is an error; `redirect()` to the safe `next`, else `/sessions`. The form is `<DisplayNameForm>` on **`/login/name`** |
 | Route protection | `src/lib/supabase/proxy.ts` | `updateSession(request)`, `isProtectedPath(pathname)` | A4 [#17](https://github.com/jhdaws/study-buddy/issues/17) | — | Signed-out `GET`/`HEAD` of `/sessions` or `/sessions/*` → `307 /login?next=<path+query>`, carrying every refreshed cookie and no-cache header; POSTs (Server Actions) and `/api/*` are never redirected. Sets `REQUEST_PATH_HEADER` on every request |
 | Sign out | `src/app/login/actions.ts` | `signOut(): Promise<void>` | A3 [#16](https://github.com/jhdaws/study-buddy/issues/16) | **Replaced by A3.** | Done: `supabase.auth.signOut({ scope: "local" })` — this device only (US-21: a shared device) — then `redirect("/")` |
-| Create a session | `src/app/sessions/actions.ts` | `createSession(prev: CreateSessionState, formData: FormData): Promise<CreateSessionState>` | S3 [#20](https://github.com/jhdaws/study-buddy/issues/20) | `requireUser()`; validates with `createSessionSchema()`; checks the place with `resolvePlace()`; redirects to `/sessions`. **Saves nothing** — the new session does not appear | `requireUser()` → validate → `resolvePlace()` → S2's create-on-use course → S1's `create_session` → database errors via `errors.ts` → `redirect("/sessions")` outside any `try` |
-| Session list | `src/lib/sessions.ts` | `listSessions(): Promise<SessionListItem[]>` | S4 [#21](https://github.com/jhdaws/study-buddy/issues/21) | **Replaced by S4.** | Done: one query through the cookie-bound client, so S1's policies apply; `status = 'open'` and `ends_at=gt.now` (`now` is a Postgres literal, so the comparison uses the **database's** clock); `session_attendees (count)` for `attendeeCount`, so Postgres counts the roster; `starts_at` ascending. No view, so no `security_invoker` to get wrong. The host embed **must** be `profiles!sessions_host_id_fkey` — a plain `profiles` is ambiguous (host_id, or a many-to-many hop through `session_attendees`) and fails at runtime with `PGRST201` |
-| Session page | `src/lib/sessions.ts` | `getSession(id: string): Promise<SessionDetail \| null>` | S6 [#52](https://github.com/jhdaws/study-buddy/issues/52) | **New in S6.** | One session with its roster: `SessionListItem` plus `status`, `hostId` and `attendees` (`{ userId, displayName, isHost }`, the host first, then by `joined_at`). Null for no such session, and for an id that is not a uuid without querying (Postgres would raise 22P02). Unlike `listSessions()` it does **not** drop cancelled or ended sessions: the page says what happened. Same named host embed as `listSessions()`; the roster's own `profiles (display_name)` is unambiguous. Never selects an email (US-25) |
+| Create a session | `src/app/sessions/actions.ts` | `createSession(prev: CreateSessionState, formData: FormData): Promise<CreateSessionState>` | S3 [#20](https://github.com/jhdaws/study-buddy/issues/20) | `requireUser()`; validates with `createSessionSchema()`; checks the place with `resolvePlace()`; redirects to `/sessions`. **Saves nothing** — the new session does not appear | `requireUser()` → validate → `consumeRateLimit("place_lookup")` (SEC-05: refused, or failing, means no lookup) → `resolvePlace()` → S2's create-on-use course → S1's `create_session` → database errors via `errors.ts` → `redirect("/sessions")` outside any `try` |
+| Session list | `src/lib/sessions.ts` | `listSessions(): Promise<SessionListItem[]>` | S4 [#21](https://github.com/jhdaws/study-buddy/issues/21) | **Replaced by S4.** | Done: one query through the cookie-bound client, so S1's policies apply; `status = 'open'` and `ends_at=gt.now` (`now` is a Postgres literal, so the comparison uses the **database's** clock); `session_attendees (count)` for `attendeeCount`, so Postgres counts the roster; `starts_at` ascending; since M4, `locations!inner (lat, lng)` for the map's pins (M3's read policy lets any signed-in user see them). No view, so no `security_invoker` to get wrong. The host embed **must** be `profiles!sessions_host_id_fkey` — a plain `profiles` is ambiguous (host_id, or a many-to-many hop through `session_attendees`) and fails at runtime with `PGRST201` |
+| Session page | `src/lib/sessions.ts` | `getSession(id: string): Promise<SessionDetail \| null>` | S6 [#52](https://github.com/jhdaws/study-buddy/issues/52) | **New in S6.** | One session with its roster: `SessionListItem` (without M4's `lat`/`lng` — the page has no map) plus `status`, `hostId` and `attendees` (`{ userId, displayName, isHost, major, classYear }` — the last two from the academic profile, US-11 — the host first, then by `joined_at`). Null for no such session, and for an id that is not a uuid without querying (Postgres would raise 22P02). Unlike `listSessions()` it does **not** drop cancelled or ended sessions: the page says what happened. Same named host embed as `listSessions()`; the roster's own `profiles (display_name)` is unambiguous. Never selects an email (US-25) |
 | Departments | `src/lib/sessions.ts` | `listDepartments(): Promise<Department[]>` | S4 [#21](https://github.com/jhdaws/study-buddy/issues/21) | **Replaced by S4.** | Done: `departments` where `merged_into is null`, ordered by code |
 | Course search | `src/lib/sessions.ts` | `searchCourses(departmentCode: string, query: string): Promise<CourseSuggestion[]>` | S4 [#21](https://github.com/jhdaws/study-buddy/issues/21), with S2's [#19](https://github.com/jhdaws/study-buddy/issues/19) normalisers | **Replaced by S4.** | Done: `normalizeDepartmentCode()`, and `[]` for one that normalises away (never an error — the host may be typing a department that does not exist yet); `merged_into is null`; `number.ilike.<normalised>%` or `title.ilike.%<query>%`, and no filter at all for an empty query; `sessions (count)` for `sessionCount`. **Ranked in TypeScript, not SQL**: the count is an embedded aggregate and PostgREST cannot `ORDER BY` one, so rows come back unordered, are sorted by count then number, then cut to `COURSE_SUGGESTION_LIMIT`. The query is reduced to letters, digits and spaces first: it reaches PostgREST's `or=(…)` as a **string**, so a comma or bracket would be read as filter syntax, and a `%` would match every course |
 | Course search over HTTP | `src/app/api/courses/route.ts` | `GET /api/courses?department=CS&q=32` → `200 CourseSuggestion[]`, or `400 { error }` without `department` | S4 [#21](https://github.com/jhdaws/study-buddy/issues/21) | Calls `searchCourses()` — not itself a stub | Should not need to change. If signed-out callers should get `401` rather than `[]`, check `getCurrentUser()` here; never make the proxy redirect `/api/*` |
 | Course search from the client | `src/lib/course-search.ts` | `fetchCourseSuggestions(departmentCode: string, query: string, options?: { signal?: AbortSignal }): Promise<CourseSuggestion[]>` | W4 — not a stub | Works as is | — |
-| Resolve a place | `src/lib/places.ts` | `resolvePlace(placeId: string, options?: { sessionToken?: string }): Promise<ResolvedPlace>`; throws `PlaceError` | M3 [#24](https://github.com/jhdaws/study-buddy/issues/24) | **Replaced by M3** (rules in `geo.ts` and `place-policy.ts`, unit tested; never yet run against Google or a database). Until M2: a fixture ID (`ChIJ-FAKE-…`) still returns its fixture location ID, with no Google call and no write — but only outside a production build, or while the deployment has no `GOOGLE_MAPS_SERVER_API_KEY`. A production build with the key refuses them as `unknown_place`. Any other ID, in a production build, is refused as `lookup_failed` before Google is called unless `getCurrentUser()` finds a signed-in user — so the real path stays closed in production until A4 | Place Details (New) with the server key; check distance from `CAMPUS_CENTER` and place type; upsert `locations` on `place_id` with Google's coordinates, using `SUPABASE_SECRET_KEY`; `PlaceError` for every refusal, never Google's or Postgres's text. M2 may pass its Autocomplete session token as `options.sessionToken` (a form field to add) |
-| Location picker | `src/components/LocationPicker.tsx` | `<LocationPicker name? id? defaultValue? onSelect? required? disabled? aria-invalid? aria-describedby? />` | M2 [#23](https://github.com/jhdaws/study-buddy/issues/23) | A `<select>` of the three fixture places | Places Autocomplete (New) with `locationRestriction` (circle of `CAMPUS_RADIUS_METERS` around `CAMPUS_CENTER`), `includedPrimaryTypes` excluding residences, session tokens; submits a place ID, never coordinates; calls `onSelect({ placeId, label })` |
+| Resolve a place | `src/lib/places.ts` | `resolvePlace(placeId: string, options?: { sessionToken?: string }): Promise<ResolvedPlace>`; throws `PlaceError` | M3 [#24](https://github.com/jhdaws/study-buddy/issues/24) | **Replaced by M3** (rules in `geo.ts` and `place-policy.ts`, unit tested; run against Google and a local database once, in M2's manual check). Without a browser Maps key the picker still offers the fixture places: a fixture ID (`ChIJ-FAKE-…`) still returns its fixture location ID, with no Google call and no write — but only outside a production build, or while the deployment has no `GOOGLE_MAPS_SERVER_API_KEY`. A production build with the key refuses them as `unknown_place`. Any other ID, in a production build, is refused as `lookup_failed` before Google is called unless `getCurrentUser()` finds a signed-in user — so the real path stays closed in production until A4 | Place Details (New) with the server key; check distance from `CAMPUS_CENTER` and place type; upsert `locations` on `place_id` with Google's coordinates, using `SUPABASE_SECRET_KEY`; `PlaceError` for every refusal, never Google's or Postgres's text. M2 passes its Autocomplete session token as `options.sessionToken` (the form field `placeSessionToken`, via `createSession()`) |
+| Location picker | `src/components/LocationPicker.tsx` | `<LocationPicker name? id? defaultValue? onSelect? required? disabled? aria-invalid? aria-describedby? />` | M2 [#23](https://github.com/jhdaws/study-buddy/issues/23) | **Replaced by M2** when `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` is set (`PlacesPicker.tsx`, over `src/lib/place-search.ts`; also submits `placeSessionToken`, and shows `LocationMap` once a place is chosen). Without the key — CI, previews — it is still the `<select>` of the three fixture places | Places Autocomplete (New) with `locationRestriction` (circle of `CAMPUS_RADIUS_METERS` around `CAMPUS_CENTER`), `includedPrimaryTypes` excluding residences, session tokens; submits a place ID, never coordinates; calls `onSelect({ placeId, label })` |
 | Form rules | `src/lib/validation.ts` | `signInSchema`, `displayNameSchema`, `createSessionSchema(now?: Date)` | W4; S2 [#19](https://github.com/jhdaws/study-buddy/issues/19) replaces the two course placeholders | Real, not stubs — unit tested in `validation.test.ts` | S2 swaps the `departmentCode` and `courseNumber` placeholder rules for its normalisers. Every rule here should have a database twin (S1, A2) |
+| Delete my account | `src/app/account/actions.ts` | `deleteAccount(prev: DeleteAccountState, formData: FormData): Promise<DeleteAccountState>`; `type DeleteAccountState = FormState<DeleteAccountField>` | P2 (US-24) — **new** | — | `requireUser()` → `deleteAccountSchema` (the `confirm` checkbox, `"yes"`) → `createAdminClient().auth.admin.deleteUser(<the caller's id>)` — a hard delete; the id is never read from the form (ADR 0010) → `signOut({ scope: "local" })` → `redirect("/?account=deleted")`, where the home page confirms it. The database does the rest (ADR 0008 rule 5; `*_delete_account.sql`'s trigger cancels hosted sessions that have not ended). Errors via `deleteAccountErrorMessage()`; `user_not_found` counts as done. The form is `<DeleteAccountForm>` on **`/account/delete`** (proxy-protected) |
+| Report a user | `src/app/reports/actions.ts` | `reportUser(prev: ReportUserState, formData: FormData): Promise<ReportUserState>`; `type ReportUserState = FormState<ReportUserField> & { sent? }` | P3 (US-18) — **new** | — | `requireUser()` → `reportUserSchema` (`reportedUserId` and `sessionId` hidden, from the roster; `reason`: the `report_reason` enum; `note`: trimmed, blank → null, ≤ 500) → refuses yourself → `insert` into `reports` **without** `.select()` (students cannot read reports, their own included) and **without** a reporter: the database sets `reporter_id` from `auth.uid()`, and clients have no privilege to name it → `{ sent: true }`. At most `REPORTS_PER_DAY` (5) per rolling day, enforced by a trigger (`report_limit_reached`, HTTP 429). Errors via `databaseErrorMessage()`. The form is `<ReportUserForm>`, opened from each roster entry but your own in `<SessionRoster>`. The team reads reports in the Supabase dashboard |
 
 `createSession`, `signIn`, `verifyCode`, `signInWithPassword`, `setPassword`, `saveDisplayName` and `signOut` live in
 `"use server"` files, so they are Server Functions: a form can use them
@@ -96,6 +98,8 @@ export type SessionListItem = {
   topic: string;
   locationLabel: string;
   room: string | null;
+  lat: number;           // added by M4: the `locations` row's, for the map
+  lng: number;
   startsAt: string;      // ISO 8601, UTC
   endsAt: string;        // ISO 8601, UTC
   capacity: number;      // host included, >= 2
@@ -141,7 +145,8 @@ export type LocationPickerProps = {
 - **Field names are the schema keys.** Sign-in: `email`. Name step:
   `displayName` (plus an optional hidden `next`). Create session:
   `departmentCode`, `courseNumber`, `topic`, `room`, `placeId` (the picker
-  submits it), `locationLabel`, `startsAt`, `endsAt`, `capacity`.
+  submits it, and with a Maps key `placeSessionToken` too), `locationLabel`,
+  `startsAt`, `endsAt`, `capacity`.
 - **`useActionState(action, {})`.** Every state type accepts `{}` as the
   initial state. A `"use server"` file can export only async functions, so
   there is no exported initial-state constant.
@@ -256,7 +261,7 @@ Handler**:
   names and SQLSTATEs to the two tables; it should not need a new function.
 - **The display-name route** is `/login/name?next=…` (A4). `/auth/confirm`,
   `verifyCode()` and `requireUser()` send nameless students there.
-- **Cancelling and chat** are later sprints.
+- **Cancelling** (S7) and **chat** (C1) have landed; chat's seam is below.
 
 ## Joining and leaving (S5), for S6 to wire up
 
@@ -307,3 +312,42 @@ click (a UX nicety — the function refuses it either way), showing "You're
 hosting" instead of a button for the host, and the roster itself. All S6
 (`src/components/SessionRoster.tsx`, `src/app/sessions/[id]/page.tsx`), which
 has landed: `rosterAction()` in `src/lib/roster.ts` picks the button.
+
+**Live roster (2026-10-26).** `subscribeToRoster(client, sessionId, onChange)`
+in `src/lib/live-roster.ts` returns a function that stops listening. It calls
+`onChange` — coalesced, at most once per 250 ms — when anyone joins or leaves
+that session, and once each time the channel (re)subscribes, to catch up on
+anything missed. It never says *what* changed: `<SessionRoster>` answers with
+`router.refresh()`, so the roster on screen is always `getSession()`'s. It
+waits for `client.realtime.setAuth()` before joining the channel; without
+that, a freshly loaded page joins signed out and receives nothing. A future
+Realtime feature (US-05's chat) should do the same, and add its table to
+`tests/db/live-roster.test.ts`'s publication allowlist on purpose.
+
+## Session chat (C1, US-05)
+
+**Database.** `session_messages (id, session_id, author_id, body, created_at)`
+(`*_session_chat.sql`). Attendees — the host included — SELECT a session's
+messages and INSERT `(session_id, body)`; `author_id` is the database's
+default, `auth.uid()`, and no client can name it or `created_at`. No UPDATE or
+DELETE for anyone. Posting is refused (RLS, `42501`) once the session is
+cancelled or ended more than `CHAT_OPEN_DAYS_AFTER_END` (7) days ago. A
+deleted account leaves its messages with `author_id` null ("Deleted user").
+The table is in the `supabase_realtime` publication; anon has no privilege.
+
+**Reading.** `listMessages(sessionId): Promise<ChatMessage[]>` in
+`src/lib/messages.ts` (server only): the latest `CHAT_HISTORY_LIMIT` (200),
+oldest first. Returns `[]` for a non-attendee (RLS), so the page asks
+`chatAccess(session, viewerId, now)` (`src/lib/chat.ts`: `"hidden"`,
+`"open"` or `"closed"`) first and does not call it for `"hidden"`.
+
+**Writing.** `sendMessage(sessionId, prev, formData)` in
+`src/app/sessions/actions.ts`, bound like `joinSession`. One field, `body`
+(`chatMessageSchema`: trimmed, 1–1000). Returns `{}` on success, or
+`FormState` with the typed text back in `values.body`. A refusal is mapped by
+`chatErrorMessage()` in `src/lib/errors.ts`.
+
+**Live.** `subscribeToChat(client, sessionId, onChange)` in
+`src/lib/live-roster.ts`, the same contract as `subscribeToRoster`: INSERTs
+for that session only, coalesced, once more on each (re)subscribe, after
+`realtime.setAuth()`. `<SessionChat>` answers with `router.refresh()`.

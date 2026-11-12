@@ -110,6 +110,31 @@ spends its first hour rediscovering the same dead end.
 - `npm audit --omit=dev` on main: `next` 16.4.0 is critical (fixed in 16.4.4), `sharp` and `source-map-js` high. Dependabot #71 only goes to `next` 16.4.2.
 - Do not run scanners or attacks against Vercel or Supabase themselves (Sprint 4 brief); test only our own build and deployment.
 
+## 2026-10-26 · Live roster: the session page updates while you watch
+
+**Branch:** `claude/jolly-ride-uvgcww` (the session's assigned branch, not a ticket-named one), from `main` at `3e89506` · **Commits made:** this PR
+
+### What changed
+- Nate asked for "a feature and a PR" with nothing assigned to him; of the options offered he chose the live roster, the gap S6's entry below names. S6 was his ticket.
+- `supabase/migrations/20261026022048_live_roster.sql` — `session_attendees` into the `supabase_realtime` publication, and `revoke all ... from anon` on it (why: below).
+- `src/lib/live-roster.ts` (new) and `<SessionRoster>` — listen, then `router.refresh()`; never apply a payload. Details in the file's header and `docs/contracts.md`.
+- `.github/workflows/ci.yml` — the `e2e` job now starts Realtime, for journey 5.
+
+### Verified versus assumed
+- **Verified, locally, on a full Supabase stack (Docker worked this time):** `npm run test:db` (111, including 3 new), all 8 e2e journeys three times on Realtime plus once on exactly CI's `supabase start -x ...` list, lint/typecheck/unit/coverage. A Node script drove the real `subscribeToRoster()` as four students (scratch, not committed).
+- **Not verified:** the hosted project. deploy-db.yml applies the migration after merge; nobody has watched a roster update on production. Either deploy order is safe: the old app never reads this table signed out, and the new app on an old database just gets no events (roster still fresh on reload).
+
+### Things the next agent should be careful about
+- **Realtime sends DELETE events without RLS**, unfiltered, to every subscriber. Before the revoke, a signed-out listener got every leave's `(session_id, user_id)`. After it, joins arrive as `401 Unauthorized` and leaves as empty records: timing only, no ids. US-05's chat will hit the same rule — check what a signed-out *and* a non-attendee listener receive before shipping it.
+- **Call `realtime.setAuth()` before subscribing.** Otherwise a freshly loaded page joins before supabase-js has read the session cookie, joins as anon, and Realtime refuses the filtered subscription; the late token is never sent. A Node test that signs in first does not show this — only a real browser did (journey 5 failed until the fix).
+- `tests/db/live-roster.test.ts` pins the publication to an allowlist. Adding a table is meant to fail it until someone updates it on purpose.
+- Realtime can deliver an event committed just before the subscription (the host's own seat, here). Harmless — one extra refresh — but count changes as deltas in any test.
+- **`next build` stopped twice with `SecurityFatalError`** ("your version of Next.js is affected by a known security vulnerability", 16.4.0), then built on retry. Not upgraded here: out of scope. CI may or may not show it.
+- Playwright 1.64 wants a newer Chromium than this container's `/opt/pw-browsers`; I ran the suite through a scratch config setting `launchOptions.executablePath`. The repo config is unchanged.
+
+### Open questions for the user
+- Upgrade Next.js past 16.4.0 for the vulnerability `next build` reports? Not started.
+
 ## 2026-10-19 · A6: email + password sign-in; BUG-15 department select
 
 **Branch:** `a6-us-01-password-sign-in` · **Commits made:** this PR (BUG-15 merged separately in #81)

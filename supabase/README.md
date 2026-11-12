@@ -175,35 +175,37 @@ one. Same subject and body for both:
 - **Body:** paste the whole of
   [`templates/magic_link.html`](./templates/magic_link.html), unchanged.
 
-What the template does: it carries **the code (`{{ .Token }}`) and nothing
-else**. Students type it into `/login` (A3's `verifyCode()`); it works on any
-device, whichever one opened the email.
+What the template does: it carries **only the code (`{{ .Token }}`)**, no
+link. Students type it into `/login` (A3's `verifyCode()`).
 
-**Codes, not magic links.** Supabase has no "send codes" switch:
-`signInWithOtp()` always sends the *Magic link* (or *Confirm signup*)
-template, and the template alone decides whether the student gets a link,
-a code, or both. Supabase's default template contains only a link
-(`{{ .ConfirmationURL }}`), so **until this template is pasted into the
-dashboard (which needs custom SMTP first, above), production emails have no
-code in them.** Ours contains only
-`{{ .Token }}`. The link was dropped on 2026-10-12: Vanderbilt mail goes
-through Microsoft Outlook, whose link scanning can open a link before the
-student does and spend the one-time token (Supabase's email-template docs
-warn about this), and the link and the code are the same token, so a
-scanned link also broke the code. With no link in the email there is
-nothing to scan.
+**Why no link (2026-11-11).** Vanderbilt mail goes through Microsoft Outlook,
+which junked or quarantined our sign-in emails while they carried a link to
+the site; the code-only email arrives. History: the link was dropped on
+2026-10-12, restored on 2026-11-09 (with the `/login/continue` button, so
+Outlook's link scanner could not spend the token), and dropped again on
+2026-11-11. `/auth/confirm` and `/login/continue` still work, for links
+already in inboxes, and `signIn()` still sets `emailRedirectTo` for them.
+Supabase has no "send codes" switch: `signInWithOtp()` always sends the
+*Magic link* (or *Confirm signup*) template, and the template alone decides
+what the student gets.
 
-`/auth/confirm` still exists and `signIn()` still passes `emailRedirectTo`:
-until the template can be changed, Supabase's default link email is what
-production sends, and it lands there.
+**If an email still doesn't arrive:** check Junk, Focused Inbox's *Other*
+tab, and Microsoft's quarantine (`security.microsoft.com/quarantine`,
+signed in with the Vanderbilt account). A first email from a new sender can
+be held for 10–30 minutes, by which time its code has expired; ask for
+another. Sending from a personal Gmail account is what Microsoft trusts
+least; a domain with SPF/DKIM through a provider (step 4) is the lasting fix.
 
 ### 3. Authentication → Sign In / Providers → Email
 
 - **Email OTP Length:** check it. The form accepts 6 to 10 digits, the
   whole range Supabase allows, so any value works; 6 matches `config.toml`.
   Some hosted projects reportedly default to 8.
-- **Email OTP Expiration:** 3600 seconds (one hour) — the default, and what
-  the email and `/login` tell students.
+- **Email OTP Expiration: 600 seconds** (10 minutes), the same as
+  `otp_expiry` in `config.toml`, and what the email and `/login` tell
+  students. Not Supabase's one-hour default: a wrong guess never uses up a
+  code, so its lifetime is the whole guessing window (SEC-12). Ten minutes
+  cuts that window to a sixth.
 - Leave **Confirm email** on — and see step 7 for the password settings.
 
 ### 4. Email delivery and rate limits — matters for the demo

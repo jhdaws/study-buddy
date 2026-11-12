@@ -50,6 +50,18 @@ export const ROOM_MAX_LENGTH = 50;
  */
 export const DEPARTMENT_CODE_MAX_LENGTH = 10;
 
+/**
+ * SEC-03: how many new departments -- and, counted separately, how many new
+ * courses -- one student may add, per rolling hour and per rolling day. A
+ * sanity limit against scripted junk in the shared picker, far above normal
+ * use. THE DATABASE IS THE ENFORCEMENT: a trigger in
+ * *_catalogue_insert_limit.sql, which a direct PostgREST insert cannot skip.
+ * These copies only word the error message (errors.ts) and size the tests.
+ * Change one, change the other.
+ */
+export const CATALOGUE_INSERTS_PER_HOUR = 10;
+export const CATALOGUE_INSERTS_PER_DAY = 30;
+
 /** The host counts as one (ADR 0008 rule 2). S1: `CHECK (capacity >= 2)`. */
 export const MIN_CAPACITY = 2;
 
@@ -61,6 +73,32 @@ export const MIN_CAPACITY = 2;
 export const MAX_CAPACITY = 2_147_483_647;
 
 /**
+ * R1/US-16: the optional note on a study request ("Tue or Wed evening would
+ * suit me"). A request is a nudge, not a post -- 200 is roughly two lines on
+ * a phone, which is as much as the list can show without burying the count.
+ * Mirrored as `study_requests_note_length` in *_r1_study_requests.sql.
+ */
+export const STUDY_REQUEST_NOTE_MAX_LENGTH = 200;
+
+/**
+ * How long a study request stays live. Set by the BEFORE INSERT trigger in
+ * *_r1_study_requests.sql, which is the only writer -- this constant is for
+ * the copy ("asks expire after 7 days") and the tests, NOT a second source of
+ * truth. Change both together.
+ */
+export const STUDY_REQUEST_DAYS = 7;
+
+/**
+ * S10/US-20: how many weekly copies a host may create in one go, inclusive.
+ * 2 is the smallest series that is actually a repeat; 8 is about two months
+ * of the same slot, enough for a midterm stretch without a host locking the
+ * room for a whole semester. Enforced in create_sessions_weekly() as well as
+ * the form -- a direct RPC call cannot skip it.
+ */
+export const MIN_REPEAT_WEEKS = 2;
+export const MAX_REPEAT_WEEKS = 8;
+
+/**
  * How far in the past a start time may be and still count as "now".
  * `datetime-local` inputs have minute precision, so a host who picks the
  * current minute is already up to 59 seconds late by the time they submit.
@@ -68,3 +106,81 @@ export const MAX_CAPACITY = 2_147_483_647;
  * interval '5 minutes'`) or the database will reject what this accepts.
  */
 export const START_GRACE_MINUTES = 5;
+
+/**
+ * How long the Supabase auth cookies last on a device, in seconds (SEC-16,
+ * US-21). @supabase/ssr's default is 400 days, so a laptop left signed in
+ * stayed signed in for over a year. The cookies are rewritten whenever the
+ * session is refreshed, which happens on every visit after the hourly access
+ * token expires, so this is an inactivity limit: a device unused for 7 days
+ * is signed out; one in use is not.
+ *
+ * It does not end a stolen refresh token, which stays valid at Supabase
+ * until signed out. That needs Supabase's session time-box
+ * (`[auth.sessions]` in config.toml), a paid-plan feature.
+ */
+export const SESSION_COOKIE_MAX_AGE_SECONDS = 7 * 24 * 60 * 60;
+
+/** The cookie options every Supabase client in the app passes. */
+export const SUPABASE_COOKIE_OPTIONS = { maxAge: SESSION_COOKIE_MAX_AGE_SECONDS } as const;
+
+/**
+ * US-11: the academic profile. Major and minor are optional free text, 1 to
+ * 80 characters after trimming (blank is saved as null); mirrored as
+ * `profiles_major_check` and `profiles_minor_check` in
+ * *_academic_profile.sql. 80 fits a double major written out in full.
+ */
+export const MAJOR_MAX_LENGTH = 80;
+export const MINOR_MAX_LENGTH = 80;
+
+/**
+ * US-11: the most current courses one profile lists. A sanity limit (a
+ * full-time load is four to six), enforced by the `profile_courses_limit`
+ * trigger in *_academic_profile.sql. Change one, change the other.
+ */
+export const PROFILE_COURSES_MAX = 8;
+
+/**
+ * SEC-05: place lookups per student -- at most PLACE_LOOKUPS_PER_WINDOW in any
+ * rolling PLACE_LOOKUP_WINDOW_MINUTES. createSession() spends one before every
+ * resolvePlace(), accepted place or not, since each real place id is a billed
+ * Google call. THE DATABASE HOLDS AND ENFORCES THESE: the `place_lookup` row of
+ * private.rate_limit_rules (*_place_lookup_rate_limit.sql), which
+ * consume_rate_limit() reads -- it never takes a limit from its caller. These
+ * copies document it and size the tests, which check the two agree.
+ */
+export const PLACE_LOOKUPS_PER_WINDOW = 20;
+export const PLACE_LOOKUP_WINDOW_MINUTES = 10;
+
+/**
+ * US-18: a report's optional note, at most 500 characters after trimming
+ * (blank is saved as null). Mirrored as `reports_note_length` in
+ * *_reports.sql.
+ */
+export const REPORT_NOTE_MAX_LENGTH = 500;
+
+/**
+ * US-18: how many reports one student may send in any rolling 24 hours.
+ * THE DATABASE IS THE ENFORCEMENT -- the `reports_limit` trigger in
+ * *_reports.sql, which a direct API call cannot skip. This copy only words
+ * the error message. Change one, change the other.
+ */
+export const REPORTS_PER_DAY = 5;
+
+/**
+ * US-05: a chat message, 1 to 1000 characters after trimming. Mirrored as
+ * `session_messages_body_check` in *_session_chat.sql.
+ */
+export const CHAT_MESSAGE_MAX_LENGTH = 1000;
+
+/**
+ * US-05, ADR 0008 rule 4: a session's chat takes new messages until this many
+ * days after the session ends, then is read-only. THE DATABASE IS THE
+ * ENFORCEMENT -- the `session_messages_insert_attendees` policy in
+ * *_session_chat.sql; this copy only decides whether to show the send form.
+ * Change one, change the other.
+ */
+export const CHAT_OPEN_DAYS_AFTER_END = 7;
+
+/** How many of a session's most recent messages the page loads. */
+export const CHAT_HISTORY_LIMIT = 200;

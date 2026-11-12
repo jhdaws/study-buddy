@@ -49,7 +49,8 @@ export function supabaseEnv(): { url: string; anonKey: string } {
 /**
  * Supabase secret key. SERVER ONLY: it bypasses Row Level Security on every
  * table. Read by src/lib/supabase/admin.ts and nowhere else, which uses it
- * only to write `locations` (ADR 0008 rule 12).
+ * only to write `locations` (ADR 0008 rule 12) and to delete the signed-in
+ * student's own account (US-24, ADR 0010).
  */
 export function supabaseSecretKey(): string {
   const key = required("SUPABASE_SECRET_KEY", process.env.SUPABASE_SECRET_KEY);
@@ -72,6 +73,30 @@ export function googleMapsBrowserKey(): string {
     "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY",
     process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
   );
+}
+
+/**
+ * The browser key, or null when this deployment has none -- CI and Vercel
+ * previews, for a start. For UI that must work without Google: the session
+ * map (M4) shows "Map unavailable" instead, and the list never needs it.
+ * Like googleMapsBrowserKey(), inlined into the client bundle at build time.
+ */
+export function optionalGoogleMapsBrowserKey(): string | null {
+  return process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || null;
+}
+
+/**
+ * Google's public test map ID. Advanced Markers need *a* map ID; this one
+ * works with any key, with Google's default styling.
+ */
+export const DEMO_MAP_ID = "DEMO_MAP_ID";
+
+/**
+ * The map ID for the session map (M4), from the Google Cloud console (Map
+ * Management). Not a secret. Optional: without one the map uses DEMO_MAP_ID.
+ */
+export function googleMapsMapId(): string {
+  return process.env.NEXT_PUBLIC_GOOGLE_MAPS_MAP_ID || DEMO_MAP_ID;
 }
 
 /** Server-side Places key. Server only; restrict it by API and a daily quota, not IP (ADR 0008). */

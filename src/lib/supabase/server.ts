@@ -15,6 +15,7 @@ import { cache } from "react";
 import type { Database } from "@/lib/database.types";
 import { mayChoosePassword } from "@/lib/password-change";
 import { supabaseEnv } from "@/lib/env";
+import { SUPABASE_COOKIE_OPTIONS } from "@/lib/limits";
 import {
   displayNamePath,
   loginPath,
@@ -31,6 +32,7 @@ export async function createClient() {
   const { url, anonKey } = supabaseEnv();
 
   return createServerClient<Database>(url, anonKey, {
+    cookieOptions: SUPABASE_COOKIE_OPTIONS, // SEC-16: see limits.ts
     cookies: {
       getAll() {
         return cookieStore.getAll();

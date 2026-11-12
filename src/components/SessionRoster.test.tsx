@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { joinSession, leaveSession } from "@/app/sessions/actions";
+import { subscribeToRoster } from "@/lib/live-roster";
 import type { Attendee } from "@/lib/sessions";
 
 import SessionRoster, { type SessionRosterProps } from "./SessionRoster";
@@ -9,11 +10,21 @@ import SessionRoster, { type SessionRosterProps } from "./SessionRoster";
 // The real actions are a "use server" module that imports server-only code;
 // the database's side of joining is tested in tests/db/join-leave-session.test.ts.
 vi.mock("@/app/sessions/actions", () => ({ joinSession: vi.fn(), leaveSession: vi.fn() }));
+// Same for the report action (US-18); tests/db/reports.test.ts has its rules.
+vi.mock("@/app/reports/actions", () => ({ reportUser: vi.fn() }));
+// Same for block/unblock (US-22); tests/db/blocks.test.ts has its rules.
+vi.mock("@/app/blocks/actions", () => ({ blockUser: vi.fn(), unblockUser: vi.fn() }));
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
+// The subscription itself is tested in src/lib/live-roster.test.ts; here,
+// only whether the roster listens, and what it does when told of a change.
+const stopListening = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/live-roster", () => ({ subscribeToRoster: vi.fn(() => stopListening) }));
+vi.mock("@/lib/supabase/client", () => ({ createClient: () => "browser-client" }));
 
 const joinMock = vi.mocked(joinSession);
 const leaveMock = vi.mocked(leaveSession);
+const subscribeMock = vi.mocked(subscribeToRoster);
 
 const SESSION = "11111111-1111-4111-8111-111111111111";
 const attendees: Attendee[] = [
@@ -33,6 +44,18 @@ function renderRoster(overrides: Partial<SessionRosterProps> = {}) {
       {...overrides}
     />,
   );
+}
+
+/**
+ * The join/leave buttons, leaving out the per-entry Block (US-22) and Report
+ * (US-18) buttons, which every roster has -- a session that has ended can
+ * still be blocked or reported.
+ */
+function rosterButtons(): HTMLElement[] {
+  return screen.queryAllByRole("button").filter((button) => {
+    const label = button.getAttribute("aria-label") ?? "";
+    return !label.startsWith("Report ") && !label.startsWith("Block ") && !label.startsWith("Unblock ");
+  });
 }
 
 async function click(name: string) {
@@ -56,9 +79,32 @@ describe("SessionRoster", () => {
     renderRoster({ viewerId: "me", action: "leave" });
 
     const items = within(screen.getByRole("list")).getAllByRole("listitem");
-    expect(items.map((item) => item.textContent)).toEqual(["PPriyaHost", "AAlex (you)"]);
+    // Everyone but the viewer has Block (US-22) and Report (US-18) buttons.
+    expect(items.map((item) => item.textContent)).toEqual([
+      "PPriyaHostBlockReport",
+      "AAlex (you)",
+    ]);
     expect(screen.getByText("2 of 4 going")).toBeTruthy();
     expect(screen.getByText("2 seats left")).toBeTruthy();
+  });
+
+  it("shows each attendee's major and year under their name when they gave them (US-11)", () => {
+    renderRoster({
+      attendees: [
+        { userId: "host", displayName: "Priya", isHost: true, major: "Computer Science", classYear: "junior" },
+        { userId: "me", displayName: "Alex", isHost: false, major: null, classYear: "graduate" },
+        { userId: "sam", displayName: "Sam", isHost: false, major: null, classYear: null },
+      ],
+    });
+
+    const items = within(screen.getByRole("list")).getAllByRole("listitem");
+    // The viewer is someone else, so every entry also ends in Block (US-22)
+    // and Report (US-18).
+    expect(items.map((item) => item.textContent)).toEqual([
+      "PPriyaComputer Science · JuniorHostBlockReport",
+      "AAlexGraduate studentBlockReport",
+      "SSamBlockReport",
+    ]);
   });
 
   it("joins this session when Join is pressed (US-04)", async () => {
@@ -101,20 +147,121 @@ describe("SessionRoster", () => {
     renderRoster({ viewerId: "host", action: "hosting" });
 
     expect(screen.getByText("You're hosting this session.")).toBeTruthy();
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(rosterButtons()).toEqual([]);
   });
 
   it("says a cancelled session was cancelled, with no button", () => {
     renderRoster({ action: "cancelled" });
 
     expect(screen.getByRole("status").textContent).toBe("The host cancelled this session.");
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(rosterButtons()).toEqual([]);
   });
 
   it("says an ended session has ended, with no button", () => {
     renderRoster({ action: "ended" });
 
     expect(screen.getByText("This session has ended.")).toBeTruthy();
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(rosterButtons()).toEqual([]);
+  });
+});
+
+describe("SessionRoster: reporting someone (US-18)", () => {
+  it("offers Report on everyone but the viewer", () => {
+    renderRoster({ viewerId: "me", action: "leave" });
+    expect(screen.getByRole("button", { name: "Report Priya" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Report Alex" })).toBeNull();
+  });
+
+  it("names a student with no display name yet neutrally", () => {
+    renderRoster({
+      attendees: [{ userId: "anon", displayName: null, isHost: false }],
+    });
+    expect(screen.getByRole("button", { name: "Report this student" })).toBeTruthy();
+  });
+
+  it("opens one report form, for that student and this session, and closes it again", () => {
+    renderRoster({ viewerId: "me", action: "leave" });
+    const report = screen.getByRole("button", { name: "Report Priya" });
+    expect(report.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(report);
+    expect(report.getAttribute("aria-expanded")).toBe("true");
+    const form = screen.getByRole("form", { name: "Report Priya" }) as HTMLFormElement;
+    const data = new FormData(form);
+    expect(data.get("reportedUserId")).toBe("host");
+    expect(data.get("sessionId")).toBe(SESSION);
+
+    fireEvent.click(within(form).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("form", { name: "Report Priya" })).toBeNull();
+  });
+
+  it("still offers Report once a session has ended or been cancelled", () => {
+    for (const action of ["ended", "cancelled"] as const) {
+      renderRoster({ action });
+      expect(screen.getByRole("button", { name: "Report Priya" })).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it("is a 44px target (ADR 0004)", () => {
+    renderRoster();
+    expect(screen.getByRole("button", { name: "Report Priya" }).className).toContain("min-h-11");
+  });
+
+  describe("live roster", () => {
+    it.each(["join", "full", "leave", "hosting"] as const)(
+      "listens for joins and leaves while the viewer could act (%s)",
+      (action) => {
+        renderRoster({ action });
+
+        expect(subscribeMock).toHaveBeenCalledTimes(1);
+        expect(subscribeMock.mock.calls[0][0]).toBe("browser-client");
+        expect(subscribeMock.mock.calls[0][1]).toBe(SESSION);
+      },
+    );
+
+    it.each(["cancelled", "ended"] as const)("does not listen once nothing can change (%s)", (action) => {
+      renderRoster({ action });
+      expect(subscribeMock).not.toHaveBeenCalled();
+    });
+
+    it("refreshes the page when someone else joins or leaves", () => {
+      renderRoster();
+      expect(router.refresh).not.toHaveBeenCalled();
+
+      const onChange = subscribeMock.mock.calls[0][2];
+      act(() => onChange());
+
+      expect(router.refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops listening when the roster leaves the page", () => {
+      renderRoster();
+      expect(stopListening).not.toHaveBeenCalled();
+
+      cleanup();
+      expect(stopListening).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps one subscription when fresh props arrive", () => {
+      const props: SessionRosterProps = {
+        sessionId: SESSION,
+        capacity: 4,
+        seatsLeft: 2,
+        attendees,
+        viewerId: "someone-else",
+        action: "join",
+      };
+      const { rerender } = render(<SessionRoster {...props} />);
+      rerender(<SessionRoster {...props} seatsLeft={0} action="full" />);
+
+      expect(subscribeMock).toHaveBeenCalledTimes(1);
+      expect(stopListening).not.toHaveBeenCalled();
+    });
+
+    it("announces the going count politely, so a screen reader hears it change", () => {
+      renderRoster();
+      expect(screen.getByText("2 of 4 going").getAttribute("aria-live")).toBe("polite");
+    });
   });
 });

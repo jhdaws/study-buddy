@@ -6,7 +6,10 @@ import {
   COURSE_SUGGESTION_LIMIT,
   getSession,
   listDepartments,
+  listMySessions,
+  listPastSessions,
   listSessions,
+  PAST_SESSIONS_LIMIT,
   searchCourses,
 } from "./sessions";
 
@@ -37,7 +40,7 @@ function fakeBuilder(result: Result, calls: Recorded) {
     then: (resolve: (value: Result) => unknown) => Promise.resolve(result).then(resolve),
   };
 
-  for (const method of ["select", "eq", "gt", "is", "or", "order", "limit", "maybeSingle"]) {
+  for (const method of ["select", "eq", "gt", "is", "in", "or", "order", "limit", "maybeSingle"]) {
     builder[method] = (...args: unknown[]) => {
       calls.push({ method, args });
       return builder;
@@ -53,12 +56,26 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 let calls: Recorded;
+// US-22: listSessions() also reads `blocks` (listBlockedUserIds()), a second
+// table the single-response `respond()` below knows nothing about. Defaults
+// to "nothing blocked" so every pre-existing test, which never heard of
+// blocks, keeps seeing exactly the rows it asks for.
+let blockedIds: string[] = [];
+
+/** The ids of the sessions test's viewer's blocked students, for this test only. */
+function respondBlocked(ids: string[]) {
+  blockedIds = ids;
+}
 
 /** Makes the next query return `data`, and records what it was asked for. */
 function respond(data: unknown, error: { message: string } | null = null) {
   calls = [];
+  blockedIds = [];
   db.from.mockImplementation((table: string) => {
     calls.push({ method: "from", args: [table] });
+    if (table === "blocks") {
+      return fakeBuilder({ data: blockedIds.map((id) => ({ blocked_id: id })), error: null }, calls);
+    }
     return fakeBuilder({ data, error }, calls);
   });
 }
@@ -75,6 +92,7 @@ const sessionRow = (overrides: Record<string, unknown> = {}) => ({
   ends_at: "2026-10-01T21:00:00+00:00",
   capacity: 6,
   courses: { department_code: "CS", number: "3251", title: "Intermediate Software Design" },
+  locations: { lat: 36.1452, lng: -86.8006 },
   profiles: { display_name: "Priya" },
   session_attendees: [{ count: 3 }],
   ...overrides,
@@ -100,6 +118,8 @@ describe("listSessions", () => {
         topic: "Dynamic programming",
         locationLabel: "Central Library",
         room: "418",
+        lat: 36.1452,
+        lng: -86.8006,
         startsAt: "2026-10-01T19:30:00+00:00",
         endsAt: "2026-10-01T21:00:00+00:00",
         capacity: 6,
@@ -157,6 +177,25 @@ describe("listSessions", () => {
     expect(String(callTo("select")?.[0])).toContain("session_attendees (count)");
   });
 
+  it("embeds each session's stored coordinates for the map (M4)", async () => {
+    respond([]);
+    await listSessions();
+
+    // The pin goes where resolvePlace() stored Google's coordinates -- the
+    // `locations` row -- never anywhere the host typed. `!inner`, like
+    // `courses!inner`: location_id is NOT NULL, so an empty embed can only
+    // mean a broken policy, and that session is better left out than pinned
+    // without coordinates.
+    expect(String(callTo("select")?.[0])).toContain("locations!inner (lat, lng)");
+  });
+
+  it("puts each session's coordinates on the list item, unrounded", async () => {
+    respond([sessionRow({ locations: { lat: 36.144_512_3, lng: -86.802_745_6 } })]);
+
+    const [session] = await listSessions();
+    expect([session.lat, session.lng]).toEqual([36.144_512_3, -86.802_745_6]);
+  });
+
   it("derives seats left from the roster", async () => {
     respond([sessionRow({ capacity: 4, session_attendees: [{ count: 1 }] })]);
 
@@ -202,6 +241,55 @@ describe("listSessions", () => {
 
     await expect(listSessions()).rejects.toThrow(/connection terminated/);
   });
+
+  // US-06: the course filter is the reason this function takes options. The
+  // assertion is on the REQUEST -- a mock can return any rows, so the only
+  // way to see that the database was asked for one course is to look at the
+  // filters. Ticket: "src/lib/sessions.test.ts asserts the exact query".
+  it("asks the database for one course when a course filter is set", async () => {
+    respond([]);
+    await listSessions({ course: { departmentCode: "CS", number: "3251" } });
+
+    expect(calls.filter((call) => call.method === "eq").map((call) => call.args)).toEqual([
+      ["status", "open"],
+      ["courses.department_code", "CS"],
+      ["courses.number", "3251"],
+    ]);
+  });
+
+  it("does not add course filters when none were asked for", async () => {
+    respond([]);
+    await listSessions();
+
+    // Only the status filter -- a stray courses.* eq would silently narrow
+    // every unfiltered visit.
+    expect(calls.filter((call) => call.method === "eq").map((call) => call.args)).toEqual([
+      ["status", "open"],
+    ]);
+  });
+
+  // US-22: a blocked host's sessions never show, as if they did not exist.
+  it("leaves out a session hosted by someone the viewer has blocked", async () => {
+    respond([
+      sessionRow({ host_id: "blocked-host" }),
+      sessionRow({ id: "22222222-2222-4222-8222-222222222222", host_id: "open-host" }),
+    ]);
+    respondBlocked(["blocked-host"]);
+
+    expect((await listSessions()).map((s) => s.id)).toEqual([
+      "22222222-2222-4222-8222-222222222222",
+    ]);
+  });
+
+  // A NOT IN filter in SQL drops a NULL host_id too (NULL IN (...) is
+  // neither true nor false) -- the JS filter below must not make the same
+  // mistake for a session whose host deleted their account.
+  it("keeps a session with no host, even when the viewer has blocks", async () => {
+    respond([sessionRow({ host_id: null })]);
+    respondBlocked(["someone-else"]);
+
+    expect(await listSessions()).toHaveLength(1);
+  });
 });
 
 // S6 (#52). Ids are uuids in the 4/8 variant, which is what Postgres hands out.
@@ -209,15 +297,19 @@ const HOST = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const EARLY = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const LATE = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
 
+const PLACE_ID = "ChIJ-central-library";
+
 const detailRow = (overrides: Record<string, unknown> = {}) =>
   sessionRow({
     status: "open",
     host_id: HOST,
+    // S7 (US-09): the edit form prefills <LocationPicker> from this.
+    locations: { place_id: PLACE_ID },
     // Deliberately out of order: the late joiner first, the host in the middle.
     session_attendees: [
-      { user_id: LATE, joined_at: "2026-10-01T18:00:00+00:00", profiles: { display_name: "Sam" } },
-      { user_id: HOST, joined_at: "2026-10-01T12:00:00+00:00", profiles: { display_name: "Priya" } },
-      { user_id: EARLY, joined_at: "2026-10-01T13:00:00+00:00", profiles: { display_name: "Alex" } },
+      { user_id: LATE, joined_at: "2026-10-01T18:00:00+00:00", profiles: { display_name: "Sam", major: null, class_year: null } },
+      { user_id: HOST, joined_at: "2026-10-01T12:00:00+00:00", profiles: { display_name: "Priya", major: "Computer Science", class_year: "junior" } },
+      { user_id: EARLY, joined_at: "2026-10-01T13:00:00+00:00", profiles: { display_name: "Alex", major: null, class_year: "first_year" } },
     ],
     ...overrides,
   });
@@ -247,11 +339,25 @@ describe("getSession", () => {
       status: "open",
       hostId: HOST,
       attendees: [
-        { userId: HOST, displayName: "Priya", isHost: true },
-        { userId: EARLY, displayName: "Alex", isHost: false },
-        { userId: LATE, displayName: "Sam", isHost: false },
+        { userId: HOST, displayName: "Priya", isHost: true, major: "Computer Science", classYear: "junior", isBlocked: false },
+        { userId: EARLY, displayName: "Alex", isHost: false, major: null, classYear: "first_year", isBlocked: false },
+        { userId: LATE, displayName: "Sam", isHost: false, major: null, classYear: null, isBlocked: false },
       ],
+      placeId: PLACE_ID,
     });
+  });
+
+  // US-22: marked from the viewer's OWN blocks, never the reverse.
+  it("marks an attendee the viewer has blocked", async () => {
+    respond(detailRow());
+    respondBlocked([EARLY]);
+
+    const session = await getSession(id);
+    expect(session?.attendees.map((a) => [a.userId, a.isBlocked])).toEqual([
+      [HOST, false],
+      [EARLY, true],
+      [LATE, false],
+    ]);
   });
 
   it("asks for that one session, by id", async () => {
@@ -279,7 +385,13 @@ describe("getSession", () => {
 
     const select = String(callTo("select")?.[0]);
     expect(select).toContain("profiles!sessions_host_id_fkey");
-    expect(select).toContain("session_attendees (user_id, joined_at, profiles (display_name))");
+    expect(select).toContain(
+      "session_attendees (user_id, joined_at, profiles (display_name, major, class_year))",
+    );
+    // S7 (US-09): the place id the edit form prefills from. `!inner` because
+    // location_id is NOT NULL -- every session has exactly one location, and
+    // the embed should not make the row optional.
+    expect(select).toContain("locations!inner (place_id)");
     // US-25: the roster is names only.
     expect(select).not.toContain("email");
   });
@@ -323,7 +435,10 @@ describe("getSession", () => {
     expect(session?.status).toBe("cancelled");
     expect(session?.hostId).toBeNull();
     expect(session?.hostDisplayName).toBeNull();
-    expect(session?.attendees).toEqual([{ userId: EARLY, displayName: "Alex", isHost: false }]);
+    // An embed without the profile's newer columns still maps: they are null.
+    expect(session?.attendees).toEqual([
+      { userId: EARLY, displayName: "Alex", isHost: false, major: null, classYear: null, isBlocked: false },
+    ]);
   });
 
   it("throws with the database's message when the query fails", async () => {
@@ -509,3 +624,100 @@ describe("searchCourses", () => {
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Home's readers (H1, #128; US-15, #133): the student's own roster.
+// ---------------------------------------------------------------------------
+
+/** Different rows per table: the roster read, then the sessions read. */
+function respondByTable(tables: Record<string, unknown>) {
+  calls = [];
+  db.from.mockImplementation((table: string) => {
+    calls.push({ method: "from", args: [table] });
+    return fakeBuilder({ data: tables[table] ?? [], error: null }, calls);
+  });
+}
+
+const ME = "22222222-2222-4222-8222-222222222222";
+
+describe("listMySessions", () => {
+  it("reads the student's roster rows, then those open, not-ended sessions, soonest first", async () => {
+    respondByTable({
+      session_attendees: [{ session_id: "s1" }, { session_id: "s2" }],
+      sessions: [
+        sessionRow({ id: "s1", host_id: ME, status: "open" }),
+        sessionRow({ id: "s2", host_id: "someone-else", status: "open" }),
+      ],
+    });
+
+    const mine = await listMySessions(ME);
+
+    expect(mine.map((s) => [s.id, s.hosting])).toEqual([
+      ["s1", true],
+      ["s2", false],
+    ]);
+    expect(calls.find((c) => c.method === "eq" && c.args[0] === "user_id")?.args).toEqual([
+      "user_id",
+      ME,
+    ]);
+    expect(callTo("in")).toEqual(["id", ["s1", "s2"]]);
+    expect(calls.filter((c) => c.method === "eq").map((c) => c.args)).toContainEqual([
+      "status",
+      "open",
+    ]);
+    expect(callTo("gt")).toEqual(["ends_at", "now"]);
+    expect(callTo("order")).toEqual(["starts_at", { ascending: true }]);
+  });
+
+  it("returns nothing, without a sessions query, when the student is on no roster", async () => {
+    respondByTable({ session_attendees: [] });
+
+    expect(await listMySessions(ME)).toEqual([]);
+    expect(calls.filter((c) => c.method === "from").map((c) => c.args[0])).toEqual([
+      "session_attendees",
+    ]);
+  });
+});
+
+describe("listPastSessions (US-15)", () => {
+  it("lists ended or cancelled sessions, most recent first, capped, flagging cancelled ones", async () => {
+    respondByTable({
+      session_attendees: [{ session_id: "s1" }, { session_id: "s2" }],
+      sessions: [
+        sessionRow({ id: "s2", host_id: "someone-else", status: "cancelled" }),
+        sessionRow({ id: "s1", host_id: ME, status: "open" }),
+      ],
+    });
+
+    const past = await listPastSessions(ME);
+
+    expect(past.map((s) => [s.id, s.hosting, s.cancelled])).toEqual([
+      ["s2", false, true],
+      ["s1", true, false],
+    ]);
+    expect(callTo("or")).toEqual(["status.eq.cancelled,ends_at.lte.now"]);
+    expect(callTo("order")).toEqual(["starts_at", { ascending: false }]);
+    expect(callTo("limit")).toEqual([PAST_SESSIONS_LIMIT]);
+  });
+
+  it("shows a host who deleted their account as null, for the \"Deleted user\" label", async () => {
+    respondByTable({
+      session_attendees: [{ session_id: "s1" }],
+      sessions: [sessionRow({ id: "s1", host_id: null, status: "open", profiles: null })],
+    });
+
+    const [session] = await listPastSessions(ME);
+    expect(session.hostDisplayName).toBeNull();
+    expect(session.hosting).toBe(false);
+  });
+
+  it("throws rather than showing an empty history when the roster read fails", async () => {
+    calls = [];
+    db.from.mockImplementation((table: string) => {
+      calls.push({ method: "from", args: [table] });
+      return fakeBuilder({ data: null, error: { message: "boom" } }, calls);
+    });
+    await expect(listPastSessions(ME)).rejects.toThrow("Could not load your sessions");
+  });
+});
+

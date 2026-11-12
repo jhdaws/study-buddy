@@ -1,12 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CHAT_CLOSED_MESSAGE,
+  chatErrorMessage,
   CODE_RATE_LIMITED_MESSAGE,
   CODE_REJECTED_MESSAGE,
   databaseErrorMessage,
+  DELETE_ACCOUNT_FAILED_MESSAGE,
+  deleteAccountErrorMessage,
   GENERIC_ERROR_MESSAGE,
+  mapUnavailableMessage,
   PASSWORD_REJECTED_MESSAGE,
   passwordSignInErrorMessage,
+  PLACE_SEARCH_BUSY_MESSAGE,
+  PLACE_SEARCH_FAILED_MESSAGE,
+  PLACE_SEARCH_OFFLINE_MESSAGE,
+  placeSearchErrorMessage,
   setPasswordErrorMessage,
   SIGN_IN_RATE_LIMITED_MESSAGE,
   signInErrorMessage,
@@ -128,6 +137,29 @@ describe("databaseErrorMessage: creating a session (S1-S3)", () => {
   });
 });
 
+// SEC-03: the catalogue trigger (*_catalogue_insert_limit.sql), as
+// supabase.rpc("get_or_create_course") or a direct insert hands it back.
+describe("databaseErrorMessage: the catalogue insert limit (SEC-03)", () => {
+  const raised = {
+    code: "PT429",
+    message: "catalogue_limit_reached",
+    details: "courses: 10 added in the last hour, 10 in the last day",
+  };
+
+  it("maps catalogue_limit_reached to the limit, in the student's words", () => {
+    expect(databaseErrorMessage(raised)).toBe(
+      "You've added a lot of new courses and departments lately — the limit is 10 of each an " +
+        "hour and 30 a day. Choose one that's already listed, or try again later.",
+    );
+  });
+
+  it("never shows the trigger's details, which name the table", () => {
+    const message = databaseErrorMessage(raised);
+    expect(message).not.toMatch(RAW_TEXT);
+    expect(message).not.toMatch(/catalogue_limit_reached|added in the last|PT429/);
+  });
+});
+
 // What join_session and leave_session can raise (S5).
 describe("databaseErrorMessage: joining and leaving a session (S5)", () => {
   it.each([
@@ -138,8 +170,96 @@ describe("databaseErrorMessage: joining and leaving a session (S5)", () => {
     ["session_full", "This session is full."],
     ["not_joined", "You're not on the roster for this session."],
     ["host_cannot_leave", "As the host, you can't leave — cancel the session instead."],
+    // P4 (US-22): the host has blocked the caller. Worded like any other
+    // refusal on purpose -- never "blocked".
+    ["cannot_join_session", "You can't join this session."],
+    // S7 (US-09): update_session and cancel_session.
+    ["not_session_host", "Only the host can change or cancel this session."],
+    [
+      "capacity_below_roster",
+      "That's fewer seats than the students already coming. Nobody is removed by an edit.",
+    ],
   ])("maps the raised message %j", (message, expected) => {
     expect(databaseErrorMessage({ message, code: "P0001" })).toBe(expected);
+  });
+});
+
+describe("placeSearchErrorMessage (M2)", () => {
+  it("says the search is busy when Google's quota answers 429", () => {
+    expect(placeSearchErrorMessage({ status: 429 })).toBe(PLACE_SEARCH_BUSY_MESSAGE);
+  });
+
+  it.each([400, 403, 500, 503])("gives HTTP %i the general message", (status) => {
+    expect(placeSearchErrorMessage({ status })).toBe(PLACE_SEARCH_FAILED_MESSAGE);
+  });
+
+  it("blames the connection when no answer came back at all", () => {
+    expect(placeSearchErrorMessage(new TypeError("Failed to fetch"))).toBe(
+      PLACE_SEARCH_OFFLINE_MESSAGE,
+    );
+    expect(placeSearchErrorMessage({ status: null })).toBe(PLACE_SEARCH_OFFLINE_MESSAGE);
+    expect(placeSearchErrorMessage(null)).toBe(PLACE_SEARCH_OFFLINE_MESSAGE);
+  });
+
+  it("never mentions Google's own error text", () => {
+    for (const message of [
+      PLACE_SEARCH_BUSY_MESSAGE,
+      PLACE_SEARCH_FAILED_MESSAGE,
+      PLACE_SEARCH_OFFLINE_MESSAGE,
+    ]) {
+      expect(message).not.toMatch(/API|key|PERMISSION|referer|quota/i);
+    }
+  });
+});
+
+describe("databaseErrorMessage: the academic profile (US-11)", () => {
+  it.each([
+    ["profiles_major_check", /major/],
+    ["profiles_minor_check", /minor/],
+  ])("maps a violation of %s without raw text", (constraint, expected) => {
+    const message = databaseErrorMessage({
+      code: "23514",
+      message: `new row for relation "profiles" violates check constraint "${constraint}"`,
+    });
+    expect(message).toMatch(expected);
+    expect(message).not.toMatch(RAW_TEXT);
+  });
+
+  it("maps the profile_courses_limit trigger's refusal", () => {
+    expect(databaseErrorMessage({ code: "P0001", message: "profile_courses_limit" })).toBe(
+      "List up to 8 current courses.",
+    );
+  });
+});
+
+describe("databaseErrorMessage: reporting a user (US-18)", () => {
+  it("maps the daily limit without the trigger's text", () => {
+    const message = databaseErrorMessage({ code: "PT429", message: "report_limit_reached" });
+    expect(message).toMatch(/5 reports in the last day/);
+    expect(message).not.toMatch(RAW_TEXT);
+  });
+
+  it.each([
+    ["reports_note_length", /500 characters/],
+    ["reports_not_self", /can't report yourself/],
+  ])("maps a violation of %s", (constraint, expected) => {
+    const message = databaseErrorMessage({
+      code: "23514",
+      message: `new row for relation "reports" violates check constraint "${constraint}"`,
+    });
+    expect(message).toMatch(expected);
+    expect(message).not.toMatch(RAW_TEXT);
+  });
+});
+
+describe("databaseErrorMessage: blocking a user (US-22)", () => {
+  it("maps a self-block", () => {
+    const message = databaseErrorMessage({
+      code: "23514",
+      message: 'new row for relation "blocks" violates check constraint "blocks_not_self"',
+    });
+    expect(message).toBe("You can't block yourself.");
+    expect(message).not.toMatch(RAW_TEXT);
   });
 });
 
@@ -272,3 +392,121 @@ describe("setPasswordErrorMessage (A6)", () => {
   });
 });
 
+
+describe("mapUnavailableMessage (M4)", () => {
+  it("points every reason at the list, which always works", () => {
+    for (const reason of ["not_configured", "load_failed"] as const) {
+      expect(mapUnavailableMessage(reason)).toMatch(/list/);
+    }
+  });
+
+  it("tells a load failure apart from a deployment without a map", () => {
+    expect(mapUnavailableMessage("load_failed")).toMatch(/reload/);
+    expect(mapUnavailableMessage("not_configured")).not.toMatch(/reload/);
+  });
+
+  it("never mentions keys, referrers or Google's error codes", () => {
+    for (const reason of ["not_configured", "load_failed"] as const) {
+      expect(mapUnavailableMessage(reason)).not.toMatch(/key|referr|billing|RefererNotAllowed|ApiNotActivated/i);
+    }
+  });
+});
+
+describe("databaseErrorMessage: study requests (R1, US-16)", () => {
+  it("explains a second ask for the same course", () => {
+    // study_requests is written through RLS policies, not a function, so a
+    // refusal arrives as a constraint name rather than a raised message.
+    const message = databaseErrorMessage({
+      code: "23505",
+      message:
+        'duplicate key value violates unique constraint "study_requests_course_id_author_id_key"',
+    });
+
+    expect(message).toBe("You've already asked for this course. Classmates can see it.");
+  });
+
+  it("explains a note that is too long", () => {
+    const message = databaseErrorMessage({
+      code: "23514",
+      message:
+        'new row for relation "study_requests" violates check constraint "study_requests_note_length"',
+    });
+
+    expect(message).toBe("Keep your note to 200 characters or fewer.");
+  });
+
+  it("falls back to the permission message when a policy refuses the write", () => {
+    // What a forged author_id looks like from PostgREST.
+    const message = databaseErrorMessage({
+      code: "42501",
+      message: 'new row violates row-level security policy for table "study_requests"',
+    });
+
+    expect(message).toBe("You don't have permission to do that.");
+  });
+});
+describe("deleteAccountErrorMessage (US-24)", () => {
+  it("says nothing was deleted, without Supabase's text", () => {
+    for (const error of [
+      { status: 500, code: "unexpected_failure", message: "Database error deleting user" },
+      { status: 403, code: "not_admin", message: "User not allowed" },
+      null,
+    ]) {
+      expect(deleteAccountErrorMessage(error)).toBe(DELETE_ACCOUNT_FAILED_MESSAGE);
+    }
+  });
+
+  it("asks a rate-limited student to wait", () => {
+    expect(deleteAccountErrorMessage({ status: 429 })).toBe(CODE_RATE_LIMITED_MESSAGE);
+    expect(deleteAccountErrorMessage({ code: "over_request_rate_limit" })).toBe(
+      CODE_RATE_LIMITED_MESSAGE,
+    );
+  });
+});
+
+// SEC-05: consume_rate_limit() at the limit, as supabase.rpc() hands it back.
+describe("databaseErrorMessage: the place lookup rate limit (SEC-05)", () => {
+  it("maps place_lookup_rate_limited, and never shows the count in its details", () => {
+    const message = databaseErrorMessage({
+      code: "PT429",
+      message: "place_lookup_rate_limited",
+      details: "20 of 20 hits used in the last 00:10:00",
+    });
+    expect(message).toBe(
+      "You've tried a lot of places in the last few minutes. Wait a few minutes, then try again.",
+    );
+    expect(message).not.toMatch(/rate_limited|hits|PT429/);
+  });
+});
+
+describe("databaseErrorMessage: repeat weekly (S10, US-20)", () => {
+  it("explains a week count outside 2..8", () => {
+    expect(databaseErrorMessage({ message: "weeks_out_of_range", code: "P0001" })).toBe(
+      "Repeat for between 2 and 8 weeks.",
+    );
+  });
+});
+
+describe("chatErrorMessage (US-05)", () => {
+  it("explains an RLS refusal of a chat post", () => {
+    const message = chatErrorMessage({
+      code: "42501",
+      message: 'new row violates row-level security policy for table "session_messages"',
+    });
+    expect(message).toBe(CHAT_CLOSED_MESSAGE);
+    expect(message).not.toMatch(RAW_TEXT);
+  });
+
+  it("maps the body check, which only a client skipping the form reaches", () => {
+    const message = chatErrorMessage({
+      code: "23514",
+      message: 'new row for relation "session_messages" violates check constraint "session_messages_body_check"',
+    });
+    expect(message).toBe("Messages are 1 to 1000 characters.");
+  });
+
+  it("falls back to the generic message for anything else", () => {
+    expect(chatErrorMessage({ code: "08006", message: "connection failure" })).toBe(GENERIC_ERROR_MESSAGE);
+    expect(chatErrorMessage(null)).toBe(GENERIC_ERROR_MESSAGE);
+  });
+});

@@ -70,6 +70,19 @@
   }
 }
 
+/* The sign-in lamp's slow glow (AuthScene). Here, not in a <style> element
+   in the component: the Content-Security-Policy (SEC-10) refuses <style>
+   elements that lack the request's nonce. */
+@keyframes sb-glow {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
 /* The app's background: plain paper. */
 @utility app-backdrop {
   background-color: var(--color-paper);

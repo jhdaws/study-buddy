@@ -96,20 +96,22 @@ export class PlaceError extends Error {
 // to the error page: a deploy without its keys should fail loudly, not tell
 // students their place does not exist.
 //
-// THE FIXTURE IDS (`ChIJ-FAKE-...`) are still all the stub <LocationPicker>
-// offers until M2 lands. Sent to Google they would fail, and the create form
-// would stop working. So a fixture id resolves to its fixture location --
-// no Google call, no database write -- ONLY while either:
+// THE FIXTURE IDS (`ChIJ-FAKE-...`) are all <LocationPicker> offers in a
+// build without the browser Maps key -- CI, previews, a fresh clone (M2).
+// Sent to Google they would fail, and the create form would stop working. So
+// a fixture id resolves to its fixture location -- no Google call, no
+// database write -- ONLY while either:
 //   - this is not a production build (`next dev`, tests), or
-//   - this deployment has no server Maps key yet (today's production).
+//   - this deployment has no server Maps key.
 // A production build WITH the key refuses them as `unknown_place`, still
-// without calling Google. Once M1's key is in Vercel, production therefore
-// needs M2's real picker to create sessions; that is intended.
+// without calling Google. A deployment with the server key therefore needs
+// the browser key too, so the picker offers real places; that is intended
+// (.env.example: both Google keys, or neither).
 // Why this is not a bypass of the radius and type checks: it writes nothing,
 // and the location ids it returns (FIXTURE_LOCATIONS, `20000000-...`) are not
 // rows in any real database -- they are not seeded -- so a session pointing
 // at one fails `sessions.location_id`'s foreign key once S3 saves for real.
-// Any other id goes the full route above. W6 deletes this once M2 lands.
+// Any other id goes the full route above.
 //
 // SIGNED-IN ONLY. Every real lookup is a billed Google call and a write with
 // the secret key. createSession() is a public POST endpoint, and its
@@ -119,9 +121,12 @@ export class PlaceError extends Error {
 // and the lookup is refused before Google is called. Until A4 lets anyone
 // sign in, that closes the real path in production entirely, even with the
 // keys set. Not checked outside production, so M3 and M2 can be tried
-// locally before sign-in exists. NOT done yet: per-user rate limiting -- a
-// signed-in student can still trigger lookups in a loop (Google's daily
-// quota cap, M1, is the backstop).
+// locally before sign-in exists.
+//
+// RATE LIMITED BY THE CALLER (SEC-05). createSession() spends one
+// `place_lookup` hit (src/lib/rate-limit.ts; PLACE_LOOKUPS_PER_WINDOW in
+// limits.ts) before calling this, so a student cannot loop lookups. Any new
+// caller must do the same. Google's daily quota cap (M1) stays the backstop.
 // ===========================================================================
 
 /** Optional extras for resolvePlace(). */
