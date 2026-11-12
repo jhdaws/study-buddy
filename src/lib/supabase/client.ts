@@ -6,10 +6,12 @@
 import { createBrowserClient } from "@supabase/ssr";
 
 import { supabaseEnv } from "@/lib/env";
+import { SUPABASE_COOKIE_OPTIONS } from "@/lib/limits";
 
 export function createClient() {
   const { url, anonKey } = supabaseEnv();
   // createBrowserClient reuses one instance per page, so calling this from
   // several components does not open several realtime connections.
-  return createBrowserClient(url, anonKey);
+  // The same cookie lifetime as the server clients (SEC-16).
+  return createBrowserClient(url, anonKey, { cookieOptions: SUPABASE_COOKIE_OPTIONS });
 }

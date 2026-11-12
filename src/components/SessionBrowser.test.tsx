@@ -14,6 +14,7 @@ import SessionCard from "./SessionCard";
 // pushState/replaceState into useSearchParams ("Native History API",
 // node_modules/next/dist/docs/01-app/01-getting-started/04-linking-and-navigating.md).
 const addressBar = vi.hoisted(() => ({ listeners: new Set<() => void>() }));
+const router = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock("next/navigation", async () => {
   const { useSyncExternalStore } = await import("react");
   const subscribe = (listener: () => void) => {
@@ -23,6 +24,9 @@ vi.mock("next/navigation", async () => {
   return {
     useSearchParams: () =>
       new URLSearchParams(useSyncExternalStore(subscribe, () => window.location.search)),
+    // Course chips (US-06) navigate for real so the server re-filters; the
+    // List / Map toggle still uses replaceState and never touches this.
+    useRouter: () => router,
   };
 });
 
@@ -40,6 +44,7 @@ const replaceState = window.history.replaceState.bind(window.history);
 
 beforeEach(() => {
   replaceState(null, "", "/sessions");
+  router.push.mockReset();
   vi.spyOn(window.history, "replaceState").mockImplementation((...args) => {
     replaceState(...args);
     addressBar.listeners.forEach((listener) => listener());
@@ -310,13 +315,14 @@ describe("<SessionBrowser> List / Map toggle (M4)", () => {
 
   it("keeps any other query parameters", () => {
     vi.stubEnv("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY", "");
-    replaceState(null, "", "/sessions?course=CS");
+    // A real US-06 course filter: the map toggle must not drop it.
+    replaceState(null, "", "/sessions?course=CS-3251");
     render(<SessionBrowser sessions={sessions} now={now} />);
 
     fireEvent.click(mapButton());
-    expect(window.location.search).toBe("?course=CS&view=map");
+    expect(window.location.search).toBe("?course=CS-3251&view=map");
     fireEvent.click(listButton());
-    expect(window.location.search).toBe("?course=CS");
+    expect(window.location.search).toBe("?course=CS-3251");
   });
 
   it("without a browser key, says the map is unavailable and never loads it", () => {
@@ -356,5 +362,97 @@ describe("<SessionBrowser> List / Map toggle (M4)", () => {
     fireEvent.change(screen.getByLabelText("Search sessions"), { target: { value: "ECON 3012" } });
     expect(screen.getByRole("heading", { name: /No sessions for .ECON 3012. yet/ })).toBeTruthy();
     expect(screen.queryByTestId("session-map")).toBeNull();
+  });
+});
+
+describe("<SessionBrowser> course filter (US-06)", () => {
+  const sessions = [
+    session({ id: "a" }),
+    session({
+      id: "b",
+      course: { departmentCode: "MATH", number: "2410", title: "Methods of Linear Algebra" },
+      topic: "Exam 2 practice problems",
+    }),
+  ];
+
+  it("offers a chip per course in the list, plus All courses", () => {
+    render(<SessionBrowser sessions={sessions} now={now} />);
+
+    const group = screen.getByRole("group", { name: "Filter by course" });
+    expect(within(group).getByRole("button", { name: "All courses" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(within(group).getByRole("button", { name: "CS 3251" })).toBeTruthy();
+    expect(within(group).getByRole("button", { name: "MATH 2410" })).toBeTruthy();
+  });
+
+  it("marks the active course chip when the page passed a filter", () => {
+    render(
+      <SessionBrowser
+        sessions={sessions.filter((item) => item.course.departmentCode === "CS")}
+        now={now}
+        courseFilter={{ departmentCode: "CS", number: "3251" }}
+      />,
+    );
+
+    const group = screen.getByRole("group", { name: "Filter by course" });
+    expect(within(group).getByRole("button", { name: "CS 3251" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(within(group).getByRole("button", { name: "All courses" }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+    // The count shares a <p> with the Clear filters control, so match a
+    // substring rather than the whole text content.
+    expect(screen.getByText(/1 session for CS 3251/)).toBeTruthy();
+  });
+
+  it("navigates when a course chip is pressed, so the server re-filters", () => {
+    render(<SessionBrowser sessions={sessions} now={now} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "MATH 2410" }));
+
+    // push, not replaceState: listSessions has to run again with the filter.
+    expect(router.push).toHaveBeenCalledWith("/sessions?course=MATH-2410");
+    expect(window.history.replaceState).not.toHaveBeenCalled();
+  });
+
+  it("keeps the map view when changing course", () => {
+    replaceState(null, "", "/sessions?view=map");
+    render(<SessionBrowser sessions={sessions} now={now} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "CS 3251" }));
+
+    expect(router.push).toHaveBeenCalledWith("/sessions?view=map&course=CS-3251");
+  });
+
+  it("clears the course filter back to the full list", () => {
+    render(
+      <SessionBrowser
+        sessions={sessions}
+        now={now}
+        courseFilter={{ departmentCode: "CS", number: "3251" }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "All courses" }));
+
+    expect(router.push).toHaveBeenCalledWith("/sessions");
+  });
+
+  it("says so when the course filter matched nothing", () => {
+    render(
+      <SessionBrowser
+        sessions={[]}
+        now={now}
+        courseFilter={{ departmentCode: "ECON", number: "3012" }}
+      />,
+    );
+
+    // Not the cold-start empty: that would tell the student there are no
+    // sessions on campus at all.
+    expect(screen.queryByRole("heading", { name: "No study sessions yet" })).toBeNull();
+    expect(screen.getByRole("heading", { name: "No sessions for ECON 3012 yet" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Show all courses" })).toBeTruthy();
   });
 });

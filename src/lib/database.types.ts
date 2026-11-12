@@ -23,7 +23,33 @@ export type Database = {
           }
         },"public": {
           Tables: {
-            "courses": {
+            "blocks": {
+                  Row: {
+                    "blocked_id": string,"blocker_id": string,"created_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "blocked_id": string,"blocker_id"?: string,"created_at"?: string
+                  }
+                  Update: {
+                    "blocked_id"?: string,"blocker_id"?: string,"created_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "blocks_blocked_id_fkey"
+      columns: ["blocked_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "blocks_blocker_id_fkey"
+      columns: ["blocker_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"courses": {
                   Row: {
                     "created_at": string,"created_by": string | null,"department_code": string,"id": string,"merged_into": string | null,"number": string,"title": string | null
                   }
@@ -95,19 +121,77 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
-                },"profiles": {
+                },"profile_courses": {
                   Row: {
-                    "created_at": string,"display_name": string | null,"id": string
+                    "added_at": string,"course_id": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"display_name"?: string | null,"id": string
+                    "added_at"?: string,"course_id": string,"user_id"?: string
                   }
                   Update: {
-                    "created_at"?: string,"display_name"?: string | null,"id"?: string
+                    "added_at"?: string,"course_id"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "profile_courses_course_id_fkey"
+      columns: ["course_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "profile_courses_user_id_fkey"
+      columns: ["user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"profiles": {
+                  Row: {
+                    "class_year": Database["public"]['Enums']["class_year"] | null,"created_at": string,"display_name": string | null,"id": string,"last_seen_sessions_at": string,"major": string | null,"minor": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "class_year"?: Database["public"]['Enums']["class_year"] | null,"created_at"?: string,"display_name"?: string | null,"id": string,"last_seen_sessions_at"?: string,"major"?: string | null,"minor"?: string | null
+                  }
+                  Update: {
+                    "class_year"?: Database["public"]['Enums']["class_year"] | null,"created_at"?: string,"display_name"?: string | null,"id"?: string,"last_seen_sessions_at"?: string,"major"?: string | null,"minor"?: string | null
                   }
                   Relationships: [
                     
+                  ]
+                },"reports": {
+                  Row: {
+                    "created_at": string,"id": string,"note": string | null,"reason": Database["public"]['Enums']["report_reason"],"reported_user_id": string | null,"reporter_id": string | null,"session_id": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"id"?: string,"note"?: string | null,"reason": Database["public"]['Enums']["report_reason"],"reported_user_id"?: string | null,"reporter_id"?: string | null,"session_id"?: string | null
+                  }
+                  Update: {
+                    "created_at"?: string,"id"?: string,"note"?: string | null,"reason"?: Database["public"]['Enums']["report_reason"],"reported_user_id"?: string | null,"reporter_id"?: string | null,"session_id"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "reports_reported_user_id_fkey"
+      columns: ["reported_user_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "reports_reporter_id_fkey"
+      columns: ["reporter_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "reports_session_id_fkey"
+      columns: ["session_id"]
+isOneToOne: false
+      referencedRelation: "sessions"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"session_attendees": {
                   Row: {
@@ -132,6 +216,32 @@ isOneToOne: false
       columns: ["user_id"]
 isOneToOne: false
       referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"session_messages": {
+                  Row: {
+                    "author_id": string | null,"body": string,"created_at": string,"id": string,"session_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "author_id"?: string | null,"body": string,"created_at"?: string,"id"?: string,"session_id": string
+                  }
+                  Update: {
+                    "author_id"?: string | null,"body"?: string,"created_at"?: string,"id"?: string,"session_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "session_messages_author_id_fkey"
+      columns: ["author_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "session_messages_session_id_fkey"
+      columns: ["session_id"]
+isOneToOne: false
+      referencedRelation: "sessions"
       referencedColumns: ["id"]
     }
                   ]
@@ -167,13 +277,66 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"study_requests": {
+                  Row: {
+                    "author_id": string,"course_id": string,"created_at": string,"expires_at": string,"id": string,"note": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "author_id": string,"course_id": string,"created_at"?: string,"expires_at"?: string,"id"?: string,"note"?: string | null
+                  }
+                  Update: {
+                    "author_id"?: string,"course_id"?: string,"created_at"?: string,"expires_at"?: string,"id"?: string,"note"?: string | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "study_requests_author_id_fkey"
+      columns: ["author_id"]
+isOneToOne: false
+      referencedRelation: "profiles"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "study_requests_course_id_fkey"
+      columns: ["course_id"]
+isOneToOne: false
+      referencedRelation: "courses"
+      referencedColumns: ["id"]
+    }
+                  ]
                 }
           }
           Views: {
             [_ in never]: never
           }
           Functions: {
-            "create_session":
+            "cancel_session":
+{ Args: { "p_session_id": string }; Returns: {
+              "capacity": number,
+"course_id": string,
+"created_at": string,
+"ends_at": string,
+"host_id": string | null,
+"id": string,
+"location_id": string,
+"location_label": string,
+"room": string | null,
+"starts_at": string,
+"status": Database["public"]['Enums']["session_status"],
+"topic": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "sessions"
+        isOneToOne: true
+        isSetofReturn: false
+      } },
+"consume_rate_limit":
+{ Args: { "p_bucket": string }; Returns: number
+                           },
+"count_new_sessions_in_my_courses":
+{ Args: Record<PropertyKey, never>; Returns: number
+                           },
+"create_session":
 { Args: { "capacity": number,"course_id": string,"ends_at": string,"location_id": string,"location_label": string,"room": string,"starts_at": string,"topic": string }; Returns: {
               "capacity": number,
 "course_id": string,
@@ -194,6 +357,27 @@ isOneToOne: false
         isOneToOne: true
         isSetofReturn: false
       } },
+"create_sessions_weekly":
+{ Args: { "p_capacity": number,"p_course_id": string,"p_ends_at": string,"p_location_id": string,"p_location_label": string,"p_room": string,"p_starts_at": string,"p_topic": string,"p_weeks": number }; Returns: {
+              "capacity": number,
+"course_id": string,
+"created_at": string,
+"ends_at": string,
+"host_id": string | null,
+"id": string,
+"location_id": string,
+"location_label": string,
+"room": string | null,
+"starts_at": string,
+"status": Database["public"]['Enums']["session_status"],
+"topic": string
+            }[]
+                          SetofOptions: {
+        from: "*"
+        to: "sessions"
+        isOneToOne: false
+        isSetofReturn: true
+      } },
 "get_or_create_course":
 { Args: { "p_course_number": string,"p_department_code": string }; Returns: string
                            },
@@ -212,15 +396,44 @@ isOneToOne: false
 "leave_session":
 { Args: { "session_id": string }; Returns: undefined
                            },
+"mark_sessions_seen":
+{ Args: Record<PropertyKey, never>; Returns: undefined
+                           },
+"new_sessions_in_my_courses":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "course_number": string,"course_title": string,"department_code": string,"ends_at": string,"id": string,"location_label": string,"starts_at": string,"topic": string
+            }[]
+                           },
 "normalize_course_number":
 { Args: { "raw": string }; Returns: string
                            },
 "normalize_department_code":
 { Args: { "raw": string }; Returns: string
-                           }
+                           },
+"update_session":
+{ Args: { "p_capacity": number,"p_course_id": string,"p_ends_at": string,"p_location_id": string,"p_location_label": string,"p_room": string,"p_session_id": string,"p_starts_at": string,"p_topic": string }; Returns: {
+              "capacity": number,
+"course_id": string,
+"created_at": string,
+"ends_at": string,
+"host_id": string | null,
+"id": string,
+"location_id": string,
+"location_label": string,
+"room": string | null,
+"starts_at": string,
+"status": Database["public"]['Enums']["session_status"],
+"topic": string
+            }
+                          SetofOptions: {
+        from: "*"
+        to: "sessions"
+        isOneToOne: true
+        isSetofReturn: false
+      } }
           }
           Enums: {
-            "session_status": "open"|"cancelled"
+            "class_year": "first_year"|"sophomore"|"junior"|"senior"|"graduate","report_reason": "harassment"|"spam"|"safety"|"other","session_status": "open"|"cancelled"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -340,7 +553,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "session_status": ["open", "cancelled"]
+            "class_year": ["first_year", "sophomore", "junior", "senior", "graduate"],"report_reason": ["harassment", "spam", "safety", "other"],"session_status": ["open", "cancelled"]
           }
         }
 } as const

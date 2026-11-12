@@ -240,13 +240,33 @@ describe("A01 IDOR: another signed-in student cannot act on someone else's rows"
     );
     expect(profileEmail.error?.code).toBe("42703");
 
-    // What she can read about Alice is her id, name and join date.
+    // What she can read about Alice is her id, name and join date, and since
+    // US-11 the academic profile classmates are meant to see on a roster
+    // (major, minor, class year). An allow-list on purpose: a new column on
+    // profiles fails here until someone decides it may be public. Checked as
+    // column privileges, because since N1 (US-17) SELECT on profiles is
+    // granted per column -- `select *` is refused outright, which is the
+    // point: last_seen_sessions_at is not on the list.
+    const { rows: readable } = await db.query<{ column_name: string }>(
+      `select column_name from information_schema.column_privileges
+        where table_schema = 'public' and table_name = 'profiles'
+          and grantee = 'authenticated' and privilege_type = 'SELECT'
+        order by column_name`,
+    );
+    expect(readable.map((row) => row.column_name)).toEqual(
+      ["class_year", "created_at", "display_name", "id", "major", "minor"],
+    );
     const visible = await as(mallory, () =>
-      attempt("select * from public.profiles where id = $1", [alice]),
+      attempt(
+        "select id, display_name, created_at, major, minor, class_year from public.profiles where id = $1",
+        [alice],
+      ),
     );
-    expect(Object.keys(visible.rows[0] ?? {}).sort()).toEqual(
-      ["created_at", "display_name", "id"],
+    expect(visible.rows).toHaveLength(1);
+    const hidden = await as(mallory, () =>
+      attempt("select last_seen_sessions_at from public.profiles where id = $1", [alice]),
     );
+    expect(hidden.error?.code).toBe("42501");
 
     // No table or view in a schema the Data API exposes (config.toml [api])
     // has a column that could hold an email. Read as the database's own role,

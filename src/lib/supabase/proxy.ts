@@ -2,7 +2,7 @@
 // matched request.
 //
 // 1. Refresh the Supabase session cookie (getUser() triggers it).
-// 2. Signed out and asking for a page under /sessions: redirect to
+// 2. Signed out and asking for a page under /sessions, /account, or /profile: redirect to
 //    /login?next=<that path> (A4, #17). Only GET and HEAD -- a POST is a
 //    Server Action, which checks for itself with requireUser() and redirects
 //    properly; a proxy redirect would turn it into a broken fetch.
@@ -27,11 +27,20 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import type { Database } from "@/lib/database.types";
 import { supabaseEnv } from "@/lib/env";
+import { SUPABASE_COOKIE_OPTIONS } from "@/lib/limits";
 import { loginPath, REQUEST_PATH_HEADER } from "@/lib/safe-next";
 
 /** Pages a signed-out visitor is sent to /login from. */
 export function isProtectedPath(pathname: string): boolean {
-  return pathname === "/sessions" || pathname.startsWith("/sessions/");
+  return (
+    pathname === "/sessions" ||
+    pathname.startsWith("/sessions/") ||
+    // US-11: the student's own profile.
+    pathname === "/profile" ||
+    // US-24: /account/delete, and any later account page.
+    pathname === "/account" ||
+    pathname.startsWith("/account/")
+  );
 }
 
 export async function updateSession(request: NextRequest) {
@@ -45,6 +54,9 @@ export async function updateSession(request: NextRequest) {
   let cacheHeaders: Record<string, string> = {};
 
   const supabase = createServerClient<Database>(url, anonKey, {
+    // 7 days unused, not 400 (SEC-16). The proxy refreshes the session, so
+    // the cookies it rewrites carry this lifetime.
+    cookieOptions: SUPABASE_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return request.cookies.getAll();

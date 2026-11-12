@@ -14,12 +14,30 @@
 //     and the CHECKs on sessions, departments and courses
 //     (*_s1_session_rules.sql, *_s2_course_normalization.sql,
 //     *_session_text_limits.sql).
+//   - SEC-03: the per-student cap on new departments and courses
+//     (*_catalogue_insert_limit.sql).
 //   - S5: what join_session and leave_session raise
 //     (*_join_leave_session.sql).
+//   - S7 (US-09): what update_session and cancel_session raise
+//     (*_s7_edit_cancel_session.sql). The CHECKs they can trip are S1's,
+//     already mapped above -- an edit goes through the same constraints.
 //   - M2 (#23): the location picker's searches, sent from the browser to
 //     Places Autocomplete (src/lib/place-search.ts).
-// Still to come:
-//   - Later: cancelling a session (US-09, host only) and chat (US-05).
+//   - R1 (US-16): the CHECK and the unique constraint on study_requests
+//     (*_r1_study_requests.sql). Those writes go through RLS policies rather
+//     than a SECURITY DEFINER function, so nothing there `raise exception`s:
+//     a refusal arrives as 42501 (already mapped below) or as a constraint
+//     name, which is why both new entries are in CONSTRAINT_MESSAGES.
+//   - P1 (US-11): the academic profile's CHECKs and course limit
+//     (*_academic_profile.sql).
+//   - P2 (US-24): deleting an account through Supabase Auth's admin API.
+//   - P3 (US-18): the reports table's limit and note check (*_reports.sql).
+//   - P4 (US-22): the blocks table's self-block CHECK, and join_session's
+//     new refusal when the host has blocked the caller (*_p4_us_22_block_a_user.sql).
+//   - C1 (US-05): the chat's body check, and chatErrorMessage() for its
+//     RLS refusal (*_session_chat.sql).
+
+import { CATALOGUE_INSERTS_PER_DAY, CATALOGUE_INSERTS_PER_HOUR } from "@/lib/limits";
 
 /** For anything we have not mapped. Says nothing about the cause. */
 export const GENERIC_ERROR_MESSAGE =
@@ -59,6 +77,22 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   departments_code_normalised: "That department code isn't valid.",
   departments_code_length: "Department codes are at most 10 letters or digits.",
   courses_number_normalised: "Enter a 4-digit course number, like 3251 or 2100W.",
+  // P1 (US-11): mirror profileSchema.
+  profiles_major_check: "Keep your major to 1 to 80 characters, without spaces at either end.",
+  profiles_minor_check: "Keep your minor to 1 to 80 characters, without spaces at either end.",
+  // P3 (US-18): mirror reportUserSchema.
+  reports_note_length: "Keep the note to 500 characters or fewer.",
+  reports_not_self: "You can't report yourself.",
+  // P4 (US-22): a direct insert naming yourself as both sides.
+  blocks_not_self: "You can't block yourself.",
+  // R1 (US-16): one live request per student per course, so asking twice is
+  // a unique violation rather than a second vote. Reached from two sides --
+  // two tabs, or a direct API call -- so it needs a message either way.
+  study_requests_course_id_author_id_key:
+    "You've already asked for this course. Classmates can see it.",
+  study_requests_note_length: "Keep your note to 200 characters or fewer.",
+  // C1 (US-05): mirrors chatMessageSchema (CHAT_MESSAGE_MAX_LENGTH).
+  session_messages_body_check: "Messages are 1 to 1000 characters.",
 };
 
 /**
@@ -73,6 +107,12 @@ const RAISED_MESSAGES: Record<string, string> = {
   starts_in_past: "That start time has already passed.",
   department_required: "Choose or add a department.",
   invalid_course_number: "Enter a 4-digit course number, like 3251 or 2100W.",
+  // SEC-03: the catalogue trigger (SQLSTATE PT429). It fires inside
+  // get_or_create_course too, which is how it reaches the create form.
+  catalogue_limit_reached:
+    "You've added a lot of new courses and departments lately — the limit is " +
+    `${CATALOGUE_INSERTS_PER_HOUR} of each an hour and ${CATALOGUE_INSERTS_PER_DAY} a day. ` +
+    "Choose one that's already listed, or try again later.",
   // S5: join_session and leave_session.
   session_not_found: "That session doesn't exist anymore.",
   session_cancelled: "This session has been cancelled.",
@@ -81,6 +121,26 @@ const RAISED_MESSAGES: Record<string, string> = {
   session_full: "This session is full.",
   not_joined: "You're not on the roster for this session.",
   host_cannot_leave: "As the host, you can't leave — cancel the session instead.",
+  // P4 (US-22): join_session refuses a caller the host has blocked. Worded
+  // exactly like a plain refusal -- never "blocked" -- so the two are
+  // indistinguishable to the caller (the ticket's own requirement).
+  cannot_join_session: "You can't join this session.",
+  // P1 (US-11): the profile_courses_limit trigger (PROFILE_COURSES_MAX).
+  profile_courses_limit: "List up to 8 current courses.",
+  // P3 (US-18): the reports_limit trigger (SQLSTATE PT429, REPORTS_PER_DAY).
+  report_limit_reached:
+    "You've sent 5 reports in the last day, which is the limit. If you are in danger right now, call 911.",
+  // S7: update_session and cancel_session (US-09).
+  not_session_host: "Only the host can change or cancel this session.",
+  capacity_below_roster:
+    "That's fewer seats than the students already coming. Nobody is removed by an edit.",
+  // SEC-05: consume_rate_limit() (*_place_lookup_rate_limit.sql, SQLSTATE
+  // PT429), which createSession() calls before every place lookup.
+  place_lookup_rate_limited:
+    "You've tried a lot of places in the last few minutes. Wait a few minutes, then try again.",
+  // S10: create_sessions_weekly (US-20).
+  weeks_out_of_range: "Repeat for between 2 and 8 weeks.",
+  ends_before_starts: "The session has to end after it starts.",
 };
 
 /** SQLSTATE codes with one meaning wherever they come from. */
@@ -88,6 +148,28 @@ const SQLSTATE_MESSAGES: Record<string, string> = {
   // insufficient_privilege: a grant or RLS policy refused the write.
   "42501": "You don't have permission to do that.",
 };
+
+/**
+ * What the security log records for a database error (SEC-09,
+ * src/lib/security-log.ts): the name databaseErrorMessage() matched it by --
+ * a raised name such as `session_full`, a constraint name, or
+ * `sqlstate_<code>` -- and never Postgres's text. `unmapped` is an error
+ * with nothing to name it by; `none` is no error at all. Checks in the same
+ * order as databaseErrorMessage(), so the two always agree (errors.test.ts).
+ */
+export function databaseErrorReason(error: DatabaseErrorLike | null | undefined): string {
+  if (!error) return "none";
+  if (error.message && Object.hasOwn(RAISED_MESSAGES, error.message)) return error.message;
+  const text = `${error.message ?? ""} ${error.details ?? ""}`;
+  for (const constraint of Object.keys(CONSTRAINT_MESSAGES)) {
+    if (text.includes(`"${constraint}"`)) return constraint;
+  }
+  // A SQLSTATE (5 characters) or PostgREST code (PGRST116) is a code, not text.
+  if (error.code && /^[0-9A-Za-z]{5,8}$/.test(error.code)) {
+    return `sqlstate_${error.code.toLowerCase()}`;
+  }
+  return "unmapped";
+}
 
 /** A message for a database error, safe to show a student. */
 export function databaseErrorMessage(error: DatabaseErrorLike | null | undefined): string {
@@ -106,6 +188,21 @@ export function databaseErrorMessage(error: DatabaseErrorLike | null | undefined
     return SQLSTATE_MESSAGES[error.code];
   }
   return GENERIC_ERROR_MESSAGE;
+}
+
+/**
+ * C1 (US-05): a chat post the session_messages_insert_attendees policy
+ * refused. RLS says only "42501", so this covers every reason it can have:
+ * not on the roster (never joined, or left in another tab), or a chat that
+ * closed while the page was open (cancelled, or a week past the end).
+ */
+export const CHAT_CLOSED_MESSAGE =
+  "You can't post here: only people going can, until a week after the session ends.";
+
+/** A message for a failed chat post, safe to show a student. */
+export function chatErrorMessage(error: DatabaseErrorLike | null | undefined): string {
+  if (error?.code === "42501") return CHAT_CLOSED_MESSAGE;
+  return databaseErrorMessage(error);
 }
 
 // ---------------------------------------------------------------------------
@@ -147,6 +244,20 @@ export type AuthErrorLike = {
   status?: number | null;
   message?: string | null;
 };
+
+/**
+ * What the security log records for a Supabase Auth error (SEC-09): its
+ * `code` -- auth-js's ErrorCode, such as `invalid_credentials` or
+ * `otp_expired` -- or `http_<status>` when an older server sent none. Never
+ * the message. `no_user` is Supabase answering without an error but without
+ * a user either.
+ */
+export function authErrorReason(error: AuthErrorLike | null | undefined): string {
+  if (!error) return "no_user";
+  if (error.code && /^[a-z0-9_]{1,64}$/.test(error.code)) return error.code;
+  if (typeof error.status === "number") return `http_${error.status}`;
+  return "unmapped";
+}
 
 export const SIGN_IN_RATE_LIMITED_MESSAGE =
   "Too many sign-in emails have gone out recently. Try again in a few minutes.";
@@ -200,7 +311,7 @@ export function signInErrorMessage(error: AuthErrorLike | null | undefined): str
 // ---------------------------------------------------------------------------
 
 export const CODE_REJECTED_MESSAGE =
-  "That code didn't work. Check it against the latest email — codes expire after an hour — or ask for a new one.";
+  "That code didn't work. Check it against the latest email — codes expire after 10 minutes — or ask for a new one.";
 
 export const CODE_RATE_LIMITED_MESSAGE =
   "Too many tries. Wait a few minutes, then try again.";
@@ -302,4 +413,24 @@ const MAP_UNAVAILABLE_MESSAGES: Record<MapUnavailableReason, string> = {
 /** A message for a map that cannot be shown, safe to show. */
 export function mapUnavailableMessage(reason: MapUnavailableReason): string {
   return MAP_UNAVAILABLE_MESSAGES[reason];
+}
+
+// ---------------------------------------------------------------------------
+// Deleting an account (US-24): auth.admin.deleteUser() in deleteAccount().
+// ---------------------------------------------------------------------------
+
+export const DELETE_ACCOUNT_FAILED_MESSAGE =
+  "We couldn't delete your account just now. Nothing was deleted — try again in a moment.";
+
+/**
+ * A message for an error from auth.admin.deleteUser(), safe to show.
+ * `user_not_found` means the account is already gone (a second tap, say), so
+ * the caller treats it as done and never shows this; anything else is ours
+ * to fix, and the deletion is one statement, so nothing was half-deleted.
+ */
+export function deleteAccountErrorMessage(error: AuthErrorLike | null | undefined): string {
+  if (error?.status === 429 || error?.code === "over_request_rate_limit") {
+    return CODE_RATE_LIMITED_MESSAGE;
+  }
+  return DELETE_ACCOUNT_FAILED_MESSAGE;
 }

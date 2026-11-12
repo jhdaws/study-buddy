@@ -238,8 +238,12 @@ max_frequency = "1s"
 # A3's form accepts 6 to 10 digits (OTP_CODE_MIN/MAX_LENGTH in src/lib/limits.ts), the whole range
 # Supabase allows, so changing this does not break sign-in.
 otp_length = 6
-# Number of seconds before the email OTP expires (defaults to 1 hour).
-otp_expiry = 3600
+# Number of seconds before the email OTP expires (Supabase's default is 1 hour).
+# 10 minutes (SEC-12): wrong guesses never invalidate a code, so its lifetime is
+# the guessing window. Keep the hosted "Email OTP Expiration" the same
+# (supabase/README.md step 3) and the "10 minutes" in SignInForm.tsx and
+# templates/magic_link.html in step with it.
+otp_expiry = 600
 
 # Use a production-ready SMTP server
 # [auth.email.smtp]
@@ -257,11 +261,11 @@ otp_expiry = 3600
 # (supabase/README.md, "Hosted auth settings (A1)"); this file is the source for both.
 # Local emails land in Mailpit: http://127.0.0.1:54324
 [auth.email.template.magic_link]
-subject = "Your Study Buddy sign-in link"
+subject = "Your Study Buddy sign-in code"
 content_path = "./supabase/templates/magic_link.html"
 
 [auth.email.template.confirmation]
-subject = "Your Study Buddy sign-in link"
+subject = "Your Study Buddy sign-in code"
 content_path = "./supabase/templates/magic_link.html"
 
 # Uncomment to customize email template
@@ -290,6 +294,10 @@ max_frequency = "5s"
 # 4152127777 = "123456"
 
 # Configure logged in session timeouts.
+# SEC-16: left off -- time-boxed sessions are a paid-plan feature on hosted
+# Supabase. The app instead expires its auth cookies after 7 days unused
+# (SESSION_COOKIE_MAX_AGE_SECONDS in src/lib/limits.ts), which signs out a
+# device left signed in but does not end a stolen refresh token.
 # [auth.sessions]
 # Force log out after the specified duration.
 # timebox = "24h"

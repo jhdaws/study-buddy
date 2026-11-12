@@ -22,36 +22,54 @@
 
 import { z } from "zod";
 
+import { CLASS_YEARS } from "@/lib/academic";
 import { ALLOWED_EMAIL_DOMAIN } from "@/lib/env";
 import {
+  CHAT_MESSAGE_MAX_LENGTH,
   DEPARTMENT_CODE_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
   LOCATION_LABEL_MAX_LENGTH,
+  MAJOR_MAX_LENGTH,
   MAX_CAPACITY,
+  MAX_REPEAT_WEEKS,
   MIN_CAPACITY,
+  MINOR_MAX_LENGTH,
+  MIN_REPEAT_WEEKS,
   OTP_CODE_MAX_LENGTH,
   OTP_CODE_MIN_LENGTH,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  PROFILE_COURSES_MAX,
+  REPORT_NOTE_MAX_LENGTH,
   ROOM_MAX_LENGTH,
   START_GRACE_MINUTES,
+  STUDY_REQUEST_NOTE_MAX_LENGTH,
   TOPIC_MAX_LENGTH,
 } from "@/lib/limits";
+import { REPORT_REASONS } from "@/lib/reports";
 
 // The limits are part of this module's contract (docs/contracts.md); they
 // live in limits.ts so Client Components can have them without zod.
 export {
+  CHAT_MESSAGE_MAX_LENGTH,
   DEPARTMENT_CODE_MAX_LENGTH,
   DISPLAY_NAME_MAX_LENGTH,
   LOCATION_LABEL_MAX_LENGTH,
+  MAJOR_MAX_LENGTH,
   MAX_CAPACITY,
+  MAX_REPEAT_WEEKS,
   MIN_CAPACITY,
+  MINOR_MAX_LENGTH,
+  MIN_REPEAT_WEEKS,
   OTP_CODE_MAX_LENGTH,
   OTP_CODE_MIN_LENGTH,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  PROFILE_COURSES_MAX,
+  REPORT_NOTE_MAX_LENGTH,
   ROOM_MAX_LENGTH,
   START_GRACE_MINUTES,
+  STUDY_REQUEST_NOTE_MAX_LENGTH,
   TOPIC_MAX_LENGTH,
 };
 
@@ -306,6 +324,32 @@ export function normalizeCourseNumber(raw: string): string {
 /** Four digits, optionally followed by one uppercase letter -- data/README.md. */
 const COURSE_NUMBER_PATTERN = /^[0-9]{4}[A-Z]?$/;
 
+// Which course, as two fields. Shared by the create-session form and the
+// study-request form (US-16) so the normalisation cannot drift between them:
+// both end up at the same get_or_create_course, and a request normalised
+// differently would ask for a course no session could ever match.
+
+const departmentCodeField = z
+  .string({ error: "Choose or add a department." })
+  .trim()
+  .min(1, { error: "Choose or add a department." })
+  .transform(normalizeDepartmentCode)
+  .refine((value) => value.length > 0, {
+    error: "Choose or add a department.",
+  })
+  .refine((value) => value.length <= DEPARTMENT_CODE_MAX_LENGTH, {
+    error: `Department codes are at most ${DEPARTMENT_CODE_MAX_LENGTH} letters or digits.`,
+  });
+
+const courseNumberField = z
+  .string({ error: "Enter a course number." })
+  .trim()
+  .min(1, { error: "Enter a course number." })
+  .transform(normalizeCourseNumber)
+  .refine((value) => COURSE_NUMBER_PATTERN.test(value), {
+    error: "Enter a 4-digit course number, like 3251 or 2100W.",
+  });
+
 /**
  * The create-session form. A factory so "now" is injectable: the start-time
  * rule depends on the clock, and tests pass a fixed one. Call it per request
@@ -318,30 +362,16 @@ const COURSE_NUMBER_PATTERN = /^[0-9]{4}[A-Z]?$/;
  * Department and course numbers are normalised here (S2, #19) the same way
  * the database does (see the SQL twin, named above).
  */
-export function createSessionSchema(now: Date = new Date()) {
+export function createSessionSchema(
+  now: Date = new Date(),
+  options: { unchangedStart?: Date } = {},
+) {
   const earliestStart = new Date(now.getTime() - START_GRACE_MINUTES * 60_000);
 
   return z
     .object({
-      departmentCode: z
-        .string({ error: "Choose or add a department." })
-        .trim()
-        .min(1, { error: "Choose or add a department." })
-        .transform(normalizeDepartmentCode)
-        .refine((value) => value.length > 0, {
-          error: "Choose or add a department.",
-        })
-        .refine((value) => value.length <= DEPARTMENT_CODE_MAX_LENGTH, {
-          error: `Department codes are at most ${DEPARTMENT_CODE_MAX_LENGTH} letters or digits.`,
-        }),
-      courseNumber: z
-        .string({ error: "Enter a course number." })
-        .trim()
-        .min(1, { error: "Enter a course number." })
-        .transform(normalizeCourseNumber)
-        .refine((value) => COURSE_NUMBER_PATTERN.test(value), {
-          error: "Enter a 4-digit course number, like 3251 or 2100W.",
-        }),
+      departmentCode: departmentCodeField,
+      courseNumber: courseNumberField,
       topic: z
         .string({ error: "Say what you'll be studying." })
         .trim()
@@ -385,7 +415,13 @@ export function createSessionSchema(now: Date = new Date()) {
           error: `Keep the location name to ${LOCATION_LABEL_MAX_LENGTH} characters or fewer.`,
         }),
       startsAt: instant("Choose a start time.").refine(
-        (startsAt) => startsAt >= earliestStart,
+        (startsAt) =>
+          startsAt >= earliestStart ||
+          // S7/US-09: an edit that leaves the start alone is allowed even once
+          // it has passed, so a host can fix the topic or room of a session
+          // already in progress. update_session() makes the same allowance,
+          // comparing against the STORED start.
+          startsAt.getTime() === options.unchangedStart?.getTime(),
         { error: "The start time has already passed." },
       ),
       endsAt: instant("Choose an end time."),
@@ -398,6 +434,29 @@ export function createSessionSchema(now: Date = new Date()) {
             error: `At least ${MIN_CAPACITY} — you count as one.`,
           })
           .max(MAX_CAPACITY, { error: "That's more seats than we can store." }),
+      ),
+      // US-20: a checked box posts "on"; an unchecked box posts nothing. The
+      // edit form does not render these fields at all, so both stay at their
+      // "not repeating" defaults there.
+      repeatWeekly: z
+        .string()
+        .optional()
+        .transform((value) => value === "on" || value === "true"),
+      // Only meaningful when repeatWeekly is true; ignored otherwise. The
+      // refine below is what demands it then -- making it required here would
+      // refuse every ordinary (non-repeat) create.
+      weeks: z.preprocess(
+        blankAsMissing,
+        z.coerce
+          .number({ error: `Choose ${MIN_REPEAT_WEEKS} to ${MAX_REPEAT_WEEKS} weeks.` })
+          .int({ error: "Enter a whole number of weeks." })
+          .min(MIN_REPEAT_WEEKS, {
+            error: `Repeat for at least ${MIN_REPEAT_WEEKS} weeks.`,
+          })
+          .max(MAX_REPEAT_WEEKS, {
+            error: `Repeat for at most ${MAX_REPEAT_WEEKS} weeks.`,
+          })
+          .optional(),
       ),
     })
     .refine((session) => session.endsAt > session.startsAt, {
@@ -412,9 +471,215 @@ export function createSessionSchema(now: Date = new Date()) {
         const value = payload.value as { startsAt?: unknown; endsAt?: unknown };
         return value?.startsAt instanceof Date && value?.endsAt instanceof Date;
       },
+    })
+    .refine((session) => !session.repeatWeekly || session.weeks != null, {
+      path: ["weeks"],
+      error: `Choose ${MIN_REPEAT_WEEKS} to ${MAX_REPEAT_WEEKS} weeks.`,
     });
 }
 
 export type CreateSessionSchema = ReturnType<typeof createSessionSchema>;
 export type CreateSessionValues = z.output<CreateSessionSchema>;
 export type CreateSessionField = keyof CreateSessionValues;
+
+// ---------------------------------------------------------------------------
+// Edit a session (US-09) -- S7 calls this in updateSession().
+// ---------------------------------------------------------------------------
+
+/**
+ * The edit-session form: the same fields and the same rules as creating one,
+ * because a host editing a session may not leave it in a state they could not
+ * have created. Deliberately the same schema rather than a parallel copy --
+ * two sets of rules for one table drift, and the database only has one.
+ *
+ * `unchangedStart` is the session's stored start time. Passing it allows a
+ * start that has already passed **only if the host did not move it**, which is
+ * what update_session() allows too: see the note on `startsAt` above.
+ */
+export function editSessionSchema(unchangedStart: Date, now: Date = new Date()) {
+  return createSessionSchema(now, { unchangedStart });
+}
+
+export type EditSessionSchema = ReturnType<typeof editSessionSchema>;
+export type EditSessionValues = z.output<EditSessionSchema>;
+export type EditSessionField = keyof EditSessionValues;
+
+// ---------------------------------------------------------------------------
+// Ask for a session (US-16, R1) -- requestSession() calls this.
+//
+// The create-session form's department and course rules, and nothing else. A
+// request says WHICH COURSE and, optionally, why; it has no time, place or
+// capacity, because a student who knew those would be hosting rather than
+// asking.
+// ---------------------------------------------------------------------------
+
+export const studyRequestSchema = z.object({
+  departmentCode: departmentCodeField,
+  courseNumber: courseNumberField,
+  // Optional, like `room`: null when blank, so the database stores null and
+  // the UI tests one thing rather than two. The BEFORE INSERT trigger in
+  // *_r1_study_requests.sql trims again -- that is the enforcement, this is
+  // the message.
+  note: z
+    .string()
+    .trim()
+    .max(STUDY_REQUEST_NOTE_MAX_LENGTH, {
+      error: `Keep it to ${STUDY_REQUEST_NOTE_MAX_LENGTH} characters or fewer.`,
+    })
+    .optional()
+    .transform((note) => note || null),
+});
+
+export type StudyRequestValues = z.output<typeof studyRequestSchema>;
+export type StudyRequestField = keyof StudyRequestValues;
+
+// ---------------------------------------------------------------------------
+// Academic profile (US-11) -- saveProfile() in src/app/profile/actions.ts.
+// The database twins are profiles_major_check, profiles_minor_check, the
+// class_year enum and the profile_courses_limit trigger
+// (*_academic_profile.sql).
+// ---------------------------------------------------------------------------
+
+// MAJOR_MAX_LENGTH, MINOR_MAX_LENGTH, PROFILE_COURSES_MAX: src/lib/limits.ts.
+
+/** Optional free text: trimmed, and blank becomes null -- never stored as "". */
+function optionalText(max: number, tooLong: string) {
+  return z
+    .string()
+    .trim()
+    .max(max, { error: tooLong })
+    .optional()
+    .transform((text) => text || null);
+}
+
+/**
+ * One current course as the form submits it: `CS 3251` -- the department,
+ * a space, the number. Both halves are normalised as the session form's are,
+ * so `cs 3251` and `C.S. 3251` are the same course.
+ */
+const profileCourseSchema = z
+  .string()
+  .trim()
+  .transform((raw, ctx) => {
+    const space = raw.lastIndexOf(" ");
+    const departmentCode = normalizeDepartmentCode(space < 0 ? "" : raw.slice(0, space));
+    const courseNumber = normalizeCourseNumber(space < 0 ? raw : raw.slice(space + 1));
+    if (departmentCode === "" || departmentCode.length > DEPARTMENT_CODE_MAX_LENGTH) {
+      ctx.addIssue({ code: "custom", message: `Choose a department for ${raw || "each course"}.` });
+      return z.NEVER;
+    }
+    if (!COURSE_NUMBER_PATTERN.test(courseNumber)) {
+      ctx.addIssue({
+        code: "custom",
+        message: `“${raw}” isn't a course number. Use 4 digits, like 3251 or 2100W.`,
+      });
+      return z.NEVER;
+    }
+    return { departmentCode, courseNumber };
+  });
+
+export const profileSchema = z.object({
+  major: optionalText(MAJOR_MAX_LENGTH, `Keep your major to ${MAJOR_MAX_LENGTH} characters or fewer.`),
+  minor: optionalText(MINOR_MAX_LENGTH, `Keep your minor to ${MINOR_MAX_LENGTH} characters or fewer.`),
+  // "" is the select's "Prefer not to say": no year.
+  classYear: z
+    .preprocess(
+      blankAsMissing,
+      z.enum(CLASS_YEARS, { error: "Choose your year from the list." }).optional(),
+    )
+    .transform((year) => year ?? null),
+  // Repeats of one course collapse to one; the limit counts what is left.
+  courses: z
+    .array(profileCourseSchema)
+    .default([])
+    .transform((courses) => {
+      const seen = new Set<string>();
+      return courses.filter((course) => {
+        const key = `${course.departmentCode} ${course.courseNumber}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    })
+    .refine((courses) => courses.length <= PROFILE_COURSES_MAX, {
+      error: `List up to ${PROFILE_COURSES_MAX} current courses.`,
+    }),
+});
+
+export type ProfileValues = z.output<typeof profileSchema>;
+export type ProfileField = keyof ProfileValues;
+
+// ---------------------------------------------------------------------------
+// Delete my account (US-24) -- deleteAccount() in src/app/account/actions.ts.
+// ---------------------------------------------------------------------------
+
+/**
+ * The confirmation step: a checkbox, `confirm`, submitted as "yes" when
+ * ticked (and absent when not). Nothing else is read from the form -- above
+ * all, no user id: the account deleted is always the caller's own.
+ */
+export const deleteAccountSchema = z.object({
+  confirm: z.literal("yes", {
+    error: "Tick the box to confirm you want your account deleted.",
+  }),
+});
+
+export type DeleteAccountValues = z.output<typeof deleteAccountSchema>;
+export type DeleteAccountField = keyof DeleteAccountValues;
+
+// ---------------------------------------------------------------------------
+// Report a user (US-18) -- reportUser() in src/app/reports/actions.ts. The
+// database twins: the report_reason enum, reports_note_length, and the
+// reports_insert_own policy (*_reports.sql).
+// ---------------------------------------------------------------------------
+
+/** A uuid as Postgres prints one. Anything else cannot be a profile or session. */
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The report form: who (a hidden field, from the roster), the session it was
+ * sent from (hidden, optional), a reason, and an optional note. Never who is
+ * reporting: that is the signed-in student, set by the database.
+ */
+export const reportUserSchema = z.object({
+  reportedUserId: z
+    .string({ error: "Choose who you're reporting." })
+    .regex(UUID_PATTERN, { error: "Choose who you're reporting." }),
+  sessionId: z
+    .string()
+    .trim()
+    .optional()
+    .transform((id) => id || null)
+    .refine((id) => id === null || UUID_PATTERN.test(id), { error: "That session isn't valid." }),
+  reason: z.enum(REPORT_REASONS, { error: "Choose a reason." }),
+  note: z
+    .string()
+    .trim()
+    .max(REPORT_NOTE_MAX_LENGTH, {
+      error: `Keep the note to ${REPORT_NOTE_MAX_LENGTH} characters or fewer.`,
+    })
+    .optional()
+    .transform((note) => note || null),
+});
+
+export type ReportUserValues = z.output<typeof reportUserSchema>;
+export type ReportUserField = keyof ReportUserValues;
+
+// ---------------------------------------------------------------------------
+// Session chat (US-05) -- sendMessage() in src/app/sessions/actions.ts. Its
+// database twin: session_messages_body_check (*_session_chat.sql). Who sends
+// it is never a field: the database fills author_id from the session.
+// ---------------------------------------------------------------------------
+
+export const chatMessageSchema = z.object({
+  body: z
+    .string({ error: "Write a message first." })
+    .trim()
+    .min(1, { error: "Write a message first." })
+    .max(CHAT_MESSAGE_MAX_LENGTH, {
+      error: `Keep messages to ${CHAT_MESSAGE_MAX_LENGTH} characters or fewer.`,
+    }),
+});
+
+export type ChatMessageValues = z.output<typeof chatMessageSchema>;
+export type ChatMessageField = keyof ChatMessageValues;

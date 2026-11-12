@@ -155,6 +155,9 @@ classDiagram
     class Profile {
         +UUID id
         +string displayName
+        +string major
+        +string minor
+        +ClassYear classYear
         +datetime createdAt
     }
 
@@ -216,7 +219,7 @@ classDiagram
     Profile "1" --> "0..*" StudyRequest : posts
     StudySession --> SessionStatus
 
-    note for Profile "displayName is null until the<br/>first-sign-in name step. Email stays<br/>in auth.users, which clients cannot<br/>read — never copied here (US-25)."
+    note for Profile "displayName is null until the<br/>first-sign-in name step. Email stays<br/>in auth.users, which clients cannot<br/>read — never copied here (US-25).<br/>major, minor, classYear and current<br/>courses (profile_courses) are optional<br/>(US-11)."
     note for SessionAttendee "Composite key (sessionId, userId).<br/>This is what makes a double-join<br/>impossible — capacity is enforced<br/>separately, under a row lock."
     note for StudySession "seatsLeft() is DERIVED from the<br/>roster, never stored. hasEnded() is<br/>derived from endsAt — there is no<br/>ENDED status. hostId is null only<br/>after the host deletes their account."
     note for Message "Later sprint. isWritable() is true<br/>until one week after the session<br/>ends, enforced in RLS. authorId is<br/>null after deletion: 'Deleted user'."
@@ -430,8 +433,8 @@ and the locked database function above. The session page subscribes directly
 to Supabase Realtime for that session's roster — any signed-in viewer, since
 the roster is readable before joining (US-23) — and refetches the page on
 each change rather than applying the event (`src/lib/live-roster.ts`). Once on
-the roster, the browser will subscribe to the session's messages the same
-way. Chat visibility is enforced by policy, not by the client choosing not
+the roster, the browser subscribes to the session's messages the same way
+(`subscribeToChat()`, C1). Chat visibility is enforced by policy, not by the client choosing not
 to render — a non-attendee subscribing to the channel directly receives
 nothing.
 
