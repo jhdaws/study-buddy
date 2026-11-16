@@ -4,29 +4,43 @@ The phone app, built a slice at a time on the same Supabase project as the
 web app. Expo SDK 58, Expo Router, TypeScript.
 
 **Slice 1 (now):** sign in with your Vanderbilt email and password, or with
-a code by email; see the open sessions, soonest first, with seats left; pull
-down to refresh; sign out. Read-only.
+a code by email; see the open sessions under day headings, soonest first,
+with seats left; pull down to refresh; sign out. Read-only. It looks like
+the website: Manrope, the navy sign-in scene, and the same session cards.
 
 **Not yet:** signing up (new students use the website first), the session
 page, joining and leaving, hosting, chat, profile.
 
-## Run it on your phone
+## Test it yourself (Windows, Mac or Linux)
 
-1. Install **Expo Go** from the App Store or Google Play.
-2. From this folder:
+You need Node 22 or newer and Git. From the repo:
 
-   ```bash
-   cp .env.example .env.local   # then fill in both values
-   npm install
-   npx expo start
-   ```
+```bash
+git fetch origin
+git checkout mob1-us-03-expo-sign-in-and-list
+cd mobile
+npm install
+```
 
-   The two values are the same as the web app's
-   `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` (public by
-   design; RLS protects the data). Never put the secret key here.
-3. Scan the QR code: with the Camera app on iPhone, or from inside Expo Go on
-   Android. Phone and laptop must be on the same Wi-Fi; on campus Wi-Fi that
-   blocks this, use `npx expo start --tunnel`.
+Then create `mobile/.env.local` with the same two public values the web app
+uses (`NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` in the
+web app's `.env.local`, or Supabase → Project Settings → API):
+
+```
+EXPO_PUBLIC_SUPABASE_URL=https://<project>.supabase.co
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<the publishable / anon key>
+```
+
+Never the secret key: RLS protects the data, and the app ships this key.
+
+**In your browser (fastest):** `npx expo start --web`, then open the
+address it prints (usually http://localhost:8081).
+
+**On your phone:** install **Expo Go**, run `npx expo start`, and scan the
+QR code (Camera app on iPhone, Expo Go on Android). Phone and laptop must be
+on the same Wi-Fi; if campus Wi-Fi blocks it, use `npx expo start --tunnel`.
+
+Sign in with your Study Buddy account (password, or "Email me a code").
 
 ## Checks
 

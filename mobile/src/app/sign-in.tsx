@@ -18,7 +18,8 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-import { colors, TAP } from "@/components/theme";
+import AuthScene from "@/components/AuthScene";
+import { colors, font, RADIUS, TAP } from "@/components/theme";
 import {
   checkCode,
   checkEmail,
@@ -37,6 +38,7 @@ export default function SignIn() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [focused, setFocused] = useState<string | null>(null);
 
   async function run(task: () => Promise<void>) {
     setBusy(true);
@@ -104,13 +106,13 @@ export default function SignIn() {
 
   if (!supabaseConfigured) {
     return (
-      <SafeAreaView style={styles.page}>
-        <Text style={styles.title}>Study Buddy</Text>
+      <AuthScene>
+        <Text style={styles.title}>Almost there</Text>
         <Text style={styles.body}>
           This build has no Supabase settings. Copy mobile/.env.example to mobile/.env.local, fill in
           both values, and restart Expo.
         </Text>
-      </SafeAreaView>
+      </AuthScene>
     );
   }
 
@@ -121,106 +123,129 @@ export default function SignIn() {
         ? { label: "Email me a code", onPress: sendCode }
         : { label: "Sign in with code", onPress: verifyCode };
 
+  const input = (name: string) => [styles.input, focused === name && styles.inputFocused];
+
   return (
-    <SafeAreaView style={styles.page}>
+    <SafeAreaView style={styles.page} edges={["top", "bottom"]}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-          <Text style={styles.title} accessibilityRole="header">
-            Study Buddy
-          </Text>
-          <Text style={styles.body}>
-            {mode === "code-enter"
-              ? `We sent a code to ${email.trim().toLowerCase()}. It works once, for 10 minutes.`
-              : "Sign in with your Vanderbilt email."}
-          </Text>
-
-          {mode !== "code-enter" && (
-            <View style={styles.field}>
-              <Text style={styles.label} nativeID="email-label">
-                Vanderbilt email
-              </Text>
-              <TextInput
-                accessibilityLabelledBy="email-label"
-                accessibilityLabel="Vanderbilt email"
-                value={email}
-                onChangeText={setEmail}
-                autoCapitalize="none"
-                autoComplete="email"
-                keyboardType="email-address"
-                textContentType="username"
-                placeholder="name@vanderbilt.edu"
-                placeholderTextColor={colors.ink3}
-                style={styles.input}
-                editable={!busy}
-              />
-            </View>
-          )}
-
-          {mode === "password" && (
-            <View style={styles.field}>
-              <Text style={styles.label}>Password</Text>
-              <TextInput
-                accessibilityLabel="Password"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                autoComplete="current-password"
-                textContentType="password"
-                style={styles.input}
-                editable={!busy}
-                onSubmitEditing={signInWithPassword}
-              />
-            </View>
-          )}
-
-          {mode === "code-enter" && (
-            <View style={styles.field}>
-              <Text style={styles.label}>Code from the email</Text>
-              <TextInput
-                accessibilityLabel="Code from the email"
-                value={code}
-                onChangeText={setCode}
-                keyboardType="number-pad"
-                autoComplete="one-time-code"
-                textContentType="oneTimeCode"
-                maxLength={14}
-                style={styles.input}
-                editable={!busy}
-                onSubmitEditing={verifyCode}
-              />
-            </View>
-          )}
-
-          {error ? (
-            <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">
-              {error}
+        <ScrollView contentContainerStyle={{ flexGrow: 1 }} keyboardShouldPersistTaps="handled" bounces={false}>
+          <AuthScene>
+            <Text style={styles.title} accessibilityRole="header">
+              {mode === "code-enter" ? "Check your inbox" : "Sign in"}
             </Text>
-          ) : null}
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ disabled: busy, busy }}
-            disabled={busy}
-            onPress={primary.onPress}
-            style={({ pressed }) => [styles.button, (pressed || busy) && { opacity: 0.8 }]}
-          >
-            {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{primary.label}</Text>}
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            disabled={busy}
-            onPress={() => {
-              setError("");
-              setMode(mode === "password" ? "code-email" : "password");
-            }}
-            style={styles.link}
-          >
-            <Text style={styles.linkText}>
-              {mode === "password" ? "Email me a code instead" : "Sign in with a password instead"}
+            <Text style={styles.body}>
+              {mode === "code-enter"
+                ? `We sent a code to ${email.trim().toLowerCase()}. It works once, for 10 minutes.`
+                : mode === "code-email"
+                  ? "We'll email you a one-time code."
+                  : "Use your Vanderbilt email and password."}
             </Text>
-          </Pressable>
 
+            <View style={styles.fields}>
+              {mode !== "code-enter" && (
+                <View style={styles.field}>
+                  <Text style={styles.label}>Vanderbilt email</Text>
+                  <TextInput
+                    accessibilityLabel="Vanderbilt email"
+                    value={email}
+                    onChangeText={setEmail}
+                    onFocus={() => setFocused("email")}
+                    onBlur={() => setFocused(null)}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    autoComplete="email"
+                    keyboardType="email-address"
+                    textContentType="username"
+                    placeholder="name@vanderbilt.edu"
+                    placeholderTextColor="rgba(255,255,255,0.6)"
+                    style={input("email")}
+                    editable={!busy}
+                    onSubmitEditing={mode === "code-email" ? sendCode : undefined}
+                  />
+                </View>
+              )}
+
+              {mode === "password" && (
+                <View style={styles.field}>
+                  <Text style={styles.label}>Password</Text>
+                  <TextInput
+                    accessibilityLabel="Password"
+                    value={password}
+                    onChangeText={setPassword}
+                    onFocus={() => setFocused("password")}
+                    onBlur={() => setFocused(null)}
+                    secureTextEntry
+                    autoComplete="current-password"
+                    textContentType="password"
+                    style={input("password")}
+                    editable={!busy}
+                    onSubmitEditing={signInWithPassword}
+                  />
+                </View>
+              )}
+
+              {mode === "code-enter" && (
+                <View style={styles.field}>
+                  <Text style={styles.label}>Code from the email</Text>
+                  <TextInput
+                    accessibilityLabel="Code from the email"
+                    value={code}
+                    onChangeText={setCode}
+                    onFocus={() => setFocused("code")}
+                    onBlur={() => setFocused(null)}
+                    keyboardType="number-pad"
+                    autoComplete="one-time-code"
+                    textContentType="oneTimeCode"
+                    maxLength={14}
+                    style={[input("code"), styles.codeInput]}
+                    editable={!busy}
+                    onSubmitEditing={verifyCode}
+                  />
+                </View>
+              )}
+
+              {error ? (
+                <View style={styles.errorBox} accessibilityRole="alert" accessibilityLiveRegion="polite">
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
+
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ disabled: busy, busy }}
+                disabled={busy}
+                onPress={primary.onPress}
+                style={({ pressed }) => [styles.button, pressed && styles.buttonPressed, busy && styles.buttonBusy]}
+              >
+                {busy ? (
+                  <ActivityIndicator color={colors.ink} accessibilityLabel="Working" />
+                ) : (
+                  <Text style={styles.buttonText}>{primary.label}</Text>
+                )}
+              </Pressable>
+            </View>
+
+            <View style={styles.links}>
+              {mode === "code-enter" ? (
+                <Pressable accessibilityRole="button" disabled={busy} onPress={() => { setError(""); setMode("code-email"); }} style={styles.link}>
+                  <Text style={styles.linkText}>Use a different email</Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                onPress={() => {
+                  setError("");
+                  setMode(mode === "password" ? "code-email" : "password");
+                }}
+                style={styles.link}
+              >
+                <Text style={styles.linkText}>
+                  {mode === "password" ? "Email me a code instead" : "Sign in with a password instead"}
+                </Text>
+              </Pressable>
+            </View>
+          </AuthScene>
           <Text style={styles.footnote}>New to Study Buddy? Sign up on the website first.</Text>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -229,32 +254,53 @@ export default function SignIn() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: colors.page },
-  content: { padding: 24, paddingTop: 64, gap: 16 },
-  title: { fontSize: 28, fontWeight: "700", color: colors.ink },
-  body: { fontSize: 16, color: colors.ink2, lineHeight: 22 },
+  page: { flex: 1, backgroundColor: colors.navy950 },
+  title: { fontFamily: font.bold, fontSize: 24, color: "#ffffff", textAlign: "center", letterSpacing: -0.3 },
+  body: { fontFamily: font.regular, fontSize: 15, lineHeight: 22, color: "rgba(255,255,255,0.8)", textAlign: "center", marginTop: 6 },
+  fields: { gap: 16, marginTop: 22 },
   field: { gap: 6 },
-  label: { fontSize: 14, fontWeight: "600", color: colors.ink },
+  label: { fontFamily: font.semibold, fontSize: 14, color: "#ffffff" },
   input: {
-    minHeight: TAP,
+    height: 48,
+    borderRadius: RADIUS.field,
     borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 10,
-    backgroundColor: colors.card,
-    paddingHorizontal: 12,
+    borderColor: "rgba(255,255,255,0.25)",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    paddingHorizontal: 16,
+    fontFamily: font.medium,
     fontSize: 16,
-    color: colors.ink,
+    color: "#ffffff",
   },
-  error: { color: colors.error, fontSize: 15 },
+  inputFocused: { borderColor: colors.blue200, backgroundColor: "rgba(255,255,255,0.12)" },
+  codeInput: { fontFamily: font.bold, fontSize: 20, letterSpacing: 6, textAlign: "center" },
+  errorBox: {
+    borderRadius: RADIUS.field,
+    borderWidth: 1,
+    borderColor: "rgba(255,180,180,0.4)",
+    backgroundColor: "rgba(210,63,63,0.15)",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  errorText: { fontFamily: font.medium, fontSize: 15, lineHeight: 21, color: colors.dangerOnDark },
   button: {
-    minHeight: TAP,
-    borderRadius: 10,
-    backgroundColor: colors.accent,
+    height: 48,
+    borderRadius: RADIUS.field,
+    backgroundColor: "#ffffff",
     alignItems: "center",
     justifyContent: "center",
   },
-  buttonText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  link: { minHeight: TAP, alignItems: "center", justifyContent: "center" },
-  linkText: { color: colors.accent, fontSize: 15, fontWeight: "500" },
-  footnote: { color: colors.ink3, fontSize: 13, textAlign: "center" },
+  buttonPressed: { backgroundColor: colors.sky50 },
+  buttonBusy: { opacity: 0.85 },
+  buttonText: { fontFamily: font.bold, fontSize: 16, color: colors.ink },
+  links: { marginTop: 8, alignItems: "center" },
+  link: { minHeight: TAP, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
+  linkText: { fontFamily: font.semibold, fontSize: 14, color: colors.blue200 },
+  footnote: {
+    fontFamily: font.regular,
+    fontSize: 13,
+    color: "rgba(255,255,255,0.6)",
+    textAlign: "center",
+    paddingVertical: 20,
+    backgroundColor: colors.navy950,
+  },
 });

@@ -77,24 +77,76 @@ export function toSessionItems(rows: SessionRow[], blockedIds: ReadonlySet<strin
       seatsLeft: seatsLeft(going, row.capacity),
     });
   }
-  return items;
+  // Soonest first even if the server's order is lost, so day headings never repeat.
+  return items.sort((x, y) => x.startsAt.getTime() - y.startsAt.getTime());
 }
 
-const dayFormat = new Intl.DateTimeFormat("en-US", {
-  timeZone: CAMPUS_TIME_ZONE,
-  weekday: "short",
-  month: "short",
-  day: "numeric",
-});
 const timeFormat = new Intl.DateTimeFormat("en-US", {
   timeZone: CAMPUS_TIME_ZONE,
   hour: "numeric",
   minute: "2-digit",
 });
+const dateFormat = new Intl.DateTimeFormat("en-US", {
+  timeZone: CAMPUS_TIME_ZONE,
+  weekday: "short",
+  month: "short",
+  day: "numeric",
+});
+const dayParts = new Intl.DateTimeFormat("en-US", {
+  timeZone: CAMPUS_TIME_ZONE,
+  year: "numeric",
+  month: "numeric",
+  day: "numeric",
+});
 
-/** "Mon, Nov 16 · 7:00 PM – 9:00 PM", in campus time. */
+const DAY_MS = 86_400_000;
+
+/** A whole-day number for `date`'s campus calendar day. */
+function campusDay(date: Date): number {
+  const parts = dayParts.formatToParts(date);
+  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value);
+  return Date.UTC(part("year"), part("month") - 1, part("day")) / DAY_MS;
+}
+
+/** "7:00 PM", in campus time. Some engines put a narrow space before AM/PM; it is normalised. */
+export function formatTime(date: Date): string {
+  return timeFormat.format(date).replace(/\u202f/g, " ");
+}
+
+/** "Today", "Tomorrow", or "Thu, Nov 19", by campus calendar day (the web's formatCampusDay). */
+export function formatCampusDay(date: Date, now: Date): string {
+  const offset = campusDay(date) - campusDay(now);
+  if (offset === 0) return "Today";
+  if (offset === 1) return "Tomorrow";
+  if (offset === -1) return "Yesterday";
+  return dateFormat.format(date);
+}
+
+/** "Mon, Nov 16 · 7:00 PM – 9:00 PM", in campus time (accessibility labels). */
 export function formatWhen(startsAt: Date, endsAt: Date): string {
-  return `${dayFormat.format(startsAt)} · ${timeFormat.format(startsAt)} – ${timeFormat.format(endsAt)}`;
+  return `${dateFormat.format(startsAt)} · ${formatTime(startsAt)} – ${formatTime(endsAt)}`;
+}
+
+export function isInProgress(item: Pick<SessionItem, "startsAt" | "endsAt">, now: Date): boolean {
+  return item.startsAt.getTime() <= now.getTime() && now.getTime() < item.endsAt.getTime();
+}
+
+export type DayGroup = { title: string; data: SessionItem[] };
+
+/**
+ * Sessions under day headings, in the order given (soonest first), as on the
+ * web list. One that started yesterday and is still running counts as Today.
+ */
+export function groupByDay(items: SessionItem[], now: Date): DayGroup[] {
+  const groups: DayGroup[] = [];
+  for (const item of items) {
+    const startedEarlier = campusDay(item.startsAt) < campusDay(now);
+    const title = startedEarlier && isInProgress(item, now) ? "Today" : formatCampusDay(item.startsAt, now);
+    const last = groups.at(-1);
+    if (last && last.title === title) last.data.push(item);
+    else groups.push({ title, data: [item] });
+  }
+  return groups;
 }
 
 /** Read the list as the signed-in student. Throws on a failed read. */

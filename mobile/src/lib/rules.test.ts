@@ -8,7 +8,18 @@ import {
   sendCodeErrorMessage,
   verifyCodeErrorMessage,
 } from "./auth-rules";
-import { formatWhen, seatsLeft, seatsText, toSessionItems, type SessionRow } from "./sessions";
+import {
+  formatCampusDay,
+  formatTime,
+  formatWhen,
+  groupByDay,
+  isInProgress,
+  seatsLeft,
+  seatsText,
+  toSessionItems,
+  type SessionItem,
+  type SessionRow,
+} from "./sessions";
 
 describe("checkEmail", () => {
   it("accepts a Vanderbilt address, trimmed and lowercased", () => {
@@ -88,6 +99,14 @@ describe("toSessionItems", () => {
     });
   });
 
+  it("sorts soonest first even when rows arrive out of order", () => {
+    const items = toSessionItems(
+      [row({ id: "later", starts_at: "2026-11-18T01:00:00.000Z" }), row({ id: "sooner" })],
+      new Set(),
+    );
+    expect(items.map((item) => item.id)).toEqual(["sooner", "later"]);
+  });
+
   it("leaves out blocked hosts and rows it cannot show, and keeps a deleted host", () => {
     const items = toSessionItems(
       [
@@ -116,5 +135,54 @@ describe("seats and time", () => {
     expect(formatWhen(new Date("2026-11-17T01:00:00Z"), new Date("2026-11-17T03:00:00Z"))).toBe(
       "Mon, Nov 16 · 7:00 PM – 9:00 PM",
     );
+  });
+});
+
+describe("day headings and times (as on the web list)", () => {
+  // 18:00Z on Mon Nov 16 is noon on Nov 16 in Nashville.
+  const now = new Date("2026-11-16T18:00:00Z");
+  const item = (id: string, start: string, end: string): SessionItem => ({
+    id,
+    course: "CS 3251",
+    courseTitle: null,
+    topic: "t",
+    place: "p",
+    host: "h",
+    startsAt: new Date(start),
+    endsAt: new Date(end),
+    going: 1,
+    capacity: 4,
+    seatsLeft: 3,
+  });
+
+  it("names the campus day, not the UTC day", () => {
+    // 03:00Z on Nov 17 is still 9 PM on Nov 16 in Nashville.
+    expect(formatCampusDay(new Date("2026-11-17T03:00:00Z"), now)).toBe("Today");
+    expect(formatCampusDay(new Date("2026-11-17T18:00:00Z"), now)).toBe("Tomorrow");
+    expect(formatCampusDay(new Date("2026-11-19T18:00:00Z"), now)).toBe("Thu, Nov 19");
+    expect(formatTime(new Date("2026-11-17T01:00:00Z"))).toBe("7:00 PM");
+  });
+
+  it("groups soonest first, and counts a session still running from yesterday as Today", () => {
+    const groups = groupByDay(
+      [
+        item("late", "2026-11-16T04:00:00Z", "2026-11-16T19:00:00Z"), // Nov 15, 10 PM, still on
+        item("a", "2026-11-16T20:00:00Z", "2026-11-16T22:00:00Z"),
+        item("b", "2026-11-17T20:00:00Z", "2026-11-17T22:00:00Z"),
+        item("c", "2026-11-19T20:00:00Z", "2026-11-19T22:00:00Z"),
+      ],
+      now,
+    );
+    expect(groups.map((g) => [g.title, g.data.map((i) => i.id)])).toEqual([
+      ["Today", ["late", "a"]],
+      ["Tomorrow", ["b"]],
+      ["Thu, Nov 19", ["c"]],
+    ]);
+  });
+
+  it("knows when a session is happening now", () => {
+    const live = item("x", "2026-11-16T17:00:00Z", "2026-11-16T19:00:00Z");
+    expect(isInProgress(live, now)).toBe(true);
+    expect(isInProgress(live, new Date("2026-11-16T19:00:00Z"))).toBe(false);
   });
 });
