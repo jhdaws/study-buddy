@@ -74,6 +74,22 @@ spends its first hour rediscovering the same dead end.
 
 
 
+## 2026-11-15 · Expo app, slice 1: sign-in and the session list (branch mob1-us-03-expo-sign-in-and-list)
+
+### What changed
+- `mobile/`: an Expo SDK 58 app with Expo Router. Sign in by password or emailed code, the open-session list (same query as the web), sign-out. See `mobile/README.md`.
+- Root `tsconfig.json` and `eslint.config.mjs` exclude `mobile/`; `ci.yml` has a `mobile` job (typecheck, unit tests, audit), not yet required.
+- SEC-18: the session is stored unencrypted (Expo's recommended `expo-sqlite` localStorage). Deferred; the fix is `expo-secure-store` with a chunking adapter.
+
+### Decided in conversation, not yet written down
+- Moses chose `mobile/` in the team repo over a separate repo. Jack has not agreed yet; the PR asks.
+- The app does not create accounts: new students sign up on the website first.
+
+### Things the next agent should be careful about
+- `npx expo install` needs Expo's API, which this environment's proxy blocks. Use `node_modules/expo/bundledNativeModules.json` for SDK-matched versions.
+- Never tested on a real phone or against hosted Supabase. The web render check used a stand-in server.
+- Next slices, in order: session page (read-only), join/leave through the existing `join_session`/`leave_session` functions, then hosting.
+
 ## 2026-11-11 · Sprint 4 cleanup: last fixes, Group 3's review, and every doc brought up to date
 
 **Branch:** `sprint4-cleanup`, from `main` at `9d0a6fd` · **Commits made:** this PR

@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     // Playwright writes its own; neither is our code.
     "coverage/**",
     "playwright-report/**",
+    // The Expo app has its own package, tsconfig and checks (CI job `mobile`).
+    "mobile/**",
     "test-results/**",
   ]),
 ]);
