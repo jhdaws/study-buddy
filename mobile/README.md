@@ -50,5 +50,7 @@ CI runs both, plus a dependency audit, in the `mobile` job. `npx expo export
   localStorage). It is not encrypted: finding SEC-18 in
   `docs/security/findings.md`.
 - Install packages with `npx expo install <name>` so versions match SDK 58.
+  `react-dom` is pinned to the exact `react` version: Expo Router pulls it in
+  for web, and a newer one breaks `npm ci` with a peer conflict.
   If that cannot reach Expo's servers, use the version in
   `node_modules/expo/bundledNativeModules.json`.
