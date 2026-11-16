@@ -87,6 +87,37 @@ jobs:
   # only the database container, not the whole local Supabase stack, and
   # applies every migration in supabase/migrations/, then supabase/seed.sql,
   # on the way up.
+  # The Expo app in mobile/ (US-01, US-03): its own package and lock file, so
+  # it never touches the web app's install. Typecheck and unit tests only;
+  # nothing here needs a device or Supabase. Not a required check yet.
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      # Same bar as the security job's audit of the web app: a High or
+      # Critical advisory in a shipped dependency fails the check.
+      - name: Dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
   db:
     # Integration tests run only after unit tests pass.
     needs: verify
