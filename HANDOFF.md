@@ -74,6 +74,22 @@ spends its first hour rediscovering the same dead end.
 
 
 
+## 2026-11-17 · Sprint 5 planning: hosting ADR, deployment diagram, board
+
+**Branch:** `s5-d8-hosting-adr`, from `main` at `3d3e100` · **Commits made:** this PR
+
+### What changed
+- `docs/adr/0012-hosting-and-release.md` and `docs/deployment.md` (D8, #161): stay on Vercel + Supabase, add a staging Supabase project, promote production by `v*` tag with approval, build the Docker image in CI for local setup only.
+- Board: milestone "Sprint 5", labels `sprint 5`, `must-have`, `release`; issues #147–#168 with owners, sizes and checkpoint dates; the P0 story issues (#16, #20, #21, #23, #24, #25, #51, #105, #107, #128) labelled `must-have`. `docs/tickets.md` has the table.
+
+### Decided in conversation, not yet written down
+- Jack owns every documentation ticket (D8–D13). The Sprint 5 plan doc (Google Drive, `sprint5-plan-group4`) still shows the earlier split until Jack edits it.
+
+### Things the next agent should be careful about
+- ADR 0012 is a decision, not an implementation: nothing deploys differently until V3 (#149). When V3 lands, update `deploy-db.yml`'s header comment, SEC-08's row and W10, as the ADR lists.
+- `NEXT_PUBLIC_*` values are baked in at build time, so a staging build cannot be promoted as-is. That is why production rebuilds the same commit. Do not "fix" this by reusing the staging build.
+- Preview URLs are behind Vercel's login. The smoke tests (V4) need the protection-bypass secret, not protection turned off.
+
 ## 2026-11-11 · Sprint 4 cleanup: last fixes, Group 3's review, and every doc brought up to date
 
 **Branch:** `sprint4-cleanup`, from `main` at `9d0a6fd` · **Commits made:** this PR
