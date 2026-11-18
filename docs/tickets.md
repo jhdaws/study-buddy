@@ -6,6 +6,40 @@ story (`w2-schema-skeleton`, `s3-us-02-create-session`).
 **Sizes:** S ≈ 1–2h · M ≈ 3–4h · L ≈ 5–6h — guesses; re-size after this sprint.
 **Status:** ⬜ not started · 🚧 in progress · ✅ done
 
+## Sprint 5 (2026-11-17 to 2026-12-08)
+
+The release sprint. Tickets live as GitHub issues on the project board
+(milestone "Sprint 5", label `sprint 5`). Hosting and release follow
+[ADR 0012](./adr/0012-hosting-and-release.md): Vercel + Supabase, a staging
+project, production promoted by a `v*` tag with approval. Jack owns every
+documentation ticket (D8 to D13). The Must-have (P0) story issues carry the
+`must-have` label.
+
+| Ticket | Work | Owner | Issue | Due |
+| --- | --- | --- | --- | --- |
+| V1 | Multi-stage Dockerfile; image built on PRs, pushed to GHCR on merge | Nate | #147 | 11/20 |
+| V2 | `docker-compose.yml`: one command runs the whole system | Nate | #148 | 11/20 |
+| V3 | Staging and production on Vercel via Actions, approval gate (closes W10, #54) | Jack | #149 | 12/1 |
+| V4 | Three smoke tests against staging that block promotion | Tapan | #150 | 12/1 |
+| V5 | `/api/health`: version, commit SHA, database reachable | Moses | #151 | 12/1 |
+| V6 | Structured logs with request ID and level | Moses | #152 | 12/1 |
+| V7 | Sentry and an uptime alert on production | Moses | #153 | 12/6 |
+| V8 | Rollback drill (bad v1.0.1, detect, roll back, time it) | Tapan | #154 | 12/8 |
+| V9 | CHANGELOG, v1.0.0-rc1, v1.0.0 GitHub Release | Jack | #155 | 12/6, 12/8 |
+| P5 | US-18 report a chat message | Moses | #156 | 12/6 |
+| S11 | US-13 remove an attendee | Nate | #157 | 12/6 |
+| N2 | US-10 reminders | Tapan | #158 | 12/6 |
+| S12 | US-14 ratings (stretch) | Tapan | #159 | 12/6 |
+| S13 | US-12 sessions near me (stretch) | Nate | #160 | 12/6 |
+| D8 | Hosting ADR and deployment diagram | Jack | #161 | 11/20 |
+| D9 | `docs/ops/RUNBOOK.md` | Jack | #162 | 12/6 |
+| D10 | README a stranger can follow | Jack | #163 | 12/8 |
+| D11 | Release pipeline stage diagram | Jack | #164 | 12/8 |
+| D12 | Five most complex functions | Moses | #165 | 12/8 |
+| D13 | Sprint 5 report and AI log | Jack | #166 | 12/8 |
+| D14 | Release video | Moses | #167 | 12/8 |
+| D15 | Final slides and presentation | Everyone | #168 | 12/8 |
+
 ## Sprint 4 (2026-10-27 to 2026-11-12)
 
 Sprint 4's tickets live as GitHub issues on the project board ("Study Buddy",
