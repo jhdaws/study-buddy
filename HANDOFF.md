@@ -74,6 +74,27 @@ spends its first hour rediscovering the same dead end.
 
 
 
+## 2026-11-20 · Checkpoint 1: Dockerfile, compose, CI image build (V1/V2)
+
+**Branch:** `v1-v2-docker-compose`, from `main` at `c8c6618` · **Commits made:** this PR
+
+### What changed
+- `Dockerfile` — multi-stage Next.js standalone image, non-root `nextjs` user, no compilers/tests in the runner.
+- `docker-compose.yml` — `supabase` service via CLI + docker.sock; `app` builds the Dockerfile and waits on Auth health.
+- `.github/workflows/ci.yml` — `docker` job builds on every PR; pushes `ghcr.io/...:sha-<sha>` and `:main` on merge to main (Actions SHA-pinned).
+- `next.config.ts` — `output: "standalone"` for the image.
+- `.env.example` / `README.md` — one-command local stack documented; local demo JWTs filled in for Compose.
+- Must-have labels already on Sprint 5 issues #147–#158; ADR 0012 + `docs/deployment.md` already on main via #169.
+
+### Uncommitted at end of session
+- None expected after the PR commit (reflection/pptx under `docs/` and `.cursor/` stay local — not part of V1/V2).
+
+### Things the next agent should be careful about
+- Local `docker build` was verified; a full `docker compose up` end-to-end was **not** claimed green — CI's docker job is the merge gate for the image.
+- Compose mounts the host workspace and needs Docker Desktop (socket). Seed of locations uses `|| true` if `node_modules` is missing in a fresh clone.
+- Production still deploys via Vercel, not the GHCR image (ADR 0012). Do not "fix" that by wiring Vercel to the container without a team decision.
+- Checkpoint 1 also needs this PR **merged** before 11:59pm Fri 11/20 — needs a teammate approval.
+
 ## 2026-11-17 · Sprint 5 planning: hosting ADR, deployment diagram, board
 
 **Branch:** `s5-d8-hosting-adr`, from `main` at `3d3e100` · **Commits made:** this PR

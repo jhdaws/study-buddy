@@ -24,6 +24,9 @@ if (process.env.VERCEL_ENV === "production") {
 }
 
 const nextConfig: NextConfig = {
+  // Sprint 5 V1: standalone output for the multi-stage Docker image
+  // (ADR 0012). The runner copies `.next/standalone` only.
+  output: "standalone",
   // Says nothing a visitor needs, and tells an attacker which framework to
   // look up (SEC-10).
   poweredByHeader: false,

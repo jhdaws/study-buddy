@@ -1,0 +1,27 @@
+# Keep the build context small and free of secrets / junk.
+.git
+.github
+.cursor
+.next
+node_modules
+coverage
+playwright-report
+test-results
+.env
+.env.*
+!.env.example
+*.md
+!README.md
+docs
+tests
+supabase/.temp
+supabase/.branches
+**/*.test.ts
+**/*.test.tsx
+vitest.config.mts
+vitest.db.config.mts
+playwright.config.ts
+HANDOFF.md
+CLAUDE.md
+AGENTS.md
+TEST_PLAN.md
