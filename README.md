@@ -26,10 +26,10 @@ docker compose up --build
 ```
 
 Then open http://localhost:3000. Compose starts the Next.js app image plus the
-local Supabase stack (database, Auth, API, Realtime, Mailpit). The committed
-`.env.example` already has the local demo Supabase values; replace them only
-when pointing `npm run dev` at the hosted project. Without Docker, use
-`npm run db:start` and `npm run dev` as before.
+local Supabase stack (database, Auth, API, Realtime, Mailpit). Leave the
+Supabase keys empty in `.env` — `docker-compose.yml` supplies the local
+`supabase start` demo values. For `npm run dev`, fill them from
+`npm run db:status` or the hosted project.
 
 ---
 
