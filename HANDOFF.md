@@ -90,10 +90,11 @@ spends its first hour rediscovering the same dead end.
 - None expected after the PR commit (reflection/pptx under `docs/` and `.cursor/` stay local — not part of V1/V2).
 
 ### Things the next agent should be careful about
-- Local `docker build` was verified; a full `docker compose up` end-to-end was **not** claimed green — CI's docker job is the merge gate for the image.
+- Local `docker build` was verified; a full `docker compose up` end-to-end was **not** claimed green — CI's docker job is the merge gate for the image (already green once on #172).
+- First push put local demo JWTs in `.env.example` and failed gitleaks; follow-up `7642154` emptied them and added fingerprints to `.gitleaksignore`. Compose still supplies those public JWTs via `${VAR:-…}` defaults.
 - Compose mounts the host workspace and needs Docker Desktop (socket). Seed of locations uses `|| true` if `node_modules` is missing in a fresh clone.
 - Production still deploys via Vercel, not the GHCR image (ADR 0012). Do not "fix" that by wiring Vercel to the container without a team decision.
-- Checkpoint 1 also needs this PR **merged** before 11:59pm Fri 11/20 — needs a teammate approval.
+- Checkpoint 1 also needs PR #172 **merged** before 11:59pm Fri 11/20 — needs a teammate approval. Reviewers requested: jhdaws, tsidhwani, moses-banda.
 
 ## 2026-11-17 · Sprint 5 planning: hosting ADR, deployment diagram, board
 
