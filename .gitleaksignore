@@ -8,3 +8,12 @@
 82741f456cd95a03bde6620197ef5d6a827dc4e5:src/lib/validation.test.ts:generic-api-key:276
 82741f456cd95a03bde6620197ef5d6a827dc4e5:src/app/sessions/actions.test.ts:generic-api-key:120
 82741f456cd95a03bde6620197ef5d6a827dc4e5:src/lib/places.test.ts:generic-api-key:121
+
+# V1/V2 (#172), commit fc4de85: well-known local `supabase start` demo JWTs
+# briefly written into .env.example. They are public fixtures (same values
+# printed by `supabase status`), not project secrets; removed from the file
+# in the follow-up commit. Kept here so history still scans clean.
+fc4de85e9d590ff3ddf264078ccde204dd541172:.env.example:jwt:9
+fc4de85e9d590ff3ddf264078ccde204dd541172:.env.example:jwt:10
+fc4de85e9d590ff3ddf264078ccde204dd541172:.env.example:jwt:30
+fc4de85e9d590ff3ddf264078ccde204dd541172:.env.example:jwt:40

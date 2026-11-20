@@ -11,6 +11,26 @@ on every merge, and builds a preview for every pull request.
 CS 4278: Principles of Software Engineering · Group 4 · Fall 2026
 Jack Dawson · Nate Dalbert · Moses Banda · Tapan Sidhwani
 
+Hosting and release plan: [`docs/adr/0012-hosting-and-release.md`](./docs/adr/0012-hosting-and-release.md),
+diagram in [`docs/deployment.md`](./docs/deployment.md).
+
+---
+
+## Run locally with Docker
+
+```bash
+git clone https://github.com/jhdaws/study-buddy.git
+cd study-buddy
+cp .env.example .env
+docker compose up --build
+```
+
+Then open http://localhost:3000. Compose starts the Next.js app image plus the
+local Supabase stack (database, Auth, API, Realtime, Mailpit). Leave the
+Supabase keys empty in `.env` — `docker-compose.yml` supplies the local
+`supabase start` demo values. For `npm run dev`, fill them from
+`npm run db:status` or the hosted project.
+
 ---
 
 ## CI/CD
@@ -23,10 +43,14 @@ in order, stopping at the first failure:
 2. **db** and **e2e**: integration tests. Database rules, policies and
    functions against real Postgres (`tests/db/`), and the main journeys in a
    browser against the full local stack (`tests/e2e/`)
-3. **coverage-report**: the coverage table and HTML report
+3. **docker**: multi-stage app image build (a broken `Dockerfile` fails the
+   check). On merge to `main`, the image is pushed to GHCR tagged with the
+   commit SHA
+4. **coverage-report**: the coverage table and HTML report
+5. **security**: dependency audit, Semgrep, and gitleaks (High fails)
 
-`main` is protected: a pull request, a teammate's approval, and green `verify`
-and `db` checks are required. On merge, Vercel deploys the app, and
+`main` is protected: a pull request, a teammate's approval, and green checks
+are required. On merge, Vercel deploys the app, and
 [`deploy-db.yml`](./.github/workflows/deploy-db.yml) applies new migrations to
 the hosted database once CI has passed.
 
