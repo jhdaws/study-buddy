@@ -74,6 +74,33 @@ spends its first hour rediscovering the same dead end.
 
 
 
+## 2026-11-27 · Jack's Sprint 5 tickets: V3, D9, V9, D10, D11 as PRs; report, notes and slides drafted
+
+**Branches:** `s5-v3-staging-production` (#177, from `main` at `0e53f9d`); stacked on it: `s5-d9-runbook` (#178), `s5-d10-readme` (#180), `s5-d11-pipeline-diagram` (#181); from `main`: `s5-v9-changelog` (#179). This entry is on `s5-docs-state-nov27` (#176). **Commits made:** those PRs. Nothing merged, no tag pushed, no issue opened.
+
+### What changed
+- #177 (V3): `vercel.json` turns off Vercel's Git deploys; `deploy.yml` deploys staging on green main (migrations, `vercel deploy`, alias to `vars.STAGING_HOST`, `smoke-tests.yml`, "staging smoke" commit status) and production on a `v*` tag (`scripts/release-gate.mjs`, then the `production` environment's approval, migrations and `--prod` in one job). Pre-release tags (`v1.0.0-rc1`) stop after the gate. `deploy-db.yml` is by-hand only. One-time setup is in `docs/deployment.md`.
+- #178 runbook, #179 CHANGELOG + `package.json` 1.0.0-rc1 + `docs/ops/release-checklist.md`, #180 README rewrite, #181 stage diagram + screenshot list.
+- Outside the repo: Google Doc `sprint5-group4` (report draft, highlighted placeholders); `/mnt/project-files/sprint5/release-notes-v1.0.0.md` and `final-group4-outline.md` (project files, not in git).
+
+### Verified versus assumed
+- **Verified:** lint (0 errors), typecheck, unit tests (1031 on #180's branch), build on #177; the gate script by hand; each PR has a failure-path test.
+- **Not verified:** no workflow has run against real Vercel or Supabase (none of the settings exist). Unchecked until the first run: `vercel alias set` on Hobby, whether `deploy --prebuilt --env APP_COMMIT_SHA` reaches functions at runtime, one approval prompt per production run. Workflows were not linted with actionlint, and the Mermaid diagram was not rendered: installing actionlint, mermaid-cli and running `go run` were refused in this environment.
+
+### Open questions for the user
+- Jack's one-time setup (`docs/deployment.md`, "One-time setup") blocks everything in Checkpoint 2. Until it is done, merging #177 means **main stops reaching production** and staging is skipped.
+- The #172 follow-up issue for Nate (BUG-24 to BUG-26) is drafted in the project thread, not opened.
+- Grader accounts for the README and release notes.
+- The board (GitHub Project) could not be updated from this session: no tool for Projects. #149, #155, #162–#164, #166, #168 should be In Progress.
+
+### Things the next agent should be careful about
+- V5 must read `APP_COMMIT_SHA` / `APP_ENVIRONMENT`, not `VERCEL_GIT_COMMIT_SHA` (unset once Git deploys are off).
+- The release gate requires the tag to equal `package.json`'s version; bump it in a PR before tagging.
+- After an Instant Rollback, Vercel stops auto-assigning the production domain; the next release needs `vercel promote` (RUNBOOK, "Roll back").
+- The smoke tests cannot be a PR-required check (they run after merge); the gate enforces them.
+- The Sprint 5 brief itself was not found in the repo or Drive; the report follows Jack's list of requirements. Check it against the brief.
+- `ci-e2e-chromium-no-apt` (remote branch) looks redundant: it has no commits that are not on main.
+
 ## 2026-11-27 · Sprint 5 state check: #172 follow-ups, where Checkpoint 2 stands
 
 **Branch:** `s5-docs-state-nov27`, from `main` at `0e53f9d` · **Commits made:** this PR
