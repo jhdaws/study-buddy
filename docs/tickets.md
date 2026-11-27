@@ -34,7 +34,7 @@ documentation ticket (D8 to D13). The Must-have (P0) story issues carry the
 | D8 | Hosting ADR and deployment diagram | Jack | #161 | 11/20 |
 | D9 | `docs/ops/RUNBOOK.md` | Jack | #162 | 12/6 |
 | D10 | README a stranger can follow | Jack | #163 | 12/8 |
-| D11 | Release pipeline stage diagram | Jack | #164 | 12/8 |
+| D11 | Release pipeline stage diagram — PR open, `s5-d11-pipeline-diagram` (on top of V3), with the report's screenshot list | Jack | #164 | 12/8 |
 | D12 | Five most complex functions | Moses | #165 | 12/8 |
 | D13 | Sprint 5 report and AI log | Jack | #166 | 12/8 |
 | D14 | Release video | Moses | #167 | 12/8 |
