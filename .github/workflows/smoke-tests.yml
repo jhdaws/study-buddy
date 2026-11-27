@@ -1,0 +1,61 @@
+name: Smoke tests
+
+# The hook V4 (#150, Tapan) plugs into. deploy.yml calls this after every
+# staging deploy; its result becomes the "staging smoke" commit status, and a
+# v* tag on a commit without a green one cannot reach production
+# (scripts/release-gate.mjs).
+#
+# The contract -- keep it when replacing the placeholder job below:
+#   inputs   base_url  the staging URL, e.g. https://study-buddy-staging-….vercel.app
+#            sha       the commit deployed there
+#   result   the job fails if the deploy is broken. That is all deploy.yml reads.
+#   secrets  the job runs in the `staging` environment, so it sees that
+#            environment's secrets: VERCEL_AUTOMATION_BYPASS_SECRET (staging is
+#            a Preview deployment, behind Vercel's login -- send it as the
+#            x-vercel-protection-bypass header, plus
+#            x-vercel-set-bypass-cookie: true for a browser), and whatever V4
+#            adds for the staging test account (e.g. SMOKE_TEST_EMAIL,
+#            SMOKE_TEST_PASSWORD).
+#
+# V4 replaces the placeholder with the three Playwright checks in #150:
+# /api/health says the database is reachable, the staging account signs in,
+# and a session it creates is stored.
+
+on:
+  workflow_call:
+    inputs:
+      base_url:
+        description: URL of the deployment to test
+        required: true
+        type: string
+      sha:
+        description: Commit deployed at base_url
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: staging
+    env:
+      BYPASS: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+
+    steps:
+      # PLACEHOLDER until V4: one request, so the pipeline and its gate can be
+      # tested end to end. It proves the deploy serves the sign-in page and
+      # nothing more.
+      - name: Staging serves the sign-in page (placeholder for V4)
+        run: |
+          if [ -z "$BYPASS" ]; then
+            echo "::error::The staging environment has no VERCEL_AUTOMATION_BYPASS_SECRET; staging is behind Vercel's login."
+            exit 1
+          fi
+          status=$(curl --silent --show-error --location --max-time 30 --retry 3 --retry-delay 5 \
+            -H "x-vercel-protection-bypass: $BYPASS" \
+            -o /dev/null -w '%{http_code}' "${{ inputs.base_url }}/login")
+          echo "GET ${{ inputs.base_url }}/login -> $status (commit ${{ inputs.sha }})"
+          [ "$status" = "200" ] || { echo "::error::Staging answered $status, not 200."; exit 1; }

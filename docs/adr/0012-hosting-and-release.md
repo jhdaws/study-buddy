@@ -121,6 +121,15 @@ How it works:
   own"), SEC-08's row in `docs/security/findings.md`, and W10 in
   `docs/tickets.md`.
 
+## Implementation note (V3, #149, 2026-11-27)
+
+Migrations moved into `deploy.yml` rather than staying in `deploy-db.yml`:
+each job that names the `production` environment waits for its own approval,
+so production's migrations and its `vercel deploy --prod` share one job, and
+the reviewer approves once. The steps are the composite action
+`.github/actions/push-migrations`. `deploy-db.yml` remains as a by-hand
+re-run from main. The decision above is unchanged.
+
 ## Revisit if
 
 - The grading of "the same image" turns out to need the image itself running

@@ -19,7 +19,7 @@ documentation ticket (D8 to D13). The Must-have (P0) story issues carry the
 | --- | --- | --- | --- | --- |
 | V1 | Multi-stage Dockerfile; image built on PRs, pushed to GHCR on merge | Nate | #147 | 11/20 |
 | V2 | `docker-compose.yml`: one command runs the whole system | Nate | #148 | 11/20 |
-| V3 | Staging and production on Vercel via Actions, approval gate (closes W10, #54) | Jack | #149 | 12/1 |
+| V3 | Staging and production on Vercel via Actions, approval gate (closes W10, #54) — PR open, `s5-v3-staging-production`; needs Jack's setup in `docs/deployment.md` | Jack | #149 | 12/1 |
 | V4 | Three smoke tests against staging that block promotion | Tapan | #150 | 12/1 |
 | V5 | `/api/health`: version, commit SHA, database reachable | Moses | #151 | 12/1 |
 | V6 | Structured logs with request ID and level | Moses | #152 | 12/1 |
@@ -209,7 +209,7 @@ flowchart LR
 #### W7 · Deploy migrations from CI
 **S · TASK-03 · P0 CI/CD · Jack**
 
-The hosted database changes only when someone runs `supabase db push` by hand, while Vercel deploys `main` on every merge. Once #31–#33 merge, production would run code calling `create_session` before the hosted database has it.
+The hosted database changes only when someone runs `supabase db push` by hand, while Vercel deployed `main` on every merge (until V3, #149: now only `.github/workflows/deploy.yml` deploys, and production only on a release tag). Once #31–#33 merge, production would run code calling `create_session` before the hosted database has it.
 - [ ] A job on push to `main`: `supabase link`, then `supabase db push` to the hosted project, with `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` in a GitHub `production` environment
 - [ ] Runs only after `verify` and `db` pass for that commit
 - [ ] No `--include-seed`: reseeding the hosted project stays a deliberate, manual step
@@ -236,7 +236,7 @@ Sprint 3 needs 60%+ coverage and integration tests. The baseline is 77.2% branch
 - [x] `coverage.thresholds` in `vitest.config.mts` set to the new numbers, so coverage cannot quietly drop
 
 #### W10 · Preview deployments get their own database
-**M · Sprint 3 · P0 CI/CD · Jack**
+**M · Sprint 3 · P0 CI/CD · Jack** — superseded by V3 (#149): a second Supabase project as shared staging (ADR 0012). Vercel no longer builds a preview per branch (`vercel.json`); the only Preview deployment is staging, built by `.github/workflows/deploy.yml` from `main` with the staging project's settings. The boxes below are kept as written in Sprint 3.
 
 Every Vercel preview uses the production Supabase project (W1 set the same values for Production, Preview and Development), so a PR's preview runs new code against production's old schema and writes test data into production.
 - [ ] Decide: Supabase preview branches (a database per PR; disabled in the integration settings now, may need a paid plan) or a second, free Supabase project as shared staging

@@ -5,8 +5,9 @@
 Find and join study sessions happening across Vanderbilt's campus — by course,
 by place, with seats left.
 
-**Live:** https://study-buddy-jdaws.vercel.app — Vercel deploys it from `main`
-on every merge, and builds a preview for every pull request.
+**Live:** https://study-buddy-jdaws.vercel.app — production, deployed by
+GitHub Actions from a `v*` release tag after a teammate approves. Every merge
+to `main` goes to staging first ([`docs/deployment.md`](./docs/deployment.md)).
 
 CS 4278: Principles of Software Engineering · Group 4 · Fall 2026
 Jack Dawson · Nate Dalbert · Moses Banda · Tapan Sidhwani
@@ -50,9 +51,12 @@ in order, stopping at the first failure:
 5. **security**: dependency audit, Semgrep, and gitleaks (High fails)
 
 `main` is protected: a pull request, a teammate's approval, and green checks
-are required. On merge, Vercel deploys the app, and
-[`deploy-db.yml`](./.github/workflows/deploy-db.yml) applies new migrations to
-the hosted database once CI has passed.
+are required. Once CI passes on `main`,
+[`deploy.yml`](./.github/workflows/deploy.yml) applies new migrations to the
+staging database, deploys the commit to staging and runs the smoke tests
+there. A `v*` tag on a commit whose staging smoke run is green deploys it to
+production, after a teammate approves. Vercel itself deploys nothing
+(`vercel.json`).
 
 ## Stack
 

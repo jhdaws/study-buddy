@@ -70,16 +70,18 @@ not this file. See [`data/README.md`](../data/README.md).
 
 ## Deploying migrations (W7, W10)
 
-Merging to `main` applies new migrations to the hosted databases by itself:
-`.github/workflows/deploy-db.yml` waits for CI to pass on that push, then runs
-`supabase db push --include-all` against **staging**, then **production**. If
-staging fails, production is not touched. Vercel deploys the app from the same
-push in parallel, so **a migration must work with the app version already
-live**: add columns, tables, functions and policies freely, but rename or drop
-in two steps. The seed is never pushed from CI.
+Since V3 (#149), migrations travel with the app in
+`.github/workflows/deploy.yml`: once CI passes on a push to `main`, it runs
+`supabase db push --include-all` against **staging** and then deploys that
+commit to staging. **Production** gets them only from a `v*` release tag,
+after a teammate approves, in the same job as the production deploy. The
+migration runs just before the new app version goes live, and the old version
+keeps serving until then, so **a migration must work with the app version
+already live**: add columns, tables, functions and policies freely, but rename
+or drop in two steps. The seed is never pushed from CI.
 
-To re-run it (after fixing a secret, say): Actions → Deploy database → Run
-workflow. To see what it would do, from a machine linked to the project:
+To re-run migrations by hand (after fixing a secret, say): Actions → Deploy
+database → Run workflow, from `main`. Production still waits for approval. To see what it would do, from a machine linked to the project:
 `npx supabase db push --include-all --dry-run`.
 
 ### One-time setup (repo admin)
@@ -93,9 +95,9 @@ create the environment and add:
 | `SUPABASE_ACCESS_TOKEN` | Secret | A personal access token from supabase.com → Account → Access Tokens |
 | `SUPABASE_DB_PASSWORD` | Secret, **optional** | Not needed: with only the access token, the CLI connects through a temporary login role (checked 2026-10-13). Add the database password only if that ever fails |
 
-An environment without `SUPABASE_PROJECT_ID` is skipped with a notice. Until
-W10 creates a staging project, leave `staging` empty, and the workflow deploys
-to production only.
+An environment without `SUPABASE_PROJECT_ID` is skipped with a notice. The
+full list of settings for both environments, including Vercel's, is in
+[`docs/deployment.md`](../docs/deployment.md), "One-time setup".
 
 ### A staging database for previews (W10)
 

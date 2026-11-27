@@ -1,0 +1,31 @@
+name: Push Supabase migrations
+description: >-
+  Apply supabase/migrations/ in the checked-out commit to one hosted Supabase
+  project. The caller checks out the commit, runs `npm ci` (the Supabase CLI
+  is a devDependency, pinned by package-lock.json), and sets
+  SUPABASE_PROJECT_ID, SUPABASE_ACCESS_TOKEN and, optionally,
+  SUPABASE_DB_PASSWORD in the job's env from its GitHub environment.
+
+# A composite action rather than only the reusable workflow
+# (push-migrations.yml) so that deploy.yml can run migrations and the Vercel
+# deploy in ONE job. Each job that names the `production` environment waits
+# for its own approval, so two jobs would ask the reviewer twice (V3, #149).
+
+runs:
+  using: composite
+  steps:
+    - name: Link the project
+      shell: bash
+      run: npx supabase link --project-ref "$SUPABASE_PROJECT_ID"
+
+    # --include-all: tracks work in parallel, so a migration created earlier
+    # can merge after a later one. Without it, db push refuses anything
+    # older than the newest migration already applied (HANDOFF, 2026-10-06).
+    - name: Show what will be applied
+      shell: bash
+      run: npx supabase db push --include-all --dry-run
+
+    # Never --include-seed here: reseeding a hosted project stays manual.
+    - name: Apply migrations
+      shell: bash
+      run: npx supabase db push --include-all --yes
