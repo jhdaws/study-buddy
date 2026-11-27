@@ -72,6 +72,10 @@ run.*
 Production gets a commit only when someone tags it, and only if that commit
 already passed on staging.
 
+A **pre-release** tag such as `v1.0.0-rc1` goes through the same gate but
+stops there: it marks the freeze commit as checked on staging and deploys
+nothing to production. Only a plain version (`v1.0.0`, `v1.0.1`) does.
+
 1. Check the commit you want shows a green **staging smoke** status on
    GitHub (the commit's page, or the ✓ next to it in the commit list).
 2. Make sure `package.json`'s `version` already says the version you are
