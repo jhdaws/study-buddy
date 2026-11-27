@@ -1,23 +1,72 @@
 # Study Buddy
 
 [![CI](https://github.com/jhdaws/study-buddy/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jhdaws/study-buddy/actions/workflows/ci.yml)
+[![Deploy](https://github.com/jhdaws/study-buddy/actions/workflows/deploy.yml/badge.svg)](https://github.com/jhdaws/study-buddy/actions/workflows/deploy.yml)
 
-Find and join study sessions happening across Vanderbilt's campus — by course,
+Find and join study sessions happening across Vanderbilt's campus: by course,
 by place, with seats left.
 
-**Live:** https://study-buddy-jdaws.vercel.app — production, deployed by
-GitHub Actions from a `v*` release tag after a teammate approves. Every merge
-to `main` goes to staging first ([`docs/deployment.md`](./docs/deployment.md)).
+| | |
+| --- | --- |
+| **Production** | https://study-buddy-jdaws.vercel.app |
+| **Staging** | `https://<STAGING_HOST>` <mark>**PLACEHOLDER:** fill in once the first staging deploy has run</mark> (behind Vercel's login; ask a teammate) |
+| **Release notes** | [`CHANGELOG.md`](./CHANGELOG.md) and [GitHub Releases](https://github.com/jhdaws/study-buddy/releases) |
 
 CS 4278: Principles of Software Engineering · Group 4 · Fall 2026
 Jack Dawson · Nate Dalbert · Moses Banda · Tapan Sidhwani
 
-Hosting and release plan: [`docs/adr/0012-hosting-and-release.md`](./docs/adr/0012-hosting-and-release.md),
-diagram in [`docs/deployment.md`](./docs/deployment.md).
+---
+
+## For graders: test accounts
+
+Sign-in is restricted to `@vanderbilt.edu` addresses, so we made accounts for
+you on **production**. Sign in with the email and password; you will not need
+an emailed code.
+
+| Account | Email | Password | Use it for |
+| --- | --- | --- | --- |
+| Grader A | <mark>**PLACEHOLDER:** Jack to provide</mark> | <mark>**PLACEHOLDER**</mark> | hosting a session |
+| Grader B | <mark>**PLACEHOLDER:** Jack to provide</mark> | <mark>**PLACEHOLDER**</mark> | joining it from a second browser |
+
+These are the only test accounts in production. Please don't delete them
+(Account → Delete account works, and is permanent).
+
+## What it does: a short user guide
+
+1. **Sign in** with your Vanderbilt email. The first time, we email you a
+   six-digit code, then you choose a password. After that, email and password
+   are enough. "Forgot your password?" sends a new code.
+   <mark>[Screenshot: sign-in screen]</mark>
+2. **Home** shows the sessions you're hosting or attending, and new sessions
+   in your courses. <mark>[Screenshot: Home]</mark>
+3. **Browse** open sessions as a list or on a campus map, and filter by
+   course. A card shows the place, the time, seats left and who is going.
+   <mark>[Screenshot: list and map]</mark>
+4. **Join** a session in one tap. Your seat is held, and the roster updates
+   live for everyone. **Leave** frees the seat again. A full session says so.
+5. **Host** a session: course, topic, a place on campus (from Google Places),
+   room, time and seats. You can repeat it weekly, edit it, or cancel it.
+   <mark>[Screenshot: create a session]</mark>
+6. **Chat** with everyone in a session from its page, and add it to your
+   calendar (`.ics`). <mark>[Screenshot: session page with chat]</mark>
+7. **Can't find a session?** Post a study request for your course so
+   classmates see the interest.
+8. **Stay safe:** report or block another student from a session's roster; blocked
+   students stop seeing each other's sessions. Your email is never shown to
+   anyone.
+9. **Your profile** holds your major, minor, year and courses. **Account**
+   lets you sign out or delete your account and data.
+
+What changed in each version is in [`CHANGELOG.md`](./CHANGELOG.md).
 
 ---
 
-## Run locally with Docker
+## Run it locally
+
+### One command (Docker)
+
+Needs [Docker Desktop](https://www.docker.com/products/docker-desktop/) and
+Git, nothing else.
 
 ```bash
 git clone https://github.com/jhdaws/study-buddy.git
@@ -26,126 +75,85 @@ cp .env.example .env
 docker compose up --build
 ```
 
-Then open http://localhost:3000. Compose starts the Next.js app image plus the
-local Supabase stack (database, Auth, API, Realtime, Mailpit). Leave the
-Supabase keys empty in `.env` — `docker-compose.yml` supplies the local
-`supabase start` demo values. For `npm run dev`, fill them from
-`npm run db:status` or the hosted project.
+Open http://localhost:3000. Compose builds the app image and starts a local
+Supabase stack (database, Auth, API, Realtime). Sign-in codes don't leave
+your machine: read them at http://localhost:54324 (Mailpit). Leave the keys
+in `.env` empty; `docker-compose.yml` fills in the local stack's public demo
+values. Stop with `Ctrl-C`, then `docker compose down`.
 
----
+> **Known issues under Compose** (`docs/bug_database.md`): session chat and
+> the live roster can't reach the database from the browser (BUG-24), and
+> creating a session fails without a Google key (BUG-25). Both are open. The
+> path below has neither.
 
-## CI/CD
+### For development (Node.js)
 
-Every pull request and every push to `main` runs [`ci.yml`](./.github/workflows/ci.yml),
-in order, stopping at the first failure:
+Needs Node.js 22 and Docker (for the local database).
 
-1. **verify**: `npm ci` from the lockfile → seed check → lint → typecheck →
-   unit tests with a coverage gate (thresholds in `vitest.config.mts`) → build
-2. **db** and **e2e**: integration tests. Database rules, policies and
-   functions against real Postgres (`tests/db/`), and the main journeys in a
-   browser against the full local stack (`tests/e2e/`)
-3. **docker**: multi-stage app image build (a broken `Dockerfile` fails the
-   check). On merge to `main`, the image is pushed to GHCR tagged with the
-   commit SHA
-4. **coverage-report**: the coverage table and HTML report
-5. **security**: dependency audit, Semgrep, and gitleaks (High fails)
+```bash
+npm ci
+npm run db:start          # local Supabase in Docker; prints URLs and keys
+cp .env.example .env.local
+# put API_URL and the anon (publishable) key from `npm run db:status` into
+# NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY
+npm run dev               # http://localhost:3000
+```
 
-`main` is protected: a pull request, a teammate's approval, and green checks
-are required. Once CI passes on `main`,
-[`deploy.yml`](./.github/workflows/deploy.yml) applies new migrations to the
-staging database, deploys the commit to staging and runs the smoke tests
-there. A `v*` tag on a commit whose staging smoke run is green deploys it to
-production, after a teammate approves. Vercel itself deploys nothing
-(`vercel.json`).
+Without Google keys, the place picker offers three test places, which is
+enough to try every feature. `.env.example` explains every setting.
+
+## Run the tests
+
+| Level | Command | Needs | What it covers |
+| --- | --- | --- | --- |
+| Unit and component | `npm test` | nothing | validation, error messages, seat maths, components, the release gate |
+| Coverage | `npm run test:coverage` | nothing | the same, failing below the thresholds in `vitest.config.mts` |
+| Database | `npm run test:db` | `npm run db:start` | constraints, Row Level Security, locks and functions in real Postgres (`tests/db/`) |
+| End to end | `npx playwright install chromium`, then `npm run test:e2e` | `npm run db:start` | the main journeys in a real browser against a production build (`tests/e2e/`) |
+| Smoke | runs in GitHub Actions after every staging deploy | staging | `.github/workflows/smoke-tests.yml` |
+
+The database and end-to-end tests refuse to run against anything but a local
+database, because they create users. Before opening a pull request, run what
+CI runs first: `npm run lint && npm run typecheck && npm test && npm run build`.
+[`TEST_PLAN.md`](./TEST_PLAN.md) has the strategy; [`docs/test-cases.md`](./docs/test-cases.md)
+says honestly what each story's tests prove.
+
+## How a change reaches production
+
+Every pull request runs [`ci.yml`](./.github/workflows/ci.yml): lint,
+typecheck, unit tests with a coverage gate, build, database tests, browser
+journeys, a Docker image build, and a security stage (dependency audit,
+Semgrep, gitleaks). `main` is protected: green checks and a teammate's
+approval are required.
+
+Once CI passes on `main`, [`deploy.yml`](./.github/workflows/deploy.yml)
+applies new migrations to the staging database, deploys the commit to
+staging, and runs the smoke tests there. A `v*` tag on a commit whose staging
+smoke run is green deploys it to production, after a teammate approves.
+Vercel itself deploys nothing (`vercel.json`). The diagram is in
+[`docs/deployment.md`](./docs/deployment.md); deploying, promoting and rolling
+back by hand are in [`docs/ops/RUNBOOK.md`](./docs/ops/RUNBOOK.md).
 
 ## Stack
 
 | Layer | Choice |
 | --- | --- |
-| Framework | Next.js 16 (App Router) + TypeScript |
+| Framework | Next.js 16 (App Router, Server Actions) + TypeScript |
 | Styling | Tailwind CSS v4 |
-| Database | PostgreSQL via Supabase, with Row Level Security |
-| Auth | Supabase email OTP, restricted to `@vanderbilt.edu` |
-| Realtime | Supabase Realtime (no socket server of our own) |
-| Map | Google Maps + Places — every location from Places (ADR 0008) |
-| Tests | Vitest |
-| Hosting | Vercel |
+| Database | PostgreSQL on Supabase, Row Level Security on every table |
+| Auth | Supabase email codes and passwords, `@vanderbilt.edu` only |
+| Realtime | Supabase Realtime (live roster, chat) |
+| Map | Google Maps + Places |
+| Tests | Vitest, Testing Library, Playwright |
+| Hosting | Vercel (staging and production), Supabase (one project each), image on GHCR |
 
-One repository, one deploy target, one database. The reasoning — including
-what we rejected and why — is in [`docs/adr/`](./docs/adr/); start with
-[ADR 0001](./docs/adr/0001-stack.md).
+The reasons, and what we rejected, are in [`docs/adr/`](./docs/adr/): start
+with [ADR 0001](./docs/adr/0001-stack.md), and
+[ADR 0012](./docs/adr/0012-hosting-and-release.md) for hosting.
 
-## Status
+## Working on the code
 
-**Scaffold plus database plumbing and a schema skeleton.** Routes,
-components, and helpers exist as stubs describing what belongs in them. The
-Supabase clients, session-refreshing proxy, local database, and database test
-harness are real. The Sprint 2 tables exist ([ADR 0008](./docs/adr/0008-sprint-2-schema-decisions.md)),
-with Row Level Security on and **no policies yet** — so nothing is readable
-through the API until each track adds its own. A starter set of departments
-and courses is seeded from [`data/`](./data/), and TypeScript types are
-generated from the schema. The screens — header, session list, and the
-create-session form — are built and click through end to end, but on
-**fixture stubs**: nothing is read from or saved to the database, and nobody
-can sign in yet. Every seam the tracks replace is listed in
-[`docs/contracts.md`](./docs/contracts.md).
-
-The toolchain is real and green: lint, typecheck, test, and build all pass, and
-CI runs them on every push.
-
-## Getting started
-
-```bash
-npm install
-cp .env.example .env.local   # fill in the two Supabase values -- see below
-npm run dev                  # http://localhost:3000
-```
-
-**The Supabase values are required.** Without them every page returns an
-error naming the missing variable. Use either the hosted project's values
-(ask a teammate) or your local database's (`npm run db:status`).
-
-## Local database
-
-Needs [Docker](https://www.docker.com/products/docker-desktop/) running. The
-Supabase CLI is a dev dependency, so there is nothing else to install.
-
-```bash
-npm run db:start    # first run downloads images; takes a few minutes
-npm run db:status   # URLs and keys for .env.local; Studio at http://127.0.0.1:54323
-npm run test:db     # database tests
-npm run db:reset    # rebuild from supabase/migrations/ and seed.sql -- wipes local data
-npm run db:stop
-```
-
-Database tests live in `tests/db/` and refuse to run against anything but a
-local database. CI runs them in a separate `db` job.
-
-**Two files are generated — edit their sources, never the files:**
-
-| Generated file | Source | Regenerate with |
-| --- | --- | --- |
-| `supabase/seed.sql` | `data/*.json` | `npm run db:seed` |
-| `src/lib/database.types.ts` | the migrations, via the local database | `npm run db:reset && npm run db:types` |
-
-Commit the generated file with its source. CI regenerates both and fails if
-either differs from what is committed — so a PR that adds a migration must
-also commit the regenerated types.
-
-### The hosted project
-
-The hosted project has the same migrations and seed as local (pushed with
-`--include-seed`, below). Its tables are unreadable through the API until the
-tracks add RLS policies — that is the intended starting point.
-
-`supabase db push` applies migrations to the hosted project but **does not
-load the seed.** To load it as well, run
-`npx supabase db push --include-seed` (linked to the hosted project first
-with `npx supabase link`). The seed uses `on conflict do nothing`, so running
-it again, or against a database where users have already added some of the
-same departments or courses, changes nothing that already exists.
-
-## Scripts
+### Scripts
 
 | Command | What it does |
 | --- | --- |
@@ -165,52 +173,22 @@ CI runs lint, typecheck, tests, and build on every push and pull request, plus
 the database tests in a separate job. It also fails if `supabase/seed.sql`
 or `src/lib/database.types.ts` is out of date.
 
-## Layout
 
-```
-src/
-  app/
-    page.tsx               Landing page
-    layout.tsx             App shell and header
-    login/                 Sign-in (US-01) -- page and actions are Track A's
-    auth/confirm/          Sign-in callback (Track A)
-    sessions/              List (page.tsx), create (new/), detail ([id]/, later)
-      actions.ts           Server actions: createSession (Track S)
-    api/courses/           GET course suggestions for the typeahead
-  components/              SiteHeader, NavLinks, AccountMenu, SessionBrowser,
-                           SessionCard, CreateSessionForm, CourseNumberInput,
-                           LocationPicker; SessionMap, SessionRoster,
-                           SessionChat (later sprints)
-  lib/
-    supabase/              Browser, server, and proxy clients; requireUser()
-    sessions.ts            listSessions, listDepartments, searchCourses (Track S)
-    places.ts              resolvePlace (Track M)
-    fixtures.ts            Fixture data every stub returns until replaced
-    validation.ts          Schemas shared by forms and actions
-    limits.ts              Length and capacity limits (client-safe)
-    format.ts              Display formatting, in campus time
-    datetime-local.ts      Form time inputs <-> ISO, in campus time
-    course-search.ts       Client-side call to /api/courses
-    env.ts                 Env vars (fail fast) and campus constants
-    errors.ts              Database error codes -> student-facing messages
-    database.types.ts      Generated from the schema (npm run db:types)
-  proxy.ts                 Session refresh (route protection: Track A)
-supabase/                  Local config, migrations (schema skeleton, RLS on),
-                           and seed.sql (generated from data/)
-tests/db/                  Database tests (two-connection harness)
-data/                      Starter departments and courses -- source of seed.sql
-scripts/build-seed.mjs     Builds supabase/seed.sql from data/ (npm run db:seed)
-docs/                      Backlog, tickets, contracts, acceptance criteria,
-                           architecture, decisions (adr/)
-```
+**Two files are generated — edit their sources, never the files:**
 
-Many files above are still stubs or return fixtures — the full list, with
-owners, is [`docs/contracts.md`](./docs/contracts.md). Real: `lib/env.ts`,
-`lib/supabase/` (except `requireUser()`), `proxy.ts`, `lib/validation.ts`,
-`limits.ts`, `format.ts`, `datetime-local.ts`, `course-search.ts`, the layout
-and header, and the `/sessions` and `/sessions/new` screens. Each
-stub carries a comment describing what it should contain and any constraint
-worth knowing before writing it.
+| Generated file | Source | Regenerate with |
+| --- | --- | --- |
+| `supabase/seed.sql` | `data/*.json` | `npm run db:seed` |
+| `src/lib/database.types.ts` | the migrations, via the local database | `npm run db:reset && npm run db:types` |
+
+Commit the generated file with its source. CI regenerates both and fails if
+either differs from what is committed — so a PR that adds a migration must
+also commit the regenerated types.
+
+
+Schema changes are new migrations only (`npx supabase migration new <name>`);
+never edit one that has been applied. Conventions for contributors, human or
+AI, are in [`CLAUDE.md`](./CLAUDE.md).
 
 ## Where things are decided
 
@@ -230,6 +208,24 @@ worth knowing before writing it.
 - [`docs/ai-usage-log.md`](./docs/ai-usage-log.md) — AI usage log for syllabus
   compliance. **Add an entry when you use AI, not the night before a
   deliverable.**
+
+## Future work
+
+What we would do next, roughly in order:
+
+- **Fix the Compose setup** (BUG-24 to BUG-26) so `docker compose up` runs
+  every feature, not only most.
+- **Sessions near me** (US-12): filter by distance instead of the campus
+  zones the old building list would have given us.
+- **Ratings** (US-14): rate a session and its host afterwards.
+- **A phone app.** An Expo app was started (#146) but not merged.
+- **Serve the Docker image in production** instead of rebuilding on Vercel,
+  if "one image, every environment" matters more than Vercel's tooling
+  (ADR 0012, "Revisit if").
+- **Check hosted auth settings in CI** (ADR 0009), so the dashboard and
+  `supabase/config.toml` cannot drift apart.
+
+<mark>**PLACEHOLDER:** remove any item above that ships before 12/8 (US-10, US-13 and US-18 are planned for Sprint 5 and are not listed).</mark>
 
 ## Two things settled before writing the database
 

@@ -94,3 +94,20 @@ describe("deploy.yml and vercel.json", () => {
     expect(staging).not.toContain("--prod");
   });
 });
+
+describe("README.md (D10)", () => {
+  const readme = read("README.md");
+  const scripts = Object.keys(JSON.parse(read("package.json")).scripts as Record<string, string>);
+
+  it("has the CI badge, the production URL and the grader accounts", () => {
+    expect(readme).toContain("actions/workflows/ci.yml/badge.svg");
+    expect(readme).toContain("https://study-buddy-jdaws.vercel.app");
+    expect(readme).toContain("## For graders: test accounts");
+  });
+
+  it("names only npm scripts that exist", () => {
+    const named = [...readme.matchAll(/npm run ([a-z0-9:-]+)/g)].map((match) => match[1]);
+    expect(named.length).toBeGreaterThan(5);
+    for (const name of named) expect(scripts).toContain(name);
+  });
+});

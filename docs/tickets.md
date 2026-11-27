@@ -33,7 +33,7 @@ documentation ticket (D8 to D13). The Must-have (P0) story issues carry the
 | S13 | US-12 sessions near me (stretch) | Nate | #160 | 12/6 |
 | D8 | Hosting ADR and deployment diagram | Jack | #161 | 11/20 |
 | D9 | `docs/ops/RUNBOOK.md` | Jack | #162 | 12/6 |
-| D10 | README a stranger can follow | Jack | #163 | 12/8 |
+| D10 | README a stranger can follow — PR open, `s5-d10-readme` (on top of V3); grader accounts and screenshots are placeholders | Jack | #163 | 12/8 |
 | D11 | Release pipeline stage diagram | Jack | #164 | 12/8 |
 | D12 | Five most complex functions | Moses | #165 | 12/8 |
 | D13 | Sprint 5 report and AI log | Jack | #166 | 12/8 |
