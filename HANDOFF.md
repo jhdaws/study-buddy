@@ -74,6 +74,59 @@ spends its first hour rediscovering the same dead end.
 
 
 
+## 2026-11-27 · Jack's Sprint 5 tickets: V3, D9, V9, D10, D11 as PRs; report, notes and slides drafted
+
+**Branches:** `s5-v3-staging-production` (#177, from `main` at `0e53f9d`); stacked on it: `s5-d9-runbook` (#178), `s5-d10-readme` (#180), `s5-d11-pipeline-diagram` (#181); from `main`: `s5-v9-changelog` (#179). This entry is on `s5-docs-state-nov27` (#176). **Commits made:** those PRs. Nothing merged, no tag pushed, no issue opened.
+
+### What changed
+- #177 (V3): `vercel.json` turns off Vercel's Git deploys; `deploy.yml` deploys staging on green main (migrations, `vercel deploy`, alias to `vars.STAGING_HOST`, `smoke-tests.yml`, "staging smoke" commit status) and production on a `v*` tag (`scripts/release-gate.mjs`, then the `production` environment's approval, migrations and `--prod` in one job). Pre-release tags (`v1.0.0-rc1`) stop after the gate. `deploy-db.yml` is by-hand only. One-time setup is in `docs/deployment.md`.
+- #178 runbook, #179 CHANGELOG + `package.json` 1.0.0-rc1 + `docs/ops/release-checklist.md`, #180 README rewrite, #181 stage diagram + screenshot list.
+- Outside the repo: Google Doc `sprint5-group4` (report draft, highlighted placeholders); `/mnt/project-files/sprint5/release-notes-v1.0.0.md` and `final-group4-outline.md` (project files, not in git).
+
+### Verified versus assumed
+- **Verified:** lint (0 errors), typecheck, unit tests (1031 on #180's branch), build on #177; the gate script by hand; each PR has a failure-path test.
+- **Not verified:** no workflow has run against real Vercel or Supabase (none of the settings exist). Unchecked until the first run: `vercel alias set` on Hobby, whether `deploy --prebuilt --env APP_COMMIT_SHA` reaches functions at runtime, one approval prompt per production run. Workflows were not linted with actionlint, and the Mermaid diagram was not rendered: installing actionlint, mermaid-cli and running `go run` were refused in this environment.
+
+### Open questions for the user
+- Jack's one-time setup (`docs/deployment.md`, "One-time setup") blocks everything in Checkpoint 2. Until it is done, merging #177 means **main stops reaching production** and staging is skipped.
+- The #172 follow-up issue for Nate (BUG-24 to BUG-26) is drafted in the project thread, not opened.
+- Grader accounts for the README and release notes.
+- The board (GitHub Project) could not be updated from this session: no tool for Projects. #149, #155, #162–#164, #166, #168 should be In Progress.
+
+### Things the next agent should be careful about
+- V5 must read `APP_COMMIT_SHA` / `APP_ENVIRONMENT`, not `VERCEL_GIT_COMMIT_SHA` (unset once Git deploys are off).
+- The release gate requires the tag to equal `package.json`'s version; bump it in a PR before tagging.
+- After an Instant Rollback, Vercel stops auto-assigning the production domain; the next release needs `vercel promote` (RUNBOOK, "Roll back").
+- The smoke tests cannot be a PR-required check (they run after merge); the gate enforces them.
+- The Sprint 5 brief itself was not found in the repo or Drive; the report follows Jack's list of requirements. Check it against the brief.
+- `ci-e2e-chromium-no-apt` (remote branch) looks redundant: it has no commits that are not on main.
+
+## 2026-11-27 · Sprint 5 state check: #172 follow-ups, where Checkpoint 2 stands
+
+**Branch:** `s5-docs-state-nov27`, from `main` at `0e53f9d` · **Commits made:** this PR
+
+### What changed
+- `docs/bug_database.md`: BUG-24 to BUG-26, the compose and image defects found reviewing #172, which merged before they were fixed.
+- `CLAUDE.md`, "Current state": Sprint 5 (the release sprint) instead of "Sprint 4 is done".
+
+### Where Sprint 5 stands (main at `0e53f9d`)
+- **Merged:** #169 (ADR 0012 and `docs/deployment.md`, D8), #171 (PR template), #172 (Dockerfile, compose, CI `docker` job that pushes to GHCR on main; V1/V2, so #147 and #148 closed).
+- **Checkpoint 2 is Tue 12/1:** merge, then image pushed, staging deploy, smoke tests, all automatic and green, with `/api/health` live. Nothing for it has merged yet: V3 (#149, Jack), V4 (#150, Tapan) and V5 (#151, Moses) are all open, and there is no staging Supabase project yet.
+- **Open PRs needing a decision:** #146 (Moses: an Expo phone app in `mobile/`, +9.7k lines, open since 11/16; it asks Jack whether a mobile app belongs in this repo), #101 (SEC-15, changes requested), #145 (the security-block demo; close it once its screenshots are taken), and Dependabot #170, #173–#175 (#173–#175 are major bumps of the docker actions #172 just added), #126, #127.
+
+### Decided in conversation, not yet written down
+- Jack owns every documentation ticket (D8–D13). The Sprint 5 plan doc in Google Drive (`sprint5-plan-group4`) still shows the earlier hours split.
+
+### Open questions for the user
+- **The #172 follow-up issue was never opened.** BUG-24 to BUG-26 plus the suspected template mount (below) need one issue (owner Nate, due 12/1); "Done" is a clean clone where `docker compose up` gets as far as signing in, creating a session and sending a chat message. Until then, `docker compose up` does not meet the brief.
+- Add `docker` to the "main protection" ruleset's required checks; today a red `docker` job does not block a merge.
+- #146: does the Expo app belong in this repo, and does it count toward Sprint 5?
+
+### Things the next agent should be careful about
+- **Suspected, not verified:** `docker-compose.yml` runs `supabase start` inside a container with the repo at `/workspace`, so the CLI asks the host's Docker to bind-mount `/workspace/supabase/templates/magic_link.html`, a path that only exists in the container. Sign-in emails probably fail under compose. The usual fix is mounting the repo at the same path (`./:${PWD}`).
+- **Do not run `docker compose up` against Jack's machine casually:** it starts Supabase with the real `project_id` and default ports, the same stack as `npm run db:start`.
+- `NEXT_PUBLIC_*` is inlined into server code as well as the browser bundle at build time, so setting those variables at container runtime changes nothing.
+
 ## 2026-11-20 · Checkpoint 1: Dockerfile, compose, CI image build (V1/V2)
 
 **Branch:** `v1-v2-docker-compose`, from `main` at `c8c6618` · **Commits made:** this PR
