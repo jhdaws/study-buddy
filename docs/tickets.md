@@ -32,7 +32,7 @@ documentation ticket (D8 to D13). The Must-have (P0) story issues carry the
 | S12 | US-14 ratings (stretch) | Tapan | #159 | 12/6 |
 | S13 | US-12 sessions near me (stretch) | Nate | #160 | 12/6 |
 | D8 | Hosting ADR and deployment diagram | Jack | #161 | 11/20 |
-| D9 | `docs/ops/RUNBOOK.md` | Jack | #162 | 12/6 |
+| D9 | `docs/ops/RUNBOOK.md` — PR open, `s5-d9-runbook` (on top of V3) | Jack | #162 | 12/6 |
 | D10 | README a stranger can follow | Jack | #163 | 12/8 |
 | D11 | Release pipeline stage diagram | Jack | #164 | 12/8 |
 | D12 | Five most complex functions | Moses | #165 | 12/8 |
