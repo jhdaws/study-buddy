@@ -1,7 +1,9 @@
 name: Push migrations
 
 # Reusable: apply supabase/migrations/ at `ref` to the Supabase project of one
-# GitHub environment. Called by deploy-db.yml; it has no trigger of its own.
+# GitHub environment. Called by deploy-db.yml (the by-hand re-run); it has no
+# trigger of its own. The steps themselves are the composite action
+# .github/actions/push-migrations, which deploy.yml also uses (V3, #149).
 
 on:
   workflow_call:
@@ -61,17 +63,6 @@ jobs:
         if: steps.configured.outputs.ready == 'true'
         run: npm ci
 
-      - name: Link the project
-        if: steps.configured.outputs.ready == 'true'
-        run: npx supabase link --project-ref "$SUPABASE_PROJECT_ID"
-
-      # --include-all: tracks work in parallel, so a migration created earlier
-      # can merge after a later one. Without it, db push refuses anything
-      # older than the newest migration already applied (HANDOFF, 2026-10-06).
-      - name: Show what will be applied
-        if: steps.configured.outputs.ready == 'true'
-        run: npx supabase db push --include-all --dry-run
-
       - name: Apply migrations
         if: steps.configured.outputs.ready == 'true'
-        run: npx supabase db push --include-all --yes
+        uses: ./.github/actions/push-migrations

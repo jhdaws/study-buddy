@@ -1,28 +1,32 @@
 name: Deploy database
 
-# W7 (#34) and W10 (#54). After CI passes on a push to main, apply any new
-# migrations in supabase/migrations/ to the hosted databases -- staging first,
-# then production. Vercel deploys the app from the same push on its own, so a
-# migration must work with the app version that is already live (additive
-# changes are fine; renames and drops take two steps -- docs/tickets.md, W7).
+# W7 (#34), by hand only since V3 (#149). Migrations now run inside
+# deploy.yml, in the same job as the app deploy they belong to:
+#   - staging: after a green CI run for a push to main;
+#   - production: on a v* tag, after the `production` environment's approval.
+# This workflow is the break-glass re-run (Actions -> Deploy database -> Run
+# workflow), e.g. after fixing a secret or for the forward fix in
+# docs/ops/RUNBOOK.md. It applies main's current migrations to staging and
+# then, once a reviewer approves the `production` environment, to production.
+#
+# Migrations must work with the app version that is already live: the
+# production app only changes on a release tag, so a migration merged to main
+# can sit on production's database for days before the code that uses it.
+# Additive changes are fine; renames and drops take two steps
+# (docs/tickets.md, W7).
 #
 # A separate workflow, not a job in ci.yml: ci.yml cancels an in-progress run
 # when a newer push arrives, which is right for tests and wrong for a
-# migration halfway through. This one queues instead.
+# migration halfway through. The concurrency groups are shared with
+# deploy.yml, so a by-hand run waits for a deploy instead of racing it.
 #
 # Setup (supabase/README.md, "Deploying migrations"): GitHub environments
 # `production` and `staging`, each with the variable SUPABASE_PROJECT_ID and
-# the secret SUPABASE_ACCESS_TOKEN (SUPABASE_DB_PASSWORD is optional). An environment
-# without SUPABASE_PROJECT_ID is skipped, so staging is a no-op until W10
-# creates it. Never --include-seed here: reseeding production stays manual.
+# the secret SUPABASE_ACCESS_TOKEN (SUPABASE_DB_PASSWORD is optional). An
+# environment without SUPABASE_PROJECT_ID is skipped. Never --include-seed
+# here: reseeding a hosted project stays manual.
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [main]
-  # Re-run by hand (Actions -> Deploy database -> Run workflow), e.g. after
-  # fixing a secret. Deploys main's current migrations -- and ONLY main's:
   # "Run workflow" offers every branch, so the jobs below refuse any other
   # ref (SEC-13). src/lib/auth-settings.test.ts checks the guard is here.
   workflow_dispatch:
@@ -30,31 +34,28 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: deploy-db
-  cancel-in-progress: false
-
 jobs:
   staging:
-    # Only after a green CI run for a push to main -- never for a PR's run --
-    # or by hand from main itself (SEC-13). Production `needs` this job, so
-    # when it is skipped production is too.
     if: >-
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
-      (github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.event == 'push' &&
-       github.event.workflow_run.head_branch == 'main')
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
     uses: ./.github/workflows/push-migrations.yml
     with:
       environment: staging
-      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      ref: ${{ github.sha }}
     secrets: inherit
 
   production:
     # Staging is the canary: if its push fails, production is not touched.
+    # The `production` environment's required reviewer gates this job.
     needs: staging
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
     uses: ./.github/workflows/push-migrations.yml
     with:
       environment: production
-      ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+      ref: ${{ github.sha }}
     secrets: inherit

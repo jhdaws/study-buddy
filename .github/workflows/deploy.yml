@@ -1,0 +1,303 @@
+name: Deploy
+
+# V3 (#149), following ADR 0012 and docs/deployment.md. The only way the app
+# reaches Vercel: vercel.json turns Vercel's own Git deploys off.
+#
+#   green CI run for a push to main
+#     -> staging:  migrations to the staging Supabase project, `vercel deploy`
+#                  with Vercel's Preview settings, alias to the fixed staging
+#                  URL (vars.STAGING_HOST)
+#     -> smoke:    smoke-tests.yml against that URL (V4, #150, plugs in there)
+#     -> record:   commit status "staging smoke" = success | failure
+#
+#   v* tag on a commit from main
+#     -> release-gate: the commit is on main, its "staging smoke" status is
+#                  success, and the tag matches package.json's version
+#                  (scripts/release-gate.mjs)
+#     -> production: waits for the `production` environment's reviewer, then
+#                  migrations to production and `vercel deploy --prod`.
+#                  Not for a pre-release tag (v1.0.0-rc1): that one only
+#                  marks a commit the gate has checked on staging, the
+#                  feature freeze in the Sprint 5 plan.
+#
+# Production rebuilds the commit that passed on staging rather than reusing
+# the staging build: NEXT_PUBLIC_* values are baked in at build time and the
+# two environments use different ones (ADR 0012, "Promotion").
+#
+# Settings (docs/deployment.md, "One-time setup", has the steps):
+#   repository variables  VERCEL_ORG_ID, VERCEL_PROJECT_ID
+#   environment staging   secret VERCEL_TOKEN, VERCEL_AUTOMATION_BYPASS_SECRET,
+#                         SUPABASE_ACCESS_TOKEN; variables STAGING_HOST,
+#                         SUPABASE_PROJECT_ID
+#   environment production  secret VERCEL_TOKEN, SUPABASE_ACCESS_TOKEN;
+#                         variables PRODUCTION_URL, SUPABASE_PROJECT_ID;
+#                         a required reviewer with "prevent self-review"
+# A staging environment without VERCEL_TOKEN is skipped with a notice, so this
+# workflow is a no-op on main until those are set.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  push:
+    tags: ["v*"]
+  # Redeploy main to staging by hand (Actions -> Deploy -> Run workflow), e.g.
+  # after changing a Vercel setting. "Run workflow" offers every branch, so
+  # the staging job refuses any ref but main (SEC-13).
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Exact version, not "latest": a CLI release must not change how we deploy
+  # without a PR. Bump it like any other dependency.
+  VERCEL_CLI: vercel@65.14.0
+  VERCEL_ORG_ID: ${{ vars.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ vars.VERCEL_PROJECT_ID }}
+
+jobs:
+  staging:
+    # Only after a green CI run for a push to main -- never for a PR's run --
+    # or by hand from main itself (SEC-13).
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: staging
+      url: ${{ steps.alias.outputs.url }}
+    concurrency:
+      group: deploy-staging
+      cancel-in-progress: false
+    outputs:
+      deployed: ${{ steps.alias.outputs.url != '' }}
+      url: ${{ steps.alias.outputs.url }}
+      sha: ${{ steps.sha.outputs.sha }}
+
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      STAGING_HOST: ${{ vars.STAGING_HOST }}
+      SUPABASE_PROJECT_ID: ${{ vars.SUPABASE_PROJECT_ID }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+    steps:
+      - name: Which commit
+        id: sha
+        run: echo "sha=${{ github.event.workflow_run.head_sha || github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Skip a staging environment that is not set up
+        id: configured
+        run: |
+          missing=""
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID STAGING_HOST SUPABASE_PROJECT_ID SUPABASE_ACCESS_TOKEN; do
+            [ -z "${!name}" ] && missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::notice::Staging is not set up yet (missing:$missing). Nothing deployed. docs/deployment.md, "One-time setup", has the list."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.configured.outputs.ready == 'true'
+        with:
+          ref: ${{ steps.sha.outputs.sha }}
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.configured.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.configured.outputs.ready == 'true'
+        run: npm ci
+
+      # Before the app: the new code may need the new schema, and our
+      # migrations are additive, so the old app keeps working on it.
+      - name: Migrations to staging
+        if: steps.configured.outputs.ready == 'true'
+        uses: ./.github/actions/push-migrations
+
+      # Vercel's Preview environment holds staging's settings (the staging
+      # Supabase project's URL and keys), never production's (SEC-08).
+      - name: Pull Vercel's Preview settings
+        if: steps.configured.outputs.ready == 'true'
+        run: npx --yes "$VERCEL_CLI" pull --yes --environment=preview --git-branch=main --token="$VERCEL_TOKEN"
+
+      # APP_COMMIT_SHA is here as well as on the deployment below, so V5 can
+      # inline it through next.config.ts's `env` if the runtime value turns
+      # out not to reach a prebuilt deployment's functions (not yet checked).
+      - name: Build
+        if: steps.configured.outputs.ready == 'true'
+        env:
+          APP_COMMIT_SHA: ${{ steps.sha.outputs.sha }}
+          APP_ENVIRONMENT: staging
+        run: npx --yes "$VERCEL_CLI" build --token="$VERCEL_TOKEN"
+
+      # APP_COMMIT_SHA and APP_ENVIRONMENT are runtime variables on this one
+      # deployment, for /api/health (V5, #151). VERCEL_GIT_COMMIT_SHA is only
+      # set for Vercel's own Git deploys, which vercel.json turns off.
+      - name: Deploy
+        id: deploy
+        if: steps.configured.outputs.ready == 'true'
+        run: |
+          url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --token="$VERCEL_TOKEN" \
+            --env APP_COMMIT_SHA="${{ steps.sha.outputs.sha }}" \
+            --env APP_ENVIRONMENT=staging \
+            --meta githubCommitSha="${{ steps.sha.outputs.sha }}")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed $url"
+
+      - name: Alias to the fixed staging URL
+        id: alias
+        if: steps.configured.outputs.ready == 'true'
+        run: |
+          npx --yes "$VERCEL_CLI" alias set "${{ steps.deploy.outputs.url }}" "$STAGING_HOST" --token="$VERCEL_TOKEN"
+          echo "url=https://$STAGING_HOST" >> "$GITHUB_OUTPUT"
+          echo "### Staging: https://$STAGING_HOST" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit \`${{ steps.sha.outputs.sha }}\`, deployment ${{ steps.deploy.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
+
+  # The hook for V4 (#150): smoke-tests.yml gets the staging URL and commit,
+  # and its result decides the "staging smoke" status below.
+  smoke:
+    needs: staging
+    if: needs.staging.outputs.deployed == 'true'
+    uses: ./.github/workflows/smoke-tests.yml
+    with:
+      base_url: ${{ needs.staging.outputs.url }}
+      sha: ${{ needs.staging.outputs.sha }}
+    secrets: inherit
+
+  # What the production gate reads. Set on failure too, so a red smoke run
+  # shows on the commit and the gate gives the real reason.
+  record-smoke:
+    needs: [staging, smoke]
+    if: always() && needs.staging.outputs.deployed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write
+    steps:
+      - name: Set the "staging smoke" commit status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATE: ${{ needs.smoke.result == 'success' && 'success' || 'failure' }}
+        run: |
+          gh api -X POST "repos/${{ github.repository }}/statuses/${{ needs.staging.outputs.sha }}" \
+            -f state="$STATE" \
+            -f context="staging smoke" \
+            -f description="Smoke tests against ${{ needs.staging.outputs.url }}: $STATE" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+  release-gate:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      statuses: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Gather the facts
+        id: facts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --no-tags origin main
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then on_main=true; else on_main=false; fi
+          smoke=$(gh api "repos/${{ github.repository }}/commits/$GITHUB_SHA/status" \
+            --jq '[.statuses[] | select(.context == "staging smoke")][0].state // "missing"')
+          echo "on_main=$on_main" >> "$GITHUB_OUTPUT"
+          echo "smoke=$smoke" >> "$GITHUB_OUTPUT"
+          echo "version=$(node -p 'require("./package.json").version')" >> "$GITHUB_OUTPUT"
+
+      - name: Tag is on main, staging smoke is green, version matches
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          ON_MAIN: ${{ steps.facts.outputs.on_main }}
+          SMOKE_STATE: ${{ steps.facts.outputs.smoke }}
+          PACKAGE_VERSION: ${{ steps.facts.outputs.version }}
+        run: node scripts/release-gate.mjs
+
+  production:
+    needs: release-gate
+    # A pre-release tag (anything with a "-", like v1.0.0-rc1) stops after
+    # the gate: it is the freeze marker, deployed on staging only.
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The required reviewer is set on this environment in GitHub, with
+    # "prevent self-review": whoever pushed the tag cannot approve it.
+    # Migrations and the deploy share this one job so the reviewer approves
+    # once (.github/actions/push-migrations explains).
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    concurrency:
+      group: deploy-production
+      cancel-in-progress: false
+
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      SUPABASE_PROJECT_ID: ${{ vars.SUPABASE_PROJECT_ID }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+
+    steps:
+      # Unlike staging, a production environment that is not set up fails:
+      # a release tag that silently deploys nothing would be worse.
+      - name: Production is set up
+        run: |
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID SUPABASE_PROJECT_ID SUPABASE_ACCESS_TOKEN; do
+            if [ -z "${!name}" ]; then echo "::error::The production environment has no $name."; exit 1; fi
+          done
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Migrations to production
+        uses: ./.github/actions/push-migrations
+
+      - name: Pull Vercel's Production settings
+        run: npx --yes "$VERCEL_CLI" pull --yes --environment=production --token="$VERCEL_TOKEN"
+
+      - name: Build
+        env:
+          APP_COMMIT_SHA: ${{ github.sha }}
+          APP_ENVIRONMENT: production
+        run: npx --yes "$VERCEL_CLI" build --prod --token="$VERCEL_TOKEN"
+
+      - name: Deploy to production
+        id: deploy
+        run: |
+          url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --token="$VERCEL_TOKEN" \
+            --env APP_COMMIT_SHA="$GITHUB_SHA" \
+            --env APP_ENVIRONMENT=production \
+            --meta githubCommitSha="$GITHUB_SHA" \
+            --meta release="${{ github.ref_name }}")
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "### Production: ${{ github.ref_name }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit \`$GITHUB_SHA\`, deployment $url. To undo: docs/ops/RUNBOOK.md, \"Roll back\"." >> "$GITHUB_STEP_SUMMARY"
+
+      # Production is not behind Vercel's login, so no bypass is needed. A
+      # deeper check is V4's to add; this catches a deploy that serves nothing.
+      - name: Production answers
+        if: vars.PRODUCTION_URL != ''
+        run: curl --fail --silent --show-error --location --max-time 30 --retry 3 --retry-delay 5 "${{ vars.PRODUCTION_URL }}/login" -o /dev/null

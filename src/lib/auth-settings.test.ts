@@ -39,8 +39,18 @@ describe("SEC-13: the database deploys only from main", () => {
     expect(workflow).not.toMatch(/github\.event_name == 'workflow_dispatch' \|\|/);
   });
 
-  it("deploys after CI only for a push to main", () => {
-    expect(workflow).toContain("github.event.workflow_run.event == 'push'");
-    expect(workflow).toContain("github.event.workflow_run.head_branch == 'main'");
+  it("no longer runs by itself: deploy.yml owns the automatic deploys (V3)", () => {
+    // Before V3 this ran after every green main and pushed to production
+    // with no approval. Production migrations now wait for a release tag.
+    expect(workflow).not.toMatch(/^\s*workflow_run:/m);
+  });
+
+  it("deploy.yml deploys to staging after CI only for a push to main", () => {
+    const deploy = read(".github/workflows/deploy.yml");
+    expect(deploy).toContain(
+      "(github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')",
+    );
+    expect(deploy).toContain("github.event.workflow_run.event == 'push'");
+    expect(deploy).toContain("github.event.workflow_run.head_branch == 'main'");
   });
 });

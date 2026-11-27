@@ -14,8 +14,9 @@ name: CI
 #   security         dependency audit, SAST and secret scan -- alongside
 #                    verify, not after it (docs/security/scans.md)
 #   docker           multi-stage app image (Sprint 5 V1); push to GHCR on main
-# Delivery is outside this file: Vercel deploys every merge to main (and a
-# preview per PR), and deploy-db.yml applies migrations after this passes.
+# Delivery is outside this file: deploy.yml starts once this passes on main
+# (staging), or on a v* tag (production, with approval). Vercel's own Git
+# deploys are off (vercel.json), so a PR gets no preview (V3, #149).
 
 on:
   push:
@@ -171,7 +172,8 @@ jobs:
 
   # Sprint 5 V1 (ADR 0012): build the multi-stage app image on every pull
   # request so a broken Dockerfile fails the check. On push to main, push the
-  # image to GHCR tagged with the commit SHA. Vercel still serves the app;
+  # image to GHCR tagged with the commit SHA. Vercel still serves the app
+  # (deploy.yml builds the same commit there);
   # the image proves containerization and feeds docker compose locally.
   docker:
     runs-on: ubuntu-latest

@@ -199,3 +199,22 @@ evidence are in [`security/findings.md`](./security/findings.md).
 - **BUG-19, Google key pair.** *Verified* by running `next.config.ts` with each
   combination of the two keys; a Vercel production build with only one fails.
 
+
+## Release pipeline (Sprint 5)
+
+- **V3 (#149), staging and production deploys.** *Verified* by unit tests
+  (`src/lib/release-pipeline.test.ts`): the production gate
+  (`scripts/release-gate.mjs`) refuses a commit whose staging smoke run failed,
+  is pending or never happened, a tag on a commit not on main, a tag that
+  disagrees with `package.json`, and a non-version tag, and reports every
+  problem at once; `vercel.json` turns off Vercel's Git deploys; the staging
+  job never passes `--prod`; production needs the gate and the `production`
+  environment. `src/lib/auth-settings.test.ts` keeps SEC-13's main-only guards
+  on both deploy workflows. The gate script was also run by hand with failing
+  and passing inputs (exit 1 with three `::error::` lines; exit 0).
+  *Not verified:* no workflow has run against real Vercel or Supabase, since
+  the staging project, token and environments do not exist yet. Unchecked
+  until the first run: that `vercel alias set` to a `*.vercel.app` name works
+  on Hobby, that `deploy --prebuilt --env` reaches the functions at runtime
+  (V5 reads `APP_COMMIT_SHA`), and that the environment approval prompts once.
+  The workflows were parsed as YAML but not linted with actionlint.
