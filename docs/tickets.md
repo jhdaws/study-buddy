@@ -25,7 +25,7 @@ documentation ticket (D8 to D13). The Must-have (P0) story issues carry the
 | V6 | Structured logs with request ID and level | Moses | #152 | 12/1 |
 | V7 | Sentry and an uptime alert on production | Moses | #153 | 12/6 |
 | V8 | Rollback drill (bad v1.0.1, detect, roll back, time it) | Tapan | #154 | 12/8 |
-| V9 | CHANGELOG, v1.0.0-rc1, v1.0.0 GitHub Release | Jack | #155 | 12/6, 12/8 |
+| V9 | CHANGELOG, v1.0.0-rc1, v1.0.0 GitHub Release — part 1 (CHANGELOG, version `1.0.0-rc1`, `docs/ops/release-checklist.md`) PR open, `s5-v9-changelog` | Jack | #155 | 12/6, 12/8 |
 | P5 | US-18 report a chat message | Moses | #156 | 12/6 |
 | S11 | US-13 remove an attendee | Nate | #157 | 12/6 |
 | N2 | US-10 reminders | Tapan | #158 | 12/6 |

@@ -199,3 +199,11 @@ evidence are in [`security/findings.md`](./security/findings.md).
 - **BUG-19, Google key pair.** *Verified* by running `next.config.ts` with each
   combination of the two keys; a Vercel production build with only one fails.
 
+
+## Release (Sprint 5)
+
+- **V9 (#155), changelog and version.** *Verified* by `src/lib/changelog.test.ts`:
+  `CHANGELOG.md` keeps an `[Unreleased]` section, dates every numbered
+  version, and mentions `package.json`'s version (mutation-checked: a version
+  missing from the changelog fails it). *Not verified:* that each line matches
+  what students see; it was written from merged PR titles and the backlog.
