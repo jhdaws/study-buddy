@@ -10,8 +10,12 @@ failed. The template and the rules for writing an entry are in that file.
 
 ## Current state
 
-Sprint 4 is done (2026-11-12); `docs/backlog.md` has what is finished and the
-backlog-done percentage. The app runs on Vercel against hosted Supabase:
+Sprint 5, the release sprint, runs 2026-11-17 to 12-08 (Sprint 4 finished
+2026-11-12). Its plan is the "Sprint 5" section of `docs/tickets.md` and
+milestone "Sprint 5" on the board; hosting and release follow ADR 0012
+(stay on Vercel, a staging Supabase project, production by `v*` tag with
+approval), drawn in `docs/deployment.md`. `docs/backlog.md` has what is
+finished and the backlog-done percentage. The app runs on Vercel against hosted Supabase:
 sign-in by emailed code then a password, Vanderbilt only; create, edit,
 cancel, join and leave sessions with a live roster; a list and a map; study
 requests; course filter; academic profile; report, block and delete account;

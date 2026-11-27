@@ -74,6 +74,32 @@ spends its first hour rediscovering the same dead end.
 
 
 
+## 2026-11-27 · Sprint 5 state check: #172 follow-ups, where Checkpoint 2 stands
+
+**Branch:** `s5-docs-state-nov27`, from `main` at `0e53f9d` · **Commits made:** this PR
+
+### What changed
+- `docs/bug_database.md`: BUG-24 to BUG-26, the compose and image defects found reviewing #172, which merged before they were fixed.
+- `CLAUDE.md`, "Current state": Sprint 5 (the release sprint) instead of "Sprint 4 is done".
+
+### Where Sprint 5 stands (main at `0e53f9d`)
+- **Merged:** #169 (ADR 0012 and `docs/deployment.md`, D8), #171 (PR template), #172 (Dockerfile, compose, CI `docker` job that pushes to GHCR on main; V1/V2, so #147 and #148 closed).
+- **Checkpoint 2 is Tue 12/1:** merge, then image pushed, staging deploy, smoke tests, all automatic and green, with `/api/health` live. Nothing for it has merged yet: V3 (#149, Jack), V4 (#150, Tapan) and V5 (#151, Moses) are all open, and there is no staging Supabase project yet.
+- **Open PRs needing a decision:** #146 (Moses: an Expo phone app in `mobile/`, +9.7k lines, open since 11/16; it asks Jack whether a mobile app belongs in this repo), #101 (SEC-15, changes requested), #145 (the security-block demo; close it once its screenshots are taken), and Dependabot #170, #173–#175 (#173–#175 are major bumps of the docker actions #172 just added), #126, #127.
+
+### Decided in conversation, not yet written down
+- Jack owns every documentation ticket (D8–D13). The Sprint 5 plan doc in Google Drive (`sprint5-plan-group4`) still shows the earlier hours split.
+
+### Open questions for the user
+- **The #172 follow-up issue was never opened.** BUG-24 to BUG-26 plus the suspected template mount (below) need one issue (owner Nate, due 12/1); "Done" is a clean clone where `docker compose up` gets as far as signing in, creating a session and sending a chat message. Until then, `docker compose up` does not meet the brief.
+- Add `docker` to the "main protection" ruleset's required checks; today a red `docker` job does not block a merge.
+- #146: does the Expo app belong in this repo, and does it count toward Sprint 5?
+
+### Things the next agent should be careful about
+- **Suspected, not verified:** `docker-compose.yml` runs `supabase start` inside a container with the repo at `/workspace`, so the CLI asks the host's Docker to bind-mount `/workspace/supabase/templates/magic_link.html`, a path that only exists in the container. Sign-in emails probably fail under compose. The usual fix is mounting the repo at the same path (`./:${PWD}`).
+- **Do not run `docker compose up` against Jack's machine casually:** it starts Supabase with the real `project_id` and default ports, the same stack as `npm run db:start`.
+- `NEXT_PUBLIC_*` is inlined into server code as well as the browser bundle at build time, so setting those variables at container runtime changes nothing.
+
 ## 2026-11-20 · Checkpoint 1: Dockerfile, compose, CI image build (V1/V2)
 
 **Branch:** `v1-v2-docker-compose`, from `main` at `c8c6618` · **Commits made:** this PR
