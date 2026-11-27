@@ -94,3 +94,34 @@ describe("deploy.yml and vercel.json", () => {
     expect(staging).not.toContain("--prod");
   });
 });
+
+describe("docs/ops/RUNBOOK.md (D9)", () => {
+  const runbook = read("docs/ops/RUNBOOK.md");
+
+  it("keeps every section Appendix B asks for", () => {
+    for (const heading of [
+      "## System overview",
+      "## Deploy to staging",
+      "## Promote to production",
+      "## Roll back",
+      "### A migration already ran",
+      "## Where to look",
+      "## Known failure modes",
+    ]) {
+      expect(runbook).toContain(heading);
+    }
+  });
+
+  it("names the settings deploy.yml reads, and holds no values", () => {
+    for (const name of ["VERCEL_TOKEN", "VERCEL_AUTOMATION_BYPASS_SECRET", "STAGING_HOST", "SUPABASE_PROJECT_ID"]) {
+      expect(deploy()).toContain(name);
+      expect(runbook).toContain(name);
+    }
+    // A JWT, a Supabase secret key or a Vercel token pasted by mistake.
+    expect(runbook).not.toMatch(/eyJ[A-Za-z0-9_-]{20,}|sb_secret_|vcp_[A-Za-z0-9]{10,}/);
+  });
+});
+
+function deploy() {
+  return read(".github/workflows/deploy.yml");
+}

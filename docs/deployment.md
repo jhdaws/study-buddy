@@ -3,7 +3,7 @@
 Where Study Buddy runs, and how a change gets from a pull request to
 students. The reasons are in [ADR 0012](./adr/0012-hosting-and-release.md).
 The step-by-step operations (deploy, promote, roll back, where the logs are)
-will be in `docs/ops/RUNBOOK.md` (D9, #162).
+are in [`docs/ops/RUNBOOK.md`](./ops/RUNBOOK.md) (D9, #162).
 
 > **Status (2026-11-27):** the pipeline is written (V3, #149:
 > `.github/workflows/deploy.yml`, `vercel.json`) but is a no-op until the
