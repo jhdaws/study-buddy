@@ -15,7 +15,10 @@ name: Deploy
 #                  success, and the tag matches package.json's version
 #                  (scripts/release-gate.mjs)
 #     -> production: waits for the `production` environment's reviewer, then
-#                  migrations to production and `vercel deploy --prod`
+#                  migrations to production and `vercel deploy --prod`.
+#                  Not for a pre-release tag (v1.0.0-rc1): that one only
+#                  marks a commit the gate has checked on staging, the
+#                  feature freeze in the Sprint 5 plan.
 #
 # Production rebuilds the commit that passed on staging rather than reusing
 # the staging build: NEXT_PUBLIC_* values are baked in at build time and the
@@ -228,6 +231,9 @@ jobs:
 
   production:
     needs: release-gate
+    # A pre-release tag (anything with a "-", like v1.0.0-rc1) stops after
+    # the gate: it is the freeze marker, deployed on staging only.
+    if: ${{ !contains(github.ref_name, '-') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The required reviewer is set on this environment in GitHub, with
