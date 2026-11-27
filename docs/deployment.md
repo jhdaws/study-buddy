@@ -87,6 +87,85 @@ environment's `NEXT_PUBLIC_SUPABASE_*` values point at its own project.
 4. **If production is bad,** Vercel Instant Rollback restores the previous
    deployment (`docs/ops/RUNBOOK.md`).
 
+## Release pipeline, stage by stage (D11, #164)
+
+Every box is a job in a workflow, named as it appears in the Actions tab. A
+red box stops everything to its right.
+
+```mermaid
+flowchart TB
+    subgraph pr["1 · Pull request (ci.yml)"]
+        direction LR
+        open["PR opened<br/>(template filled in)"] --> verify
+        verify["verify<br/>npm ci · seed check · lint ·<br/>typecheck · unit + coverage gate · build"]
+        verify --> db["db<br/>Postgres: RLS, constraints, locks"]
+        verify --> e2e["e2e<br/>Playwright journeys,<br/>full local stack"]
+        open --> security["security<br/>npm audit · Semgrep · gitleaks"]
+        open --> docker["docker<br/>image build"]
+        db --> review
+        e2e --> review
+        security --> review
+        docker --> review
+        review{"teammate approves<br/>(main protection ruleset)"}
+    end
+
+    subgraph main["2 · Merge to main (ci.yml, then deploy.yml)"]
+        direction LR
+        merge["merge"] --> ci2["CI again on main<br/>docker job pushes<br/>ghcr.io/…:sha-&lt;commit&gt;"]
+        ci2 -- "green" --> staging["staging<br/>migrations → vercel build →<br/>vercel deploy (Preview) →<br/>alias to staging URL"]
+        staging --> smoke["smoke<br/>smoke-tests.yml<br/>against staging (V4)"]
+        smoke --> record["record-smoke<br/>commit status<br/>'staging smoke'"]
+    end
+
+    subgraph rel["3 · Release tag (deploy.yml)"]
+        direction LR
+        tag["git push origin v1.0.0"] --> gate{"release-gate<br/>on main? · smoke green? ·<br/>tag = package.json?"}
+        gate -- "pre-release (v1.0.0-rc1)" --> stop["stops here:<br/>freeze marker"]
+        gate -- "v1.0.0" --> approve{"production environment<br/>a teammate other than<br/>the tagger approves"}
+        approve --> prod["production<br/>migrations → vercel build --prod →<br/>vercel deploy --prod → GET /login"]
+    end
+
+    subgraph ops["4 · After release (RUNBOOK.md)"]
+        direction LR
+        watch["/api/health (V5) · uptime check<br/>and Sentry (V7) · Vercel logs (V6)"]
+        watch -- "bad release" --> rollback["Vercel Instant Rollback<br/>then Promote the fix"]
+    end
+
+    review -- "approved" --> merge
+    record -. "green status read by" .-> gate
+    prod --> watch
+
+    classDef human fill:#fff4d6,stroke:#b58900,color:#000
+    class review,approve,tag human
+```
+
+The yellow boxes are the only steps a person takes. Everything else runs by
+itself. The only route from staging to production is the "staging smoke"
+status, shown dotted: a tag on a commit without a green one stops at the gate.
+
+### Screenshots for the Sprint 5 report
+
+Take each one once the pipeline has run for real. Save it under the report's
+appendix, and note the run's URL beside it so a grader can check it.
+
+1. **A green staging deploy.** Actions → Deploy → a run for a merge to main,
+   with `staging`, `smoke` and `record-smoke` all green. Include the job
+   summary that shows the staging URL and the commit. A second shot: the
+   commit on GitHub with its green **staging smoke** status.
+2. **A promotion with its approval.** Actions → Deploy → the `v1.0.0` run,
+   paused at `production` with the "Review deployments" panel open, showing
+   who approved, and then the same run green. Then GitHub → the repository's
+   Environments → `production`, showing the deployment.
+3. **A smoke test blocking a promotion.** Make a commit's smoke run fail on
+   purpose (V4 shows one: for example, point the smoke test at a page that
+   does not exist on a throwaway commit), tag it, and capture
+   `release-gate` red with its `::error::` line ("result is "failure", not
+   success") and `production` never starting.
+4. Also useful for the report and the video: the `docker` job pushing the
+   image to GHCR (the package page with the `sha-…` tag), `/api/health`'s
+   JSON on production, and the rollback drill's Vercel "Instant Rollback"
+   confirmation with its timestamp.
+
 ## One-time setup (V3, #149)
 
 `deploy.yml` skips staging with a notice until these exist, and fails a

@@ -94,3 +94,17 @@ describe("deploy.yml and vercel.json", () => {
     expect(staging).not.toContain("--prod");
   });
 });
+
+describe("docs/deployment.md stage diagram (D11)", () => {
+  const doc = read("docs/deployment.md");
+  const start = doc.indexOf("## Release pipeline, stage by stage");
+  const diagram = doc.slice(doc.indexOf("```mermaid", start), doc.indexOf("```\n", doc.indexOf("```mermaid", start) + 10));
+  const workflows = read(".github/workflows/ci.yml") + read(".github/workflows/deploy.yml");
+
+  it("draws only jobs that exist in ci.yml and deploy.yml", () => {
+    for (const job of ["verify", "db", "e2e", "security", "docker", "staging", "smoke", "record-smoke", "release-gate", "production"]) {
+      expect(diagram).toContain(job);
+      expect(workflows).toMatch(new RegExp(`^  ${job}:$`, "m"));
+    }
+  });
+});
