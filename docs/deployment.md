@@ -161,6 +161,7 @@ the merge, against staging), so they cannot be added there; the
 | --- | --- |
 | Only Actions deploys; no preview per branch | `vercel.json` (`git.deploymentEnabled: false`) |
 | Staging only from a green CI run for a push to main, or by hand from main | `deploy.yml`, `staging` job's `if` (SEC-13) |
+| A pre-release tag (`v1.0.0-rc1`) runs the gate but never deploys to production | `deploy.yml`, `production` job's `if` |
 | Production only from a `v*` tag on a commit from main, whose "staging smoke" status is green, and whose `package.json` version matches the tag | `deploy.yml`, `release-gate` job → `scripts/release-gate.mjs` |
 | A teammate other than the tagger approves | the `production` environment's reviewers |
 | Each environment's secrets only reach main or a `v*` tag | the environments' deployment-branch rules |

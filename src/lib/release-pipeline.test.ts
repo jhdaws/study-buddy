@@ -83,8 +83,9 @@ describe("deploy.yml and vercel.json", () => {
     expect(production).toContain("needs: release-gate");
     expect(production).toMatch(/environment:\n\s+name: production/);
     expect(production).toContain("deploy --prebuilt --prod");
-    // The gate runs only for v* tags.
+    // The gate runs only for v* tags, and a pre-release tag stops there.
     expect(deploy).toContain("startsWith(github.ref, 'refs/tags/v')");
+    expect(production).toContain("if: ${{ !contains(github.ref_name, '-') }}");
   });
 
   it("never deploys to production from the staging job", () => {
