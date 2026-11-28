@@ -74,6 +74,29 @@ spends its first hour rediscovering the same dead end.
 
 
 
+## 2026-11-27 · Moses's Sprint 5 tickets: V5, V6, V7, P5 (US-18), D12, and D14's script
+
+**Branches (one PR each, all from `main` at `0e53f9d`):** `s5-v5-health-endpoint` #182 · `s5-v6-structured-logs` #183 · `s5-p5-us-18-report-message` #184 · `s5-v7-monitoring` #185 · `s5-d12-complexity` #186. This entry rides on #182.
+
+### What changed
+- V5 #182: `GET /api/health` (`src/lib/health.ts`) and `public.health_check()`, a SQL function that reads nothing, so anon gets no table.
+- V6 #183: `src/lib/log.ts` (one JSON line: level, event, message, requestId, at); `src/proxy.ts` sets `x-request-id`; every server `console.*` converted; the security log writes through the same formatter. Postgres's own text is no longer logged, only the SQLSTATE and `databaseErrorReason()`'s name.
+- P5 #184: `reports.message_id`, a RESTRICTIVE policy `reports_insert_message_seen`, unique `reports_reporter_message_key`; Report on chat messages.
+- V7 #185: Sentry (`src/instrumentation.ts`, `src/instrumentation-client.ts`, `src/lib/monitoring.ts`), inert without a DSN; `.github/workflows/uptime.yml`, inert until `UPTIME_CHECK_ENABLED`; setup in `docs/ops/monitoring.md`.
+- D12 #186: `npm run complexity` and `docs/complexity.md`.
+- D14: the video's script and shot list are a Claude doc, not in the repo: https://claude.ai/artifact/XwHb5jAG4j6BJh2Pqd8FdG
+
+### Open questions for the user
+- Sentry needs an account (Moses) and the DSN in Vercel Production; the uptime check needs `UPTIME_CHECK_ENABLED=true` once `/api/health` is on production, and optionally `UPTIME_WEBHOOK_URL`. Which chat does the team use? A GroupMe or iMessage group has no compatible webhook.
+- Nobody has reviewed Jack's #176 to #181 yet; Moses has 2 h of reviews in the plan. Notes for #177 were drafted, not posted.
+
+### Things the next agent should be careful about
+- **Merge order matters for logging.** #183 (V6) converts every server `console.*`, but #182's health route and #184's `reportUser()` changes were written against `main` with `console.error`. Whichever of them merges after #183 must switch those lines to `log.error(...)` / `databaseErrorFields()`. `git grep "console\." -- src ':!*.test.*'` should then show only `sessions/error.tsx` and `live-roster.ts` (both browser code).
+- The migrations and `tests/db/` were never run locally here: the Supabase images could not be pulled (registries blocked), so CI's `db` job is the only check. `database.types.ts` was edited by hand in #182 and #184; CI's type-drift check passed on #182.
+- #184's first db run failed: a report written and its session deleted in one transaction tripped `reports_message_id_fkey`, because Postgres re-checks the key on the first of two set-null updates. Fixed by making that key DEFERRABLE INITIALLY DEFERRED; keep it so.
+- `npx supabase migration new` creates the file and then hangs here (its telemetry host is blocked). Kill it once the file exists.
+- `APP_COMMIT_SHA` reaching a prebuilt Vercel function at run time is still unchecked (V3's note). If `/api/health` shows `"commit": null` on staging, that is the cause.
+
 ## 2026-11-20 · Checkpoint 1: Dockerfile, compose, CI image build (V1/V2)
 
 **Branch:** `v1-v2-docker-compose`, from `main` at `c8c6618` · **Commits made:** this PR
