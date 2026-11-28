@@ -199,3 +199,15 @@ evidence are in [`security/findings.md`](./security/findings.md).
 - **BUG-19, Google key pair.** *Verified* by running `next.config.ts` with each
   combination of the two keys; a Vercel production build with only one fails.
 
+## Release (Sprint 5)
+
+- **V5, `/api/health` (#151).** *Verified* by unit tests
+  (`src/lib/health.test.ts`, `src/app/api/health/route.test.ts`): 200 with
+  every key when the database answers; 503 when it refuses, does not answer
+  within 3 s, or the deployment has no Supabase settings; `no-store`; the
+  failure reason goes to the log as a code and never into the body.
+  `tests/db/health-check.test.ts` checks against real Postgres that anon can
+  run `health_check()` and still reads no table. *Assumed until the first
+  staging deploy:* that `APP_COMMIT_SHA`, set by `deploy.yml` on the
+  deployment, reaches the function at run time (V3 flags this as unchecked);
+  if it does not, `commit` is `null` and the body says so.
