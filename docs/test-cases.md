@@ -199,3 +199,17 @@ evidence are in [`security/findings.md`](./security/findings.md).
 - **BUG-19, Google key pair.** *Verified* by running `next.config.ts` with each
   combination of the two keys; a Vercel production build with only one fails.
 
+## Release (Sprint 5)
+
+- **V7, monitoring (#153).** *Verified* by unit tests
+  (`src/lib/monitoring.test.ts`, `src/instrumentation.test.ts`,
+  `src/instrumentation-client.test.ts`, `src/lib/monitoring-client.test.ts`,
+  `security-headers.test.ts`, `src/proxy.test.ts`): without a DSN Sentry is
+  never started and the CSP is unchanged; with one, errors only, no default
+  PII, cookies/headers/bodies/query strings/emails stripped before sending,
+  and the browser may reach only Sentry's ingest origin. The uptime check's
+  probe step was run against a stand-in server: 200 passes, 503 and no answer
+  fail after three tries. *Not verified until the accounts exist:* an event
+  reaching Sentry, the `outage` issue being opened and closed, and the chat
+  webhook (docs/ops/monitoring.md, "Proving it works").
+
