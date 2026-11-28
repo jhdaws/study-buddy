@@ -32,6 +32,9 @@
 //     (*_academic_profile.sql).
 //   - P2 (US-24): deleting an account through Supabase Auth's admin API.
 //   - P3 (US-18): the reports table's limit and note check (*_reports.sql).
+//   - P5 (US-18): one report per student per message, and the policy that a
+//     message report names the message's real author
+//     (*_p5_us_18_report_message.sql).
 //   - P4 (US-22): the blocks table's self-block CHECK, and join_session's
 //     new refusal when the host has blocked the caller (*_p4_us_22_block_a_user.sql).
 //   - C1 (US-05): the chat's body check, and chatErrorMessage() for its
@@ -83,6 +86,9 @@ const CONSTRAINT_MESSAGES: Record<string, string> = {
   // P3 (US-18): mirror reportUserSchema.
   reports_note_length: "Keep the note to 500 characters or fewer.",
   reports_not_self: "You can't report yourself.",
+  // P5 (US-18): a second report of the same message by the same student --
+  // a double tap, or a second tab.
+  reports_reporter_message_key: "You've already reported this message. The team will read it.",
   // P4 (US-22): a direct insert naming yourself as both sides.
   blocks_not_self: "You can't block yourself.",
   // R1 (US-16): one live request per student per course, so asking twice is

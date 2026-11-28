@@ -26,12 +26,20 @@
  *
  * Times are formatted against `now` from the server render, so the server
  * and the browser print the same "Today"/"Yesterday".
+ *
+ * Reporting (US-18, P5): every message but your own, and but a deleted
+ * user's, has a "Report" button that opens <ReportUserForm> for that message,
+ * one at a time. The form opens BELOW the transcript, not inside it: the
+ * transcript is a live region, and a form inside it would be read out as if
+ * it were a new message. It works in a closed chat too -- something can be
+ * noticed after the chat goes read-only.
  */
 
 import { useRouter } from "next/navigation";
-import { useActionState, useEffect, useId, useRef, type KeyboardEvent } from "react";
+import { useActionState, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 
 import { sendMessage, type SendMessageState } from "@/app/sessions/actions";
+import ReportUserForm from "@/components/ReportUserForm";
 import { BUTTON_PRIMARY, FIELD_ERROR, FORM_ERROR, PANEL, SECTION_TITLE } from "@/components/ui/styles";
 import type { ChatAccess, ChatMessage } from "@/lib/chat";
 import { formatMessageTime } from "@/lib/format";
@@ -69,6 +77,9 @@ export default function SessionChat({
   );
   const ids = { heading: useId(), body: useId(), error: useId() };
   const transcript = useRef<HTMLOListElement>(null);
+  // The id of the message whose report form is open, if any.
+  const [reporting, setReporting] = useState<string | null>(null);
+  const reported = messages.find((message) => message.id === reporting);
 
   const open = access === "open";
   useEffect(() => {
@@ -124,12 +135,25 @@ export default function SessionChat({
                 message.authorId === null ? "Deleted user" : (message.authorDisplayName ?? "A student");
               return (
                 <li key={message.id} className={`flex flex-col ${mine ? "items-end" : "items-start"}`}>
-                  <p className="text-sm text-ink-2">
-                    <span className="font-semibold text-ink">{mine ? "You" : name}</span>
-                    {" · "}
-                    <time dateTime={message.createdAt}>
-                      {formatMessageTime(message.createdAt, new Date(now))}
-                    </time>
+                  <p className="flex items-center text-sm text-ink-2">
+                    <span>
+                      <span className="font-semibold text-ink">{mine ? "You" : name}</span>
+                      {" · "}
+                      <time dateTime={message.createdAt}>
+                        {formatMessageTime(message.createdAt, new Date(now))}
+                      </time>
+                    </span>
+                    {!mine && message.authorId !== null && (
+                      <button
+                        type="button"
+                        aria-label={`Report message from ${name}`}
+                        aria-expanded={reporting === message.id}
+                        onClick={() => setReporting(reporting === message.id ? null : message.id)}
+                        className="ml-1 inline-flex min-h-11 items-center rounded-lg px-2 text-sm font-semibold text-ink-2 hover:bg-paper hover:text-danger-on-light"
+                      >
+                        Report
+                      </button>
+                    )}
                   </p>
                   <p
                     className={`mt-0.5 max-w-[85%] rounded-xl px-3.5 py-2 text-[15px] break-words whitespace-pre-wrap ${
@@ -142,6 +166,17 @@ export default function SessionChat({
               );
             })}
           </ol>
+
+          {reported && reported.authorId !== null && (
+            <ReportUserForm
+              key={reported.id}
+              reportedUserId={reported.authorId}
+              displayName={reported.authorDisplayName}
+              sessionId={sessionId}
+              message={{ id: reported.id, body: reported.body }}
+              onClose={() => setReporting(null)}
+            />
+          )}
 
           {open ? (
             <form action={formAction} noValidate className="mt-4 flex flex-col gap-2">

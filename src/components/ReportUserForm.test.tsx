@@ -72,6 +72,26 @@ describe("<ReportUserForm> (US-18)", () => {
     });
   });
 
+  it("for a chat message (P5): names it, quotes it, and sends its id too", async () => {
+    reportMock.mockResolvedValue({ sent: true });
+    const MESSAGE = "22222222-2222-4222-8222-222222222222";
+    renderForm({ message: { id: MESSAGE, body: "You're all idiots" } });
+
+    expect(screen.getByRole("group", { name: "Report a message from Sam" })).toBeTruthy();
+    expect(screen.getByText("You're all idiots").tagName).toBe("BLOCKQUOTE");
+    fireEvent.click(screen.getByLabelText("Harassment or bullying"));
+    await send();
+
+    const data = reportMock.mock.calls[0][1];
+    expect(Object.fromEntries([...data].filter(([key]) => !key.startsWith("$ACTION")))).toEqual({
+      reportedUserId: REPORTED,
+      sessionId: SESSION,
+      messageId: MESSAGE,
+      reason: "harassment",
+      note: "",
+    });
+  });
+
   it("confirms, without saying anything more about the student, and closes on Done", async () => {
     reportMock.mockResolvedValue({ sent: true });
     const onClose = renderForm();

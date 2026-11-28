@@ -1036,7 +1036,7 @@ test("block a user (US-22): A blocks B from a roster, B's later join is refused,
   }
 });
 
-test("session chat (US-05, C1): two students in one session exchange messages live; a non-attendee sees none", async ({
+test("session chat (US-05, C1): two students exchange messages live, a non-attendee sees none, and one is reported (US-18)", async ({
   page,
   browser,
 }) => {
@@ -1121,6 +1121,37 @@ test("session chat (US-05, C1): two students in one session exchange messages li
       ]);
     } finally {
       await db.end();
+    }
+
+    // US-18, P5 (#156): the host reports the guest's message from the chat.
+    // There is no Report on their own message.
+    await expect(hostChat.getByRole("button", { name: /^Report message from Cary/ })).toHaveCount(0);
+    await hostChat.getByRole("button", { name: "Report message from Gale Guest" }).click();
+    const reportForm = hostChat.getByRole("form", { name: "Report a message from Gale Guest" });
+    await expect(reportForm).toContainText("Hi from the guest");
+    await reportForm.getByLabel("Harassment or bullying").check();
+    await reportForm.getByLabel(/Anything else/).fill("E2E message report");
+    await reportForm.getByRole("button", { name: "Send report" }).click();
+    await expect(hostChat.getByRole("status")).toContainText("Your report was sent");
+
+    // Filed with the host's own token. The reported student, the session and
+    // the message came from the message itself, not the form.
+    const check = await connect();
+    try {
+      const { rows } = await check.query<{ reporter: string; reported: string; body: string; sameSession: boolean }>(
+        `select rp.display_name as reporter, rd.display_name as reported, m.body,
+                r.session_id = m.session_id as "sameSession"
+           from public.reports r
+           join public.profiles rp on rp.id = r.reporter_id
+           join public.profiles rd on rd.id = r.reported_user_id
+           join public.session_messages m on m.id = r.message_id
+          where r.note = 'E2E message report'`,
+      );
+      expect(rows).toEqual([
+        { reporter: "Cary Chathost", reported: "Gale Guest", body: "Hi from the guest", sameSession: true },
+      ]);
+    } finally {
+      await check.end();
     }
   } finally {
     await guestContext.close();

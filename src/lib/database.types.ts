@@ -163,17 +163,23 @@ isOneToOne: false
                   ]
                 },"reports": {
                   Row: {
-                    "created_at": string,"id": string,"note": string | null,"reason": Database["public"]['Enums']["report_reason"],"reported_user_id": string | null,"reporter_id": string | null,"session_id": string | null
+                    "created_at": string,"id": string,"message_id": string | null,"note": string | null,"reason": Database["public"]['Enums']["report_reason"],"reported_user_id": string | null,"reporter_id": string | null,"session_id": string | null
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"id"?: string,"note"?: string | null,"reason": Database["public"]['Enums']["report_reason"],"reported_user_id"?: string | null,"reporter_id"?: string | null,"session_id"?: string | null
+                    "created_at"?: string,"id"?: string,"message_id"?: string | null,"note"?: string | null,"reason": Database["public"]['Enums']["report_reason"],"reported_user_id"?: string | null,"reporter_id"?: string | null,"session_id"?: string | null
                   }
                   Update: {
-                    "created_at"?: string,"id"?: string,"note"?: string | null,"reason"?: Database["public"]['Enums']["report_reason"],"reported_user_id"?: string | null,"reporter_id"?: string | null,"session_id"?: string | null
+                    "created_at"?: string,"id"?: string,"message_id"?: string | null,"note"?: string | null,"reason"?: Database["public"]['Enums']["report_reason"],"reported_user_id"?: string | null,"reporter_id"?: string | null,"session_id"?: string | null
                   }
                   Relationships: [
                     {
+      foreignKeyName: "reports_message_id_fkey"
+      columns: ["message_id"]
+isOneToOne: false
+      referencedRelation: "session_messages"
+      referencedColumns: ["id"]
+    },{
       foreignKeyName: "reports_reported_user_id_fkey"
       columns: ["reported_user_id"]
 isOneToOne: false

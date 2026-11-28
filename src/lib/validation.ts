@@ -630,15 +630,18 @@ export type DeleteAccountField = keyof DeleteAccountValues;
 // ---------------------------------------------------------------------------
 // Report a user (US-18) -- reportUser() in src/app/reports/actions.ts. The
 // database twins: the report_reason enum, reports_note_length, and the
-// reports_insert_own policy (*_reports.sql).
+// reports_insert_own policy (*_reports.sql). A chat message report (P5) is
+// the same form with a `messageId`; its twins are reports_insert_message_seen
+// and reports_reporter_message_key (*_p5_us_18_report_message.sql).
 // ---------------------------------------------------------------------------
 
 /** A uuid as Postgres prints one. Anything else cannot be a profile or session. */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * The report form: who (a hidden field, from the roster), the session it was
- * sent from (hidden, optional), a reason, and an optional note. Never who is
+ * The report form: who (a hidden field, from the roster or the message), the
+ * session it was sent from (hidden, optional), the chat message it is about
+ * (hidden, optional; P5), a reason, and an optional note. Never who is
  * reporting: that is the signed-in student, set by the database.
  */
 export const reportUserSchema = z.object({
@@ -651,6 +654,12 @@ export const reportUserSchema = z.object({
     .optional()
     .transform((id) => id || null)
     .refine((id) => id === null || UUID_PATTERN.test(id), { error: "That session isn't valid." }),
+  messageId: z
+    .string()
+    .trim()
+    .optional()
+    .transform((id) => id || null)
+    .refine((id) => id === null || UUID_PATTERN.test(id), { error: "That message isn't valid." }),
   reason: z.enum(REPORT_REASONS, { error: "Choose a reason." }),
   note: z
     .string()

@@ -19,6 +19,10 @@ const fakes = vi.hoisted(() => ({
   requireUser: vi.fn(),
   from: vi.fn(),
   insert: vi.fn(),
+  // session_messages: .select(...).eq("id", ...).maybeSingle()
+  select: vi.fn(),
+  eq: vi.fn(),
+  maybeSingle: vi.fn(),
 }));
 vi.mock("@/lib/supabase/server", () => ({
   requireUser: fakes.requireUser,
@@ -41,7 +45,12 @@ const valid = (overrides: Record<string, string> = {}) =>
 beforeEach(() => {
   fakes.requireUser.mockResolvedValue({ id: ME, displayName: "Priya" });
   fakes.insert.mockResolvedValue({ error: null });
-  fakes.from.mockReturnValue({ insert: fakes.insert });
+  fakes.from.mockImplementation((table: string) =>
+    table === "session_messages" ? { select: fakes.select } : { insert: fakes.insert },
+  );
+  fakes.select.mockReturnValue({ eq: fakes.eq });
+  fakes.eq.mockReturnValue({ maybeSingle: fakes.maybeSingle });
+  fakes.maybeSingle.mockResolvedValue({ data: { author_id: SAM, session_id: SESSION }, error: null });
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
@@ -118,5 +127,99 @@ describe("reportUser", () => {
     });
     const state = await reportUser({}, valid());
     expect(state.formError).toBe("You don't have permission to do that.");
+  });
+});
+
+// P5 (#156): reporting one chat message. Who is reported, and in which
+// session, come from the message as RLS lets the caller read it -- never the
+// form. The database's own check (reports_insert_message_seen) and the
+// one-report-per-message index are tested in tests/db/reports.test.ts.
+describe("reportUser: a chat message", () => {
+  const MESSAGE = "22222222-2222-4222-8222-222222222222";
+  const OTHER_SESSION = "33333333-3333-4333-8333-333333333333";
+  const messageForm = (overrides: Record<string, string> = {}) =>
+    valid({ messageId: MESSAGE, ...overrides });
+
+  it("reads the message through the caller's client and reports its author, in its session", async () => {
+    // The form claims someone else and another session; the message wins.
+    const state = await reportUser({}, messageForm({ reportedUserId: SAM, sessionId: OTHER_SESSION }));
+
+    expect(state).toEqual({ sent: true });
+    expect(fakes.from).toHaveBeenCalledWith("session_messages");
+    expect(fakes.select).toHaveBeenCalledWith("author_id, session_id");
+    expect(fakes.eq).toHaveBeenCalledWith("id", MESSAGE);
+    expect(fakes.insert).toHaveBeenCalledWith({
+      reported_user_id: SAM,
+      session_id: SESSION,
+      message_id: MESSAGE,
+      reason: "harassment",
+      note: null,
+    });
+  });
+
+  it("says the message is gone when the caller cannot read it, and inserts nothing", async () => {
+    fakes.maybeSingle.mockResolvedValue({ data: null, error: null });
+
+    const state = await reportUser({}, messageForm({ note: "Rude" }));
+
+    expect(state.formError).toBe("That message isn't there anymore.");
+    expect(state.values?.note).toBe("Rude");
+    expect(fakes.insert).not.toHaveBeenCalled();
+  });
+
+  it("refuses your own message, whatever the form says", async () => {
+    fakes.maybeSingle.mockResolvedValue({ data: { author_id: ME, session_id: SESSION }, error: null });
+
+    const state = await reportUser({}, messageForm({ reportedUserId: SAM }));
+
+    expect(state.formError).toBe("You can't report your own message.");
+    expect(fakes.insert).not.toHaveBeenCalled();
+  });
+
+  it("refuses a message whose author deleted their account", async () => {
+    fakes.maybeSingle.mockResolvedValue({ data: { author_id: null, session_id: SESSION }, error: null });
+
+    const state = await reportUser({}, messageForm());
+
+    expect(state.formError).toMatch(/deleted their account/);
+    expect(fakes.insert).not.toHaveBeenCalled();
+  });
+
+  it("maps a second report of the same message to our own words", async () => {
+    fakes.insert.mockResolvedValue({
+      error: { code: "23505", message: 'duplicate key value violates unique constraint "reports_reporter_message_key"' },
+    });
+
+    const state = await reportUser({}, messageForm());
+
+    expect(state.formError).toMatch(/already reported this message/);
+    expect(state.sent).toBeUndefined();
+  });
+
+  it("does not show a failed read's text, and logs only its code", async () => {
+    fakes.maybeSingle.mockResolvedValue({
+      data: null,
+      error: { code: "42P01", message: 'relation "session_messages" does not exist' },
+    });
+
+    const state = await reportUser({}, messageForm());
+
+    expect(state.formError).toBe("Something went wrong on our side. Try again in a moment.");
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toMatch(/relation/);
+    expect(fakes.insert).not.toHaveBeenCalled();
+  });
+
+  it("returns a field error for a message id that is not a uuid", async () => {
+    const state = await reportUser({}, messageForm({ messageId: "m1" }));
+
+    expect(state.fieldErrors?.messageId?.[0]).toBe("That message isn't valid.");
+    expect(fakes.from).not.toHaveBeenCalled();
+  });
+
+  it("leaves a user report as it was: no message read, no message_id", async () => {
+    await reportUser({}, valid());
+
+    expect(fakes.from).not.toHaveBeenCalledWith("session_messages");
+    expect(fakes.insert.mock.calls[0][0]).not.toHaveProperty("message_id");
   });
 });

@@ -1,13 +1,16 @@
 "use client";
 
 /**
- * The report form under one roster entry (US-18), opened by that entry's
- * "Report" button in <SessionRoster>. Posts to reportUser()
- * (src/app/reports/actions.ts) with `useActionState`.
+ * The report form (US-18): under one roster entry, opened by that entry's
+ * "Report" button in <SessionRoster>; or under the chat for one message
+ * (P5), opened by that message's "Report" button in <SessionChat>, when it
+ * gets a `messageId`. Posts to reportUser() (src/app/reports/actions.ts)
+ * with `useActionState`.
  *
- * Fields (reportUserSchema): `reportedUserId` and `sessionId`, hidden;
- * `reason`, a radio group; `note`, optional. Never who is reporting: the
- * database takes that from the session.
+ * Fields (reportUserSchema): `reportedUserId`, `sessionId` and, for a
+ * message, `messageId`, hidden; `reason`, a radio group; `note`, optional.
+ * Never who is reporting: the database takes that from the session. For a
+ * message, the server takes who is reported from the message itself.
  *
  * Shows nothing about the reported student but the display name the roster
  * already shows, and the confirmation says nothing about them either -- not
@@ -38,6 +41,8 @@ export type ReportUserFormProps = {
   /** As the roster shows it; null for a profile with no name yet. */
   displayName: string | null;
   sessionId: string;
+  /** P5: the chat message being reported, when it is one. */
+  message?: { id: string; body: string };
   /** Close the form (Cancel, or Done after sending). */
   onClose: () => void;
   /** useActionState's starting state. `{}` in the roster; tests pass others. */
@@ -51,6 +56,7 @@ export default function ReportUserForm({
   reportedUserId,
   displayName,
   sessionId,
+  message,
   onClose,
   initialState = {},
 }: ReportUserFormProps) {
@@ -106,6 +112,7 @@ export default function ReportUserForm({
     >
       <input type="hidden" name="reportedUserId" value={reportedUserId} />
       <input type="hidden" name="sessionId" value={sessionId} />
+      {message && <input type="hidden" name="messageId" value={message.id} />}
 
       <fieldset
         key={values.reason ?? ""}
@@ -113,8 +120,13 @@ export default function ReportUserForm({
         className="flex flex-col gap-1"
       >
         <legend id={ids.legend} className="mb-1 text-[15px] font-bold text-ink">
-          Report {name}
+          {message ? `Report a message from ${name}` : `Report ${name}`}
         </legend>
+        {message && (
+          <blockquote className="mb-2 line-clamp-3 rounded-lg border-l-4 border-line bg-white px-3 py-2 text-[15px] break-words whitespace-pre-wrap text-ink-2">
+            {message.body}
+          </blockquote>
+        )}
         <p className={`${HINT} mb-1`}>Only the Study Buddy team sees reports. What happened?</p>
         {REPORT_REASONS.map((reason, index) => (
           <label
