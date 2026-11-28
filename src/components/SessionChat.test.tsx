@@ -10,6 +10,7 @@ import SessionChat, { type SessionChatProps } from "./SessionChat";
 // The real action is a "use server" module that imports server-only code;
 // what the database allows is tested in tests/db/session-chat.test.ts.
 vi.mock("@/app/sessions/actions", () => ({ sendMessage: vi.fn() }));
+vi.mock("@/app/reports/actions", () => ({ reportUser: vi.fn() }));
 const router = vi.hoisted(() => ({ refresh: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 // The subscription itself is tested in src/lib/live-roster.test.ts.
@@ -69,7 +70,7 @@ describe("SessionChat", () => {
     const items = within(log).getAllByRole("listitem").map((item) => plain(item.textContent));
     // textContent runs the header and the bubble together.
     expect(items).toEqual([
-      "Priya · 11:30 AMTable by the window",
+      "Priya · 11:30 AMReportTable by the window",
       "You · 11:45 AMOn my way",
       "Deleted user · Yesterday, 2:00 PMOld news",
     ]);
@@ -167,5 +168,60 @@ describe("SessionChat", () => {
   it("does not tell a non-attendee to join a session they cannot join", () => {
     renderChat({ access: "hidden", messages: [], joinable: false });
     expect(screen.getByText("Only people going to this session can see its chat.")).toBeTruthy();
+  });
+});
+
+// US-18, P5 (#156): reporting one message. What the server does with it is
+// tested in src/app/reports/actions.test.ts, and the form in
+// ReportUserForm.test.tsx.
+describe("SessionChat: reporting a message", () => {
+  it("offers Report on other people's messages only -- not your own, not a deleted user's", () => {
+    renderChat();
+
+    expect(screen.getAllByRole("button", { name: /^Report message/ })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Report message from Priya" })).toBeTruthy();
+  });
+
+  it("opens the form for that message below the transcript, never inside the live log", () => {
+    renderChat();
+    const button = screen.getByRole("button", { name: "Report message from Priya" });
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+
+    fireEvent.click(button);
+
+    const form = screen.getByRole("form", { name: "Report a message from Priya" });
+    expect(button.getAttribute("aria-expanded")).toBe("true");
+    expect(within(screen.getByRole("log")).queryByRole("form")).toBeNull();
+    expect((form.querySelector('input[name="messageId"]') as HTMLInputElement).value).toBe("m1");
+    expect((form.querySelector('input[name="reportedUserId"]') as HTMLInputElement).value).toBe("host");
+    expect((form.querySelector('input[name="sessionId"]') as HTMLInputElement).value).toBe(SESSION);
+    expect(within(form).getByText("Table by the window")).toBeTruthy();
+  });
+
+  it("closes it again from the same button, or Cancel", () => {
+    renderChat();
+    const button = screen.getByRole("button", { name: "Report message from Priya" });
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(screen.queryByRole("form", { name: /Report a message/ })).toBeNull();
+
+    fireEvent.click(button);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("form", { name: /Report a message/ })).toBeNull();
+  });
+
+  it("still lets you report in a read-only chat", () => {
+    renderChat({ access: "closed" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Report message from Priya" }));
+
+    expect(screen.getByRole("form", { name: "Report a message from Priya" })).toBeTruthy();
+  });
+
+  it("offers nothing to report when the chat is hidden", () => {
+    renderChat({ access: "hidden", messages: [] });
+
+    expect(screen.queryByRole("button", { name: /^Report/ })).toBeNull();
   });
 });

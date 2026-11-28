@@ -12,6 +12,9 @@ import { connect } from "./connection";
  *     changes or deletes a report; signed-out callers can do nothing.
  *   - At most 5 per student per rolling day.
  *   - Reports survive either side deleting their account (US-24).
+ *   - P5 (*_p5_us_18_report_message.sql): a report can name a chat message,
+ *     but only one the caller can read, and only against its real author in
+ *     its real session; once per student per message.
  *
  * Every test runs inside a transaction that is rolled back.
  */
@@ -201,7 +204,7 @@ describe("nobody but the team reads reports", () => {
     expect(error?.code).toBe("42501");
   });
 
-  it("grants clients nothing but INSERT of the four form columns", async () => {
+  it("grants clients nothing but INSERT of the five form columns", async () => {
     const { rows: tableGrants } = await db.query(
       `select grantee, privilege_type from information_schema.role_table_grants
         where table_schema = 'public' and table_name = 'reports' and grantee in ('anon', 'authenticated')`,
@@ -214,7 +217,8 @@ describe("nobody but the team reads reports", () => {
         order by column_name`,
     );
     expect(columnGrants).toEqual(
-      ["note", "reason", "reported_user_id", "session_id"].map((column_name) => ({
+      // message_id since P5 (*_p5_us_18_report_message.sql).
+      ["message_id", "note", "reason", "reported_user_id", "session_id"].map((column_name) => ({
         grantee: "authenticated",
         privilege_type: "INSERT",
         column_name,
@@ -273,6 +277,118 @@ describe("reports and deleted accounts (US-24)", () => {
     await report(me, sam, "safety", "Kept");
     await db.query("delete from auth.users where id = $1", [me]);
     const { error } = await attempt("delete from auth.users where id = $1", [sam]);
+    expect(error).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// P5 (#156): reporting a chat message
+// ---------------------------------------------------------------------------
+
+describe("reporting a chat message (P5)", () => {
+  let session: string;
+  let message: string;
+
+  /** What reportUser() sends for a message: the message's author and session. */
+  const MESSAGE_REPORT =
+    "insert into public.reports (reported_user_id, session_id, message_id, reason) values ($1, $2, $3, 'harassment')";
+  const reportMessage = (reporter: string, reported: string, sessionId: string | null, messageId: string) =>
+    asUser(reporter, () => attempt(MESSAGE_REPORT, [reported, sessionId, messageId]));
+
+  /** A session hosted by Sam. */
+  async function newSession(): Promise<string> {
+    const { rows: course } = await db.query<{ id: string }>("select id from public.courses limit 1");
+    const { rows: location } = await db.query<{ id: string }>(
+      "insert into public.locations (place_id, lat, lng) values ($1, 36.14, -86.80) returning id",
+      [`p5-${Math.random()}`],
+    );
+    const { rows } = await db.query<{ id: string }>(
+      `insert into public.sessions (host_id, course_id, location_id, location_label, topic, starts_at, ends_at, capacity)
+       values ($1, $2, $3, 'Library', 'P5 test', now() + interval '1 hour', now() + interval '2 hours', 4)
+       returning id`,
+      [sam, course[0].id, location[0].id],
+    );
+    return rows[0].id;
+  }
+
+  beforeEach(async () => {
+    session = await newSession();
+    // Sam hosts; I joined. Alex did not.
+    for (const user of [sam, me]) {
+      await db.query("insert into public.session_attendees (session_id, user_id) values ($1, $2)", [session, user]);
+    }
+    const { rows: posted } = await db.query<{ id: string }>(
+      "insert into public.session_messages (session_id, author_id, body) values ($1, $2, 'You are all useless') returning id",
+      [session, sam],
+    );
+    message = posted[0].id;
+  });
+
+  it("lets someone on the roster report it, against its author, in its session", async () => {
+    const { error } = await reportMessage(me, sam, session, message);
+    expect(error).toBeUndefined();
+
+    const { rows } = await db.query(
+      "select reporter_id, reported_user_id, session_id, message_id from public.reports where message_id = $1",
+      [message],
+    );
+    expect(rows).toEqual([{ reporter_id: me, reported_user_id: sam, session_id: session, message_id: message }]);
+  });
+
+  it("refuses to pin the message on someone who did not write it", async () => {
+    const { error } = await reportMessage(me, alex, session, message);
+    expect(error?.code).toBe("42501");
+  });
+
+  it("refuses a report naming the wrong session, or none", async () => {
+    const other = await newSession();
+    await db.query("insert into public.session_attendees (session_id, user_id) values ($1, $2)", [other, me]);
+    expect((await reportMessage(me, sam, other, message)).error?.code).toBe("42501");
+    expect((await reportMessage(me, sam, null, message)).error?.code).toBe("42501");
+  });
+
+  it("refuses someone who cannot see the chat (not on the roster)", async () => {
+    const { error } = await reportMessage(alex, sam, session, message);
+    expect(error?.code).toBe("42501");
+  });
+
+  it("refuses reporting your own message", async () => {
+    const { error } = await reportMessage(sam, sam, session, message);
+    expect(error?.code).toBe("42501");
+  });
+
+  it("takes one report per student per message, and maps the second by name", async () => {
+    expect((await reportMessage(me, sam, session, message)).error).toBeUndefined();
+
+    const { error } = await reportMessage(me, sam, session, message);
+    expect(error?.code).toBe("23505");
+    expect(error?.message).toContain('"reports_reporter_message_key"');
+  });
+
+  it("counts towards the same 5 a day as user reports", async () => {
+    for (let i = 0; i < 5; i++) expect((await report(me, alex)).error).toBeUndefined();
+
+    const { error } = await reportMessage(me, sam, session, message);
+    expect(error?.code).toBe("PT429");
+    expect(error?.message).toBe("report_limit_reached");
+  });
+
+  // Written and deleted in one transaction here, the case that needs the
+  // foreign key to be deferred (see the migration).
+  it("keeps the report, without the message, if the team deletes the session", async () => {
+    await reportMessage(me, sam, session, message);
+
+    await db.query("delete from public.sessions where id = $1", [session]);
+
+    const { rows } = await db.query(
+      "select message_id, session_id, reported_user_id from public.reports where reporter_id = $1",
+      [me],
+    );
+    expect(rows).toEqual([{ message_id: null, session_id: null, reported_user_id: sam }]);
+  });
+
+  it("leaves a user report, with no message, exactly as before", async () => {
+    const { error } = await report(me, alex);
     expect(error).toBeUndefined();
   });
 });

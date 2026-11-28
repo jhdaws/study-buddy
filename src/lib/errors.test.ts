@@ -250,6 +250,15 @@ describe("databaseErrorMessage: reporting a user (US-18)", () => {
     expect(message).toMatch(expected);
     expect(message).not.toMatch(RAW_TEXT);
   });
+
+  it("maps a second report of the same message (P5) without Postgres's text", () => {
+    const message = databaseErrorMessage({
+      code: "23505",
+      message: 'duplicate key value violates unique constraint "reports_reporter_message_key"',
+    });
+    expect(message).toMatch(/already reported this message/);
+    expect(message).not.toMatch(/duplicate|constraint/);
+  });
 });
 
 describe("databaseErrorMessage: blocking a user (US-22)", () => {
