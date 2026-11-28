@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { supabaseEnv } from "@/lib/env";
+import { createRequestId, REQUEST_ID_HEADER } from "@/lib/request-id";
 import { contentSecurityPolicy, createNonce, NONCE_HEADER } from "@/lib/security-headers";
 import { updateSession } from "@/lib/supabase/proxy";
 
@@ -19,6 +20,11 @@ import { updateSession } from "@/lib/supabase/proxy";
  *    returns, redirect or not, is the one that carries them, so the CSP is
  *    added to that response rather than to a new one.
  *
+ * 3. Gives the request a fresh ID (V6, #152), on the request for the
+ *    logger (@/lib/log reads it with headers()) and on the response so it
+ *    can be quoted from the browser. Like the nonce, it is set before
+ *    updateSession() forwards the request headers, and always overwritten.
+ *
  * The other security headers do not change per request; next.config.ts sets
  * them on every response, including the static files this matcher skips.
  */
@@ -32,9 +38,12 @@ export async function proxy(request: NextRequest) {
   });
   request.headers.set("Content-Security-Policy", policy);
   request.headers.set(NONCE_HEADER, nonce);
+  const requestId = createRequestId();
+  request.headers.set(REQUEST_ID_HEADER, requestId);
 
   const response = await updateSession(request);
   response.headers.set("Content-Security-Policy", policy);
+  response.headers.set(REQUEST_ID_HEADER, requestId);
   return response;
 }
 

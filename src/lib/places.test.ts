@@ -220,6 +220,18 @@ describe("resolvePlace: storing", () => {
 
     expect(error.reason).toBe("lookup_failed");
     expect(error.message).not.toMatch(/permission|locations/);
+    // The server log keeps the code, not that text either (V6).
+    const logged = JSON.stringify(vi.mocked(console.error).mock.calls);
+    expect(logged).toContain("sqlstate_42501");
+    expect(logged).not.toMatch(/permission denied/);
+  });
+
+  it("treats an upsert that returns no row and no error as lookup_failed, and says so in the log", async () => {
+    googleReplies(200, { location: ON_CAMPUS, types: LIBRARY_TYPES });
+    admin.result = { data: null, error: null };
+
+    expect((await refusal(resolvePlace(PLACE_ID))).reason).toBe("lookup_failed");
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).toContain('\\"reason\\":\\"no_row\\"');
   });
 
   it("turns a client that throws (the database unreachable) into lookup_failed", async () => {

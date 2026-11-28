@@ -7,9 +7,13 @@ import "server-only";
 //
 // Each event is ONE console.warn call with ONE argument: a JSON object on a
 // single line, so it can be searched for (`"log":"security"`) and parsed.
+// Since V6 (#152) it is written by src/lib/log.ts's formatLogLine(), so it
+// also carries the level and the request ID every other server line has --
+// search the requestId to see what else that request did.
 //
-//   {"log":"security","event":"sign_in_password_failed","reason":"invalid_credentials",
-//    "at":"2026-11-09T20:00:00.000Z","emailHash":"5d41..."}
+//   {"level":"warn","event":"sign_in_password_failed","message":"security: sign_in_password_failed",
+//    "requestId":"6f1c...","at":"2026-11-09T20:00:00.000Z","log":"security",
+//    "reason":"invalid_credentials","emailHash":"5d41..."}
 //
 // WHAT NEVER GOES IN: a password, a sign-in code, a token, a raw email
 // address, or Supabase's / Postgres's own error text. Callers pass a reason
@@ -29,6 +33,8 @@ import "server-only";
 // these logs are ever sent anywhere wider than Vercel's own.
 
 import { createHash } from "node:crypto";
+
+import { currentRequestId, formatLogLine, writeLogLine } from "@/lib/log";
 
 /** Everything the security log records. Add an event here before logging it. */
 export type SecurityEventName =
@@ -72,17 +78,23 @@ export function hashEmail(email: string): string {
   return createHash("sha256").update(email.trim().toLowerCase()).digest("hex");
 }
 
-/** Write one security event to the server log. Never throws. */
-export function logSecurityEvent({ event, reason, userId, email, sessionId }: SecurityEvent): void {
-  const line: Record<string, string> = {
-    log: "security",
-    event,
-    reason: REASON_CODE.test(reason) ? reason : "invalid_reason",
-    at: new Date().toISOString(),
-  };
-  // From Supabase (getUser()), never from the request.
-  if (userId !== undefined) line.userId = userId;
-  if (email !== undefined) line.emailHash = hashEmail(email);
-  if (sessionId !== undefined) line.sessionId = UUID.test(sessionId) ? sessionId : "invalid_id";
-  console.warn(JSON.stringify(line));
+/**
+ * Write one security event to the server log. Await it (it reads the
+ * request ID first); it never throws.
+ */
+export async function logSecurityEvent({ event, reason, userId, email, sessionId }: SecurityEvent): Promise<void> {
+  try {
+    const fields: Record<string, string> = {
+      log: "security",
+      reason: REASON_CODE.test(reason) ? reason : "invalid_reason",
+    };
+    // From Supabase (getUser()), never from the request.
+    if (userId !== undefined) fields.userId = userId;
+    if (email !== undefined) fields.emailHash = hashEmail(email);
+    if (sessionId !== undefined) fields.sessionId = UUID.test(sessionId) ? sessionId : "invalid_id";
+    const requestId = await currentRequestId();
+    writeLogLine("warn", formatLogLine("warn", event, `security: ${event}`, fields, { requestId }));
+  } catch {
+    // Like every log call: never break the request it describes.
+  }
 }

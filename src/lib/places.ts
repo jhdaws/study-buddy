@@ -19,6 +19,7 @@ import "server-only";
 import { googleMapsServerKey } from "@/lib/env";
 import { FIXTURE_LOCATIONS } from "@/lib/fixtures";
 import type { LatLng } from "@/lib/geo";
+import { databaseErrorFields, log } from "@/lib/log";
 import {
   classifyPlaceDetailsError,
   isWellFormedPlaceId,
@@ -174,7 +175,7 @@ export async function resolvePlace(
   }
 
   if (process.env.NODE_ENV === "production" && !(await getCurrentUser())) {
-    console.error("resolvePlace: refused a lookup with no signed-in user", { placeId });
+    await log.error("place_lookup_signed_out", "resolvePlace: refused a lookup with no signed-in user", { placeId });
     throw new PlaceError("lookup_failed", placeId);
   }
 
@@ -219,7 +220,7 @@ async function lookUpPlace(placeId: string, sessionToken?: string): Promise<Plac
   } catch (error) {
     // Network failure or timeout. Log the kind, not the error object: it
     // could carry the request, and the request carries the key.
-    console.error("resolvePlace: Place Details request failed", {
+    await log.error("place_lookup_request_failed", "resolvePlace: Place Details request failed", {
       placeId,
       error: error instanceof Error ? error.name : "unknown",
     });
@@ -231,10 +232,14 @@ async function lookUpPlace(placeId: string, sessionToken?: string): Promise<Plac
     const reason = classifyPlaceDetailsError(response.status, googleError);
     // Logged even when the student is told "unknown place": a run of these
     // can mean our request is wrong, not their pick.
-    console.error("resolvePlace: Place Details refused", {
+    // Google's message is about our request (a key, a field mask), not the
+    // student; the logger still caps its length.
+    await log.error("place_lookup_refused", "resolvePlace: Place Details refused", {
       placeId,
       httpStatus: response.status,
-      ...googleError,
+      googleStatus: googleError.status,
+      googleReason: googleError.reason,
+      googleMessage: googleError.message,
       mappedTo: reason,
     });
     throw new PlaceError(reason, placeId);
@@ -242,7 +247,7 @@ async function lookUpPlace(placeId: string, sessionToken?: string): Promise<Plac
 
   const place = parsePlaceDetails(body);
   if (!place) {
-    console.error("resolvePlace: Place Details returned no usable location", { placeId });
+    await log.error("place_lookup_unusable", "resolvePlace: Place Details returned no usable location", { placeId });
     throw new PlaceError("lookup_failed", placeId);
   }
   return place;
@@ -268,18 +273,18 @@ async function storeLocation(placeId: string, location: LatLng): Promise<string>
       .select("id")
       .single();
     if (error || !data) {
-      // Postgres's text goes to the server log only, never into PlaceError.
-      console.error("resolvePlace: storing the location failed", {
+      // The SQLSTATE and its mapped name go to the server log (V6); neither
+      // they nor Postgres's text go into PlaceError.
+      await log.error("place_store_failed", "resolvePlace: storing the location failed", {
         placeId,
-        code: error?.code,
-        message: error?.message,
+        ...(error ? databaseErrorFields(error) : { reason: "no_row" }),
       });
       throw new PlaceError("lookup_failed", placeId);
     }
     return data.id;
   } catch (error) {
     if (error instanceof PlaceError) throw error;
-    console.error("resolvePlace: storing the location failed", {
+    await log.error("place_store_failed", "resolvePlace: storing the location failed", {
       placeId,
       error: error instanceof Error ? error.name : "unknown",
     });

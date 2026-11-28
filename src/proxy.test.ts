@@ -3,6 +3,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { isRequestId, REQUEST_ID_HEADER } from "@/lib/request-id";
 import { NONCE_HEADER } from "@/lib/security-headers";
 
 import { proxy } from "./proxy";
@@ -78,6 +79,28 @@ describe("proxy", () => {
     expect(nonce).not.toBe("chosen-by-client");
     expect(first.headers.get(`x-middleware-request-${NONCE_HEADER}`)).toBe(nonce);
     expect(nonceOf(second.headers.get("content-security-policy"))).not.toBe(nonce);
+  });
+
+  it("gives every request a new ID, for the logger and the browser, and overwrites a forged one (V6)", async () => {
+    const forged = "11111111-1111-4111-8111-111111111111";
+    const incoming = request("/");
+    incoming.headers.set(REQUEST_ID_HEADER, forged);
+    const first = await proxy(incoming);
+    const second = await proxy(request("/"));
+
+    const id = first.headers.get(REQUEST_ID_HEADER);
+    expect(isRequestId(id)).toBe(true);
+    expect(id).not.toBe(forged);
+    // The same id is passed on to the app, where src/lib/log.ts reads it.
+    expect(first.headers.get(`x-middleware-request-${REQUEST_ID_HEADER}`)).toBe(id);
+    expect(second.headers.get(REQUEST_ID_HEADER)).not.toBe(id);
+  });
+
+  it("puts the request ID on the redirect to sign-in too", async () => {
+    const response = await proxy(request("/sessions/new"));
+
+    expect(response.status).toBe(307);
+    expect(isRequestId(response.headers.get(REQUEST_ID_HEADER))).toBe(true);
   });
 
   it("keeps refreshed cookies, and puts the CSP on the redirect to sign-in too", async () => {

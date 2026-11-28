@@ -172,7 +172,7 @@ export async function verifyCode(
   const { data, error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });
   if (error || !data.user) {
     // SEC-09: the reason code and a hash of the address; never the code.
-    logSecurityEvent({ event: "sign_in_code_failed", reason: authErrorReason(error), email });
+    await logSecurityEvent({ event: "sign_in_code_failed", reason: authErrorReason(error), email });
     return { formError: verifyCodeErrorMessage(error), values: formValues(formData) };
   }
 
@@ -216,7 +216,7 @@ export async function confirmSignIn(formData: FormData): Promise<void> {
   if (error || !data.user) {
     // SEC-09: the reason code only. A link carries no email, and the token
     // hash is a credential, so neither is logged.
-    logSecurityEvent({ event: "sign_in_link_failed", reason: authErrorReason(error) });
+    await logSecurityEvent({ event: "sign_in_link_failed", reason: authErrorReason(error) });
     redirect(loginWithLinkError(next));
   }
 
@@ -255,7 +255,7 @@ export async function signInWithPassword(
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error || !data.user) {
     // SEC-09: the reason code and a hash of the address; never the password.
-    logSecurityEvent({ event: "sign_in_password_failed", reason: authErrorReason(error), email });
+    await logSecurityEvent({ event: "sign_in_password_failed", reason: authErrorReason(error), email });
     return { formError: passwordSignInErrorMessage(error), values: { email } };
   }
 

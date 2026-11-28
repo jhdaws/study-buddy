@@ -23,6 +23,7 @@ import { redirect } from "next/navigation";
 
 import { ACCOUNT_DELETED_PATH } from "@/lib/account";
 import { DELETE_ACCOUNT_FAILED_MESSAGE, deleteAccountErrorMessage } from "@/lib/errors";
+import { log } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import {
@@ -56,13 +57,19 @@ export async function deleteAccount(
     const { error } = await createAdminClient().auth.admin.deleteUser(user.id);
     // Already gone -- a second tap, or another tab -- is what was asked for.
     if (error && error.code !== "user_not_found") {
-      console.error("deleteAccount: deleteUser failed", { status: error.status, code: error.code });
+      await log.error("delete_account_failed", "deleteAccount: deleteUser failed", {
+        status: error.status,
+        code: error.code,
+      });
       return { formError: deleteAccountErrorMessage(error) };
     }
   } catch (thrown) {
     // E.g. SUPABASE_SECRET_KEY missing from this deployment (env.ts).
-    console.error("deleteAccount: could not call the admin API", {
-      message: thrown instanceof Error ? thrown.message : String(thrown),
+    // Our own exception text (env.ts's "Missing environment variable ..."),
+    // or fetch's -- not a student's input.
+    await log.error("delete_account_admin_api_failed", "deleteAccount: could not call the admin API", {
+      errorName: thrown instanceof Error ? thrown.name : typeof thrown,
+      detail: thrown instanceof Error ? thrown.message : String(thrown),
     });
     return { formError: DELETE_ACCOUNT_FAILED_MESSAGE };
   }
@@ -74,8 +81,9 @@ export async function deleteAccount(
     const supabase = await createClient();
     await supabase.auth.signOut({ scope: "local" });
   } catch (thrown) {
-    console.error("deleteAccount: sign-out after deletion failed", {
-      message: thrown instanceof Error ? thrown.message : String(thrown),
+    await log.warn("delete_account_sign_out_failed", "deleteAccount: sign-out after deletion failed", {
+      errorName: thrown instanceof Error ? thrown.name : typeof thrown,
+      detail: thrown instanceof Error ? thrown.message : String(thrown),
     });
   }
 

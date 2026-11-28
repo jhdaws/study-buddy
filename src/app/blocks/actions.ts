@@ -15,6 +15,7 @@
 import { revalidatePath } from "next/cache";
 
 import { databaseErrorMessage } from "@/lib/errors";
+import { databaseErrorFields, log } from "@/lib/log";
 import { createClient, requireUser } from "@/lib/supabase/server";
 
 export type BlockActionState = { error?: string };
@@ -37,7 +38,7 @@ export async function blockUser(
   // is a habit worth not forming.
   const { error } = await supabase.from("blocks").insert({ blocked_id: blockedUserId });
   if (error) {
-    console.error("blockUser: insert failed", { code: error.code, message: error.message });
+    await log.error("block_user_failed", "blockUser: insert failed", databaseErrorFields(error));
     return { error: databaseErrorMessage(error) };
   }
 
@@ -61,7 +62,7 @@ export async function unblockUser(
     .eq("blocker_id", user.id)
     .eq("blocked_id", blockedUserId);
   if (error) {
-    console.error("unblockUser: delete failed", { code: error.code, message: error.message });
+    await log.error("unblock_user_failed", "unblockUser: delete failed", databaseErrorFields(error));
     return { error: databaseErrorMessage(error) };
   }
 

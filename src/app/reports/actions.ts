@@ -14,6 +14,7 @@
 // the report was sent.
 
 import { databaseErrorMessage } from "@/lib/errors";
+import { databaseErrorFields, log } from "@/lib/log";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import {
   formValues,
@@ -55,7 +56,7 @@ export async function reportUser(
     note: parsed.data.note,
   });
   if (error) {
-    console.error("reportUser: insert failed", { code: error.code, message: error.message });
+    await log.error("report_user_failed", "reportUser: insert failed", databaseErrorFields(error));
     return { formError: databaseErrorMessage(error), values: formValues(formData) };
   }
 

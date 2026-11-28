@@ -198,6 +198,11 @@ describe("createSession: stops early", () => {
   });
 });
 
+/** Every structured line written to console.error (V6, src/lib/log.ts), parsed. */
+function errorLines(): Record<string, unknown>[] {
+  return vi.mocked(console.error).mock.calls.map((args) => JSON.parse(args[0] as string));
+}
+
 describe("createSession: database refusals", () => {
   it("maps a course refusal to our own message, logs the original, and stops", async () => {
     rpcReplies({ data: null, error: { code: "P0001", message: "invalid_course_number" } }, null);
@@ -206,10 +211,15 @@ describe("createSession: database refusals", () => {
 
     expect(state.formError).toBe("Enter a 4-digit course number, like 3251 or 2100W.");
     expect(server.rpc).toHaveBeenCalledTimes(1);
-    expect(console.error).toHaveBeenCalledWith("createSession: get_or_create_course failed", {
-      code: "P0001",
-      message: "invalid_course_number",
-    });
+    expect(errorLines()).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        event: "create_session_failed",
+        message: "createSession: get_or_create_course failed",
+        reason: "invalid_course_number",
+        code: "P0001",
+      }),
+    );
   });
 
   it("maps a session refusal to our own message and keeps the form values", async () => {
@@ -241,10 +251,11 @@ describe("createSession: database refusals", () => {
 
     expect(state.formError).toBe("Something went wrong on our side. Try again in a moment.");
     expect(state.formError).not.toMatch(/sessions|constraint|violates/);
-    expect(console.error).toHaveBeenCalledWith(
-      "createSession: create_session failed",
-      expect.objectContaining({ code: "23503" }),
+    expect(errorLines()).toContainEqual(
+      expect.objectContaining({ message: "createSession: create_session failed", code: "23503" }),
     );
+    // The log keeps the code, not Postgres's text, which can quote input (V6).
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toMatch(/violates/);
   });
 });
 
@@ -284,10 +295,13 @@ describe("createSession: place lookup rate limit (SEC-05)", () => {
 
     await createSession({}, form());
 
-    expect(console.error).toHaveBeenCalledWith("createSession: consume_rate_limit failed", {
-      code: "PT429",
-      message: "place_lookup_rate_limited",
-    });
+    expect(errorLines()).toContainEqual(
+      expect.objectContaining({
+        message: "createSession: consume_rate_limit failed",
+        reason: "place_lookup_rate_limited",
+        code: "PT429",
+      }),
+    );
     expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toMatch(/ChIJ|u1|Priya/);
   });
 
@@ -348,10 +362,14 @@ describe("joinSession: database refusals", () => {
 
     expect(state).toEqual({ error: "This session is full." });
     expect(cache.revalidatePath).not.toHaveBeenCalled();
-    expect(console.error).toHaveBeenCalledWith("joinSession: join_session failed", {
-      code: "P0001",
-      message: "session_full",
-    });
+    expect(errorLines()).toContainEqual(
+      expect.objectContaining({
+        event: "join_session_failed",
+        message: "joinSession: join_session failed",
+        reason: "session_full",
+        code: "P0001",
+      }),
+    );
   });
 
   it("never shows Postgres's own text for an unmapped error", async () => {
