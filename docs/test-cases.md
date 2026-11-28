@@ -199,3 +199,15 @@ evidence are in [`security/findings.md`](./security/findings.md).
 - **BUG-19, Google key pair.** *Verified* by running `next.config.ts` with each
   combination of the two keys; a Vercel production build with only one fails.
 
+## Release (Sprint 5)
+
+- **V6, structured logs (#152).** *Verified* by unit tests
+  (`src/lib/log.test.ts`, `security-log.test.ts`, `src/proxy.test.ts`, and the
+  call sites in `sessions/actions.test.ts` and `places.test.ts`): every server
+  log is one JSON line with `level`, `event`, `message`, `requestId` and `at`;
+  the proxy gives each request a fresh ID on the request and the response and
+  overwrites one the client sent; a field cannot overwrite those keys; email
+  addresses, newlines and long strings are cut; Postgres's own text no longer
+  reaches the log (the SQLSTATE and mapped name do). *Assumed until the first
+  staging deploy:* that Vercel's log view finds a line by its `requestId`.
+

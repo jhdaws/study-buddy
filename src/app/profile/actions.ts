@@ -13,6 +13,7 @@ import { revalidatePath } from "next/cache";
 
 import { courseKey } from "@/lib/academic";
 import { databaseErrorMessage, type DatabaseErrorLike } from "@/lib/errors";
+import { databaseErrorFields, log } from "@/lib/log";
 import { createClient, requireUser } from "@/lib/supabase/server";
 import {
   formValues,
@@ -132,10 +133,12 @@ export async function saveProfile(_prev: ProfileState, formData: FormData): Prom
 }
 
 /**
- * The student sees our own message; the server log keeps Postgres's code
- * and text, so a generic "Something went wrong" can still be traced.
+ * The student sees our own message; the server log (V6) keeps the SQLSTATE
+ * and the name the error was mapped by, under the request's ID, so a generic
+ * "Something went wrong" can still be traced -- not Postgres's own text,
+ * which can quote the input back (src/lib/log.ts).
  */
-function failure(step: string, error: DatabaseErrorLike, formData: FormData): ProfileState {
-  console.error(`saveProfile: ${step} failed`, { code: error.code, message: error.message });
+async function failure(step: string, error: DatabaseErrorLike, formData: FormData): Promise<ProfileState> {
+  await log.error("save_profile_failed", `saveProfile: ${step} failed`, databaseErrorFields(error));
   return { formError: databaseErrorMessage(error), values: formValues(formData) };
 }

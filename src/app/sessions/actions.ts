@@ -23,6 +23,7 @@ import {
   databaseErrorReason,
   type DatabaseErrorLike,
 } from "@/lib/errors";
+import { databaseErrorFields, log } from "@/lib/log";
 import { PlaceError, resolvePlace } from "@/lib/places";
 import { logSecurityEvent } from "@/lib/security-log";
 import { getSession } from "@/lib/sessions";
@@ -87,7 +88,7 @@ export async function createSession(
     }));
   } catch (error) {
     if (error instanceof PlaceError) {
-      logSecurityEvent({ event: "session_create_refused", reason: error.reason, userId: user.id });
+      await logSecurityEvent({ event: "session_create_refused", reason: error.reason, userId: user.id });
       return {
         fieldErrors: { placeId: [error.message] },
         values: formValues(formData),
@@ -220,7 +221,7 @@ export async function editSession(
       }));
     } catch (error) {
       if (error instanceof PlaceError) {
-        logSecurityEvent({
+        await logSecurityEvent({
           event: "session_edit_refused",
           reason: error.reason,
           userId: user.id,
@@ -282,11 +283,8 @@ export async function cancelSession(
   const supabase = await createClient();
   const { error } = await supabase.rpc("cancel_session", { p_session_id: sessionId });
   if (error) {
-    console.error("cancelSession: cancel_session failed", {
-      code: error.code,
-      message: error.message,
-    });
-    logSecurityEvent({
+    await log.error("cancel_session_failed", "cancelSession: cancel_session failed", databaseErrorFields(error));
+    await logSecurityEvent({
       event: "session_cancel_refused",
       reason: databaseErrorReason(error),
       userId: user.id,
@@ -328,9 +326,9 @@ export async function joinSession(
   const supabase = await createClient();
   const { error } = await supabase.rpc("join_session", { session_id: sessionId });
   if (error) {
-    console.error("joinSession: join_session failed", { code: error.code, message: error.message });
+    await log.error("join_session_failed", "joinSession: join_session failed", databaseErrorFields(error));
     // SEC-09: e.g. session_full, already_joined -- the name, not the text.
-    logSecurityEvent({
+    await logSecurityEvent({
       event: "session_join_refused",
       reason: databaseErrorReason(error),
       userId: user.id,
@@ -359,7 +357,7 @@ export async function leaveSession(
   const supabase = await createClient();
   const { error } = await supabase.rpc("leave_session", { session_id: sessionId });
   if (error) {
-    console.error("leaveSession: leave_session failed", { code: error.code, message: error.message });
+    await log.error("leave_session_failed", "leaveSession: leave_session failed", databaseErrorFields(error));
     return { error: databaseErrorMessage(error) };
   }
 
@@ -403,10 +401,10 @@ export async function sendMessage(
     .from("session_messages")
     .insert({ session_id: sessionId, body: parsed.data.body });
   if (error) {
-    console.error("sendMessage: insert failed", { code: error.code, message: error.message });
+    await log.error("send_message_failed", "sendMessage: insert failed", databaseErrorFields(error));
     // SEC-09: a refused post is usually a stale page, but it is also what a
     // student posting into a chat they are not in looks like.
-    logSecurityEvent({
+    await logSecurityEvent({
       event: "chat_post_refused",
       reason: databaseErrorReason(error),
       userId: user.id,
@@ -531,7 +529,7 @@ export async function withdrawRequest(
     .eq("id", requestId);
 
   if (error) {
-    console.error("withdrawRequest: delete failed", { code: error.code, message: error.message });
+    await log.error("withdraw_request_failed", "withdrawRequest: delete failed", databaseErrorFields(error));
     return { error: databaseErrorMessage(error) };
   }
   if (count === 0) {
@@ -551,41 +549,43 @@ function isOwnRequestAlreadyThere(error: DatabaseErrorLike): boolean {
 }
 
 /** databaseFailure's twin for the study-request form's field names. */
-function studyRequestFailure(
+async function studyRequestFailure(
   what: string,
   error: DatabaseErrorLike,
   formData: FormData,
-): StudyRequestState {
-  console.error(`requestSession: ${what} failed`, { code: error.code, message: error.message });
+): Promise<StudyRequestState> {
+  await log.error("study_request_failed", `requestSession: ${what} failed`, databaseErrorFields(error));
   return { formError: databaseErrorMessage(error), values: formValues(formData) };
 }
 
 /**
- * The student sees our own message; the server log keeps Postgres's code
- * and text, so a generic "Something went wrong" can still be traced. The
- * security log (SEC-09) gets only the name the error was mapped by.
+ * The student sees our own message; the server log (V6) keeps the SQLSTATE
+ * and the name the error was mapped by, under the request's ID, so a generic
+ * "Something went wrong" can still be traced. Not Postgres's own text: it can
+ * quote the input back (src/lib/log.ts). The security log (SEC-09) gets the
+ * mapped name too.
  */
-function databaseFailure(
+async function databaseFailure(
   rpc: string,
   error: DatabaseErrorLike,
   formData: FormData,
   userId: string,
-): CreateSessionState {
-  console.error(`createSession: ${rpc} failed`, { code: error.code, message: error.message });
-  logSecurityEvent({ event: "session_create_refused", reason: databaseErrorReason(error), userId });
+): Promise<CreateSessionState> {
+  await log.error("create_session_failed", `createSession: ${rpc} failed`, databaseErrorFields(error));
+  await logSecurityEvent({ event: "session_create_refused", reason: databaseErrorReason(error), userId });
   return { formError: databaseErrorMessage(error), values: formValues(formData) };
 }
 
 /** The same, for editSession() (US-09). */
-function editFailure(
+async function editFailure(
   rpc: string,
   error: DatabaseErrorLike,
   formData: FormData,
   userId: string,
   sessionId: string,
-): EditSessionState {
-  console.error(`editSession: ${rpc} failed`, { code: error.code, message: error.message });
-  logSecurityEvent({
+): Promise<EditSessionState> {
+  await log.error("edit_session_failed", `editSession: ${rpc} failed`, databaseErrorFields(error));
+  await logSecurityEvent({
     event: "session_edit_refused",
     reason: databaseErrorReason(error),
     userId,
