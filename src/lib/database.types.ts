@@ -381,6 +381,9 @@ isOneToOne: false
 "get_or_create_course":
 { Args: { "p_course_number": string,"p_department_code": string }; Returns: string
                            },
+"health_check":
+{ Args: Record<PropertyKey, never>; Returns: boolean
+                           },
 "join_session":
 { Args: { "session_id": string }; Returns: {
               "joined_at": string,
