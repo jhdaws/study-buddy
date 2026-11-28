@@ -37,9 +37,17 @@
 -- 1. The column
 -- ---------------------------------------------------------------------------
 
+-- DEFERRABLE INITIALLY DEFERRED: deleting a session nulls both this column
+-- (through the cascade to its messages) and session_id, as two separate
+-- updates of the report. If the report was written in the same transaction,
+-- Postgres re-checks this key on the first of them, before the second has
+-- nulled it, and the delete fails. Checking at commit, when both are done,
+-- removes the dependence on that order. A report cannot name a missing
+-- message anyway: reports_insert_message_seen requires it to exist.
 alter table public.reports
   add column message_id uuid
-    references public.session_messages (id) on delete set null;
+    references public.session_messages (id) on delete set null
+    deferrable initially deferred;
 
 -- How the team finds every report about one message, and the ON DELETE SET
 -- NULL when a session's chat is deleted with it.

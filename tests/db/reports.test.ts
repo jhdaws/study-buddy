@@ -373,6 +373,8 @@ describe("reporting a chat message (P5)", () => {
     expect(error?.message).toBe("report_limit_reached");
   });
 
+  // Written and deleted in one transaction here, the case that needs the
+  // foreign key to be deferred (see the migration).
   it("keeps the report, without the message, if the team deletes the session", async () => {
     await reportMessage(me, sam, session, message);
 
