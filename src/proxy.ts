@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 
 import { supabaseEnv } from "@/lib/env";
+import { sentryOrigin } from "@/lib/monitoring";
 import { contentSecurityPolicy, createNonce, NONCE_HEADER } from "@/lib/security-headers";
 import { updateSession } from "@/lib/supabase/proxy";
 
@@ -29,6 +30,8 @@ export async function proxy(request: NextRequest) {
     supabaseUrl: supabaseEnv().url,
     googleMaps: Boolean(process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY),
     dev: process.env.NODE_ENV === "development",
+    // V7: lets the browser send errors to Sentry, when this build reports them.
+    sentryOrigin: sentryOrigin(process.env.NEXT_PUBLIC_SENTRY_DSN),
   });
   request.headers.set("Content-Security-Policy", policy);
   request.headers.set(NONCE_HEADER, nonce);

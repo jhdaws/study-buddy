@@ -10,6 +10,10 @@
  * could be raw Postgres text (never shown to students -- CLAUDE.md). The
  * digest is logged so it can be matched to the server log.
  *
+ * Monitoring (V7): an error with a digest came from the server, where
+ * src/instrumentation.ts already reported it; only a browser-side error (no
+ * digest) is sent on from here, so nothing reaches Sentry twice.
+ *
  * `retry` re-fetches and re-renders the segment (Next 16). Its sibling
  * `reset` only clears the error without re-fetching, which would not help
  * when the data load is what failed.
@@ -19,6 +23,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 
 import { BUTTON_PRIMARY, BUTTON_SECONDARY } from "@/components/ui/styles";
+import { reportClientError } from "@/lib/monitoring-client";
 
 export default function SessionsError({
   error,
@@ -29,6 +34,7 @@ export default function SessionsError({
 }) {
   useEffect(() => {
     console.error(error);
+    if (!error.digest) void reportClientError(error);
   }, [error]);
 
   return (

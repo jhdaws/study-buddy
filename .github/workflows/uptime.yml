@@ -1,0 +1,132 @@
+name: Uptime
+
+# V7 (#153): an uptime check on production's /api/health, from outside
+# Vercel. Every 10 minutes it asks production whether it is up and whether
+# the database answers (src/app/api/health/route.ts: 200, or 503).
+#
+#   down  -> opens ONE issue labelled `outage` (GitHub emails everyone
+#            watching the repo), and posts to the team chat if
+#            UPTIME_WEBHOOK_URL is set. Later failures while it is open add
+#            nothing, so an outage is one alert, not one every 10 minutes.
+#   up    -> if an `outage` issue is open, says so on it and closes it, and
+#            posts "recovered" to the chat.
+#
+# OFF until the repository variable UPTIME_CHECK_ENABLED is `true` (Settings
+# -> Secrets and variables -> Actions -> Variables). Turn it on once
+# /api/health is live on production (V5 released), or every run would page.
+# A run started by hand always checks, which is how to test the alert:
+# Actions -> Uptime -> Run workflow, with `target` set to a URL that fails.
+#
+# Settings it reads (none is required, and none is in the `production`
+# environment, whose required reviewer would make every run wait):
+#   vars.UPTIME_CHECK_ENABLED   `true` to run on the schedule
+#   vars.PRODUCTION_URL         defaults to https://study-buddy-jdaws.vercel.app
+#   secrets.UPTIME_WEBHOOK_URL  a Slack or Discord incoming-webhook URL
+#
+# GitHub may start a scheduled run a few minutes late, and skips schedules on
+# a repository with no activity for 60 days. Both are fine for a class
+# project; a dedicated monitor (UptimeRobot's free tier) is the upgrade.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Health URL to check instead of production's (to test the alert)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: uptime
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: vars.UPTIME_CHECK_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PRODUCTION_URL: ${{ vars.PRODUCTION_URL || 'https://study-buddy-jdaws.vercel.app' }}
+      TARGET: ${{ inputs.target }}
+      WEBHOOK: ${{ secrets.UPTIME_WEBHOOK_URL }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    steps:
+      # Three tries, 20 s apart: a cold start (docs/ops/RUNBOOK.md, "Known
+      # failure modes") is slow, not down.
+      - name: Ask /api/health
+        id: health
+        run: |
+          url="${TARGET:-${PRODUCTION_URL%/}/api/health}"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          status=000
+          for attempt in 1 2 3; do
+            rm -f body.json
+            # curl prints 000 itself when nothing answers; `|| true` keeps it.
+            status=$(curl --silent --show-error --max-time 15 -o body.json -w '%{http_code}' "$url") || true
+            status=${status:-000}
+            echo "Attempt $attempt: GET $url -> $status"
+            [ "$status" = "200" ] && break
+            [ "$attempt" -lt 3 ] && sleep 20
+          done
+          # Print the body only if it is the JSON we expect; never an HTML page.
+          if jq -e '.status' body.json > /dev/null 2>&1; then
+            jq -c '{status, version, commit, environment, database}' body.json
+          fi
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          if [ "$status" = "200" ]; then echo "ok=true" >> "$GITHUB_OUTPUT"; else echo "ok=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Raise the alarm (first failure only)
+        if: steps.health.outputs.ok == 'false'
+        env:
+          URL: ${{ steps.health.outputs.url }}
+          STATUS: ${{ steps.health.outputs.status }}
+        run: |
+          gh label create outage --repo "$REPO" --color B60205 \
+            --description "Opened by the uptime check (V7)" 2>/dev/null || true
+          open=$(gh issue list --repo "$REPO" --label outage --state open --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            echo "Outage #$open is already open; not alerting again."
+            exit 1
+          fi
+          when=$(date -u '+%Y-%m-%d %H:%M UTC')
+          body=$(printf '%s\n\n%s\n\n%s\n%s' \
+            "The uptime check got **HTTP $STATUS** from \`$URL\` three times in a row at $when." \
+            "503 means the app is up but the database did not answer (a paused Supabase project, most often); 000 means nothing answered at all." \
+            "What to do: docs/ops/RUNBOOK.md (\"Known failure modes\", \"Roll back\")." \
+            "Run: $RUN_URL. This issue closes itself when the check passes again.")
+          issue=$(gh issue create --repo "$REPO" --label outage \
+            --title "Production is down: /api/health answered $STATUS" --body "$body")
+          echo "Opened $issue"
+          if [ -n "$WEBHOOK" ]; then
+            text="🔴 Study Buddy production is down: /api/health answered $STATUS. $issue"
+            jq -n --arg t "$text" '{text: $t, content: $t}' \
+              | curl --silent --show-error --max-time 15 -H 'Content-Type: application/json' -d @- "$WEBHOOK" \
+              || echo "::warning::Could not post to the team chat."
+          fi
+          # A failed run is also what shows red in the Actions tab.
+          exit 1
+
+      - name: Stand down (if an outage was open)
+        if: steps.health.outputs.ok == 'true'
+        run: |
+          open=$(gh issue list --repo "$REPO" --label outage --state open --json number --jq '.[0].number // empty')
+          if [ -z "$open" ]; then
+            echo "Healthy, and no outage open."
+            exit 0
+          fi
+          gh issue close "$open" --repo "$REPO" \
+            --comment "Healthy again at $(date -u '+%Y-%m-%d %H:%M UTC'): /api/health answered 200. Run: $RUN_URL"
+          if [ -n "$WEBHOOK" ]; then
+            text="🟢 Study Buddy production is back: /api/health answers 200 (closed #$open)."
+            jq -n --arg t "$text" '{text: $t, content: $t}' \
+              | curl --silent --show-error --max-time 15 -H 'Content-Type: application/json' -d @- "$WEBHOOK" \
+              || echo "::warning::Could not post to the team chat."
+          fi

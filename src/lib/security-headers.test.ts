@@ -84,6 +84,15 @@ describe("contentSecurityPolicy", () => {
     expect(policy["default-src"]).toEqual(["'self'"]);
   });
 
+  it("lets the browser reach Sentry's ingest origin only when browser monitoring is on (V7)", () => {
+    const origin = "https://o4500000000000000.ingest.us.sentry.io";
+    expect(policyFor({ sentryOrigin: origin })["connect-src"]).toContain(origin);
+    // connect-src only: the SDK is our own bundled script, not Sentry's CDN.
+    expect(policyFor({ sentryOrigin: origin })["script-src"].join(" ")).not.toContain("sentry");
+    expect(contentSecurityPolicy(HOSTED)).not.toContain("sentry");
+    expect(contentSecurityPolicy({ ...HOSTED, sentryOrigin: null })).not.toContain("sentry");
+  });
+
   it("names no Google host without a Maps key", () => {
     const policy = contentSecurityPolicy(HOSTED);
     expect(policy).not.toMatch(/google|gstatic|wasm/);

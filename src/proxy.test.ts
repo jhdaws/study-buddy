@@ -116,6 +116,15 @@ describe("proxy", () => {
     expect(without).not.toContain("'wasm-unsafe-eval'");
   });
 
+  it("adds Sentry's origin to connect-src only when the build has a browser DSN (V7)", async () => {
+    expect((await proxy(request("/"))).headers.get("content-security-policy")).not.toContain("sentry");
+
+    vi.stubEnv("NEXT_PUBLIC_SENTRY_DSN", "https://abc@o4500000000000000.ingest.us.sentry.io/4500000000000001");
+    expect((await proxy(request("/"))).headers.get("content-security-policy")).toContain(
+      "https://o4500000000000000.ingest.us.sentry.io",
+    );
+  });
+
   it("allows eval only under `next dev`", async () => {
     vi.stubEnv("NODE_ENV", "production");
     expect((await proxy(request("/"))).headers.get("content-security-policy")).not.toContain(

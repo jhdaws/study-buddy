@@ -24,6 +24,7 @@
   },
   "dependencies": {
     "@fontsource-variable/manrope": "^5.3.0",
+    "@sentry/nextjs": "11.20.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.117.3",
     "@vis.gl/react-google-maps": "^1.10.1",

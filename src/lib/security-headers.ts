@@ -67,6 +67,12 @@ export type ContentSecurityPolicyOptions = {
   googleMaps: boolean;
   /** `next dev`: React and Next's dev tooling need eval and un-nonced styles. */
   dev: boolean;
+  /**
+   * V7: the origin browser errors are sent to (sentryOrigin() in
+   * src/lib/monitoring.ts), when this build has browser monitoring. Only
+   * connect-src gets it: the SDK is our own script, loaded from 'self'.
+   */
+  sentryOrigin?: string | null;
 };
 
 /** A fresh, unguessable nonce: 128 random bits, base64. One per request. */
@@ -117,6 +123,7 @@ export function contentSecurityPolicy({
   supabaseUrl,
   googleMaps,
   dev,
+  sentryOrigin = null,
 }: ContentSecurityPolicyOptions): string {
   const supabase = new URL(supabaseUrl);
   const supabaseSocket = `${supabase.protocol === "https:" ? "wss:" : "ws:"}//${supabase.host}`;
@@ -137,7 +144,13 @@ export function contentSecurityPolicy({
     "style-src-attr": ["'unsafe-inline'"],
     "img-src": ["'self'", "data:", "blob:", ...google("img-src")],
     "font-src": ["'self'", ...google("font-src")],
-    "connect-src": ["'self'", supabase.origin, supabaseSocket, ...google("connect-src")],
+    "connect-src": [
+      "'self'",
+      supabase.origin,
+      supabaseSocket,
+      ...google("connect-src"),
+      ...(sentryOrigin ? [sentryOrigin] : []),
+    ],
     "worker-src": google("worker-src"),
     "frame-src": google("frame-src"),
     "object-src": ["'none'"],
